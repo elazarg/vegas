@@ -31,17 +31,29 @@ contract OddsEvens {
 
     bool public done_Phase0_Even;
 
+    uint256 public Odd_hidden_c;
+
+    bool public done_Odd_hidden_c;
+
     bool public Odd_c;
 
     bool public done_Odd_c;
 
     bool public done_Phase1_Odd;
 
+    uint256 public Even_hidden_c;
+
+    bool public done_Even_hidden_c;
+
     bool public Even_c;
 
     bool public done_Even_c;
 
     bool public done_Phase1_Even;
+
+    bool public done_Phase2_Odd;
+
+    bool public done_Phase2_Even;
 
     modifier at_phase(uint256 _phase) {
         require((phase == _phase), "wrong phase");
@@ -52,7 +64,7 @@ contract OddsEvens {
     }
 
     modifier at_final_phase() {
-        require((phase == 2), "game not over");
+        require((phase == 3), "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -89,17 +101,17 @@ contract OddsEvens {
         lastTs = block.timestamp;
     }
 
-    function yield_Phase1_Odd(bool _c) public by(Role.Odd) at_phase(1) {
+    function yield_Phase1_Odd(uint256 _hidden_c) public by(Role.Odd) at_phase(1) {
         require((!done_Phase1_Odd), "done");
-        Odd_c = _c;
-        done_Odd_c = true;
+        Odd_hidden_c = _hidden_c;
+        done_Odd_hidden_c = true;
         done_Phase1_Odd = true;
     }
 
-    function yield_Phase1_Even(bool _c) public by(Role.Even) at_phase(1) {
+    function yield_Phase1_Even(uint256 _hidden_c) public by(Role.Even) at_phase(1) {
         require((!done_Phase1_Even), "done");
-        Even_c = _c;
-        done_Even_c = true;
+        Even_hidden_c = _hidden_c;
+        done_Even_hidden_c = true;
         done_Phase1_Even = true;
     }
 
@@ -109,6 +121,31 @@ contract OddsEvens {
         require(done_Phase1_Even, "Even not done");
         emit Broadcast_Phase1();
         phase = 2;
+        lastTs = block.timestamp;
+    }
+
+    function reveal_Phase2_Odd(bool _c, uint256 salt) public by(Role.Odd) at_phase(2) {
+        require((!done_Phase2_Odd), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Odd_hidden_c)), "bad reveal");
+        Odd_c = _c;
+        done_Odd_c = true;
+        done_Phase2_Odd = true;
+    }
+
+    function reveal_Phase2_Even(bool _c, uint256 salt) public by(Role.Even) at_phase(2) {
+        require((!done_Phase2_Even), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Even_hidden_c)), "bad reveal");
+        Even_c = _c;
+        done_Even_c = true;
+        done_Phase2_Even = true;
+    }
+
+    function __nextPhase_Phase2() public {
+        require((phase == 2), "wrong phase");
+        require(done_Phase2_Odd, "Odd not done");
+        require(done_Phase2_Even, "Even not done");
+        emit Broadcast_Phase2();
+        phase = 3;
         lastTs = block.timestamp;
     }
 
@@ -129,6 +166,8 @@ contract OddsEvens {
     event Broadcast_Phase0();
 
     event Broadcast_Phase1();
+
+    event Broadcast_Phase2();
 
     receive() public payable {
         revert("direct ETH not allowed");

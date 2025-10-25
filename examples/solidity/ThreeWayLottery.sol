@@ -37,11 +37,19 @@ contract ThreeWayLottery {
 
     bool public done_Phase2_Bob;
 
+    uint256 public Issuer_hidden_c;
+
+    bool public done_Issuer_hidden_c;
+
     int256 public Issuer_c;
 
     bool public done_Issuer_c;
 
     bool public done_Phase3_Issuer;
+
+    uint256 public Alice_hidden_c;
+
+    bool public done_Alice_hidden_c;
 
     int256 public Alice_c;
 
@@ -49,11 +57,21 @@ contract ThreeWayLottery {
 
     bool public done_Phase3_Alice;
 
+    uint256 public Bob_hidden_c;
+
+    bool public done_Bob_hidden_c;
+
     int256 public Bob_c;
 
     bool public done_Bob_c;
 
     bool public done_Phase3_Bob;
+
+    bool public done_Phase4_Issuer;
+
+    bool public done_Phase4_Alice;
+
+    bool public done_Phase4_Bob;
 
     modifier at_phase(uint256 _phase) {
         require((phase == _phase), "wrong phase");
@@ -64,7 +82,7 @@ contract ThreeWayLottery {
     }
 
     modifier at_final_phase() {
-        require((phase == 4), "game not over");
+        require((phase == 5), "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -126,27 +144,24 @@ contract ThreeWayLottery {
         lastTs = block.timestamp;
     }
 
-    function yield_Phase3_Issuer(int256 _c) public by(Role.Issuer) at_phase(3) {
+    function yield_Phase3_Issuer(uint256 _hidden_c) public by(Role.Issuer) at_phase(3) {
         require((!done_Phase3_Issuer), "done");
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Issuer_c = _c;
-        done_Issuer_c = true;
+        Issuer_hidden_c = _hidden_c;
+        done_Issuer_hidden_c = true;
         done_Phase3_Issuer = true;
     }
 
-    function yield_Phase3_Alice(int256 _c) public by(Role.Alice) at_phase(3) {
+    function yield_Phase3_Alice(uint256 _hidden_c) public by(Role.Alice) at_phase(3) {
         require((!done_Phase3_Alice), "done");
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Alice_c = _c;
-        done_Alice_c = true;
+        Alice_hidden_c = _hidden_c;
+        done_Alice_hidden_c = true;
         done_Phase3_Alice = true;
     }
 
-    function yield_Phase3_Bob(int256 _c) public by(Role.Bob) at_phase(3) {
+    function yield_Phase3_Bob(uint256 _hidden_c) public by(Role.Bob) at_phase(3) {
         require((!done_Phase3_Bob), "done");
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Bob_c = _c;
-        done_Bob_c = true;
+        Bob_hidden_c = _hidden_c;
+        done_Bob_hidden_c = true;
         done_Phase3_Bob = true;
     }
 
@@ -157,6 +172,43 @@ contract ThreeWayLottery {
         require(done_Phase3_Bob, "Bob not done");
         emit Broadcast_Phase3();
         phase = 4;
+        lastTs = block.timestamp;
+    }
+
+    function reveal_Phase4_Issuer(int256 _c, uint256 salt) public by(Role.Issuer) at_phase(4) {
+        require((!done_Phase4_Issuer), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Issuer_c = _c;
+        done_Issuer_c = true;
+        done_Phase4_Issuer = true;
+    }
+
+    function reveal_Phase4_Alice(int256 _c, uint256 salt) public by(Role.Alice) at_phase(4) {
+        require((!done_Phase4_Alice), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Alice_c = _c;
+        done_Alice_c = true;
+        done_Phase4_Alice = true;
+    }
+
+    function reveal_Phase4_Bob(int256 _c, uint256 salt) public by(Role.Bob) at_phase(4) {
+        require((!done_Phase4_Bob), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Bob_c = _c;
+        done_Bob_c = true;
+        done_Phase4_Bob = true;
+    }
+
+    function __nextPhase_Phase4() public {
+        require((phase == 4), "wrong phase");
+        require(done_Phase4_Issuer, "Issuer not done");
+        require(done_Phase4_Alice, "Alice not done");
+        require(done_Phase4_Bob, "Bob not done");
+        emit Broadcast_Phase4();
+        phase = 5;
         lastTs = block.timestamp;
     }
 
@@ -182,6 +234,8 @@ contract ThreeWayLottery {
     event Broadcast_Phase2();
 
     event Broadcast_Phase3();
+
+    event Broadcast_Phase4();
 
     receive() public payable {
         revert("direct ETH not allowed");

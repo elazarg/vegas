@@ -4,24 +4,6 @@ import vegas.RoleId
 import vegas.VarId
 import vegas.FieldRef
 
-// ---------- types & domains ----------
-sealed class Type {
-    object IntType : Type()
-    object BoolType : Type()
-    data class SetType(val values: Set<Int>) : Type()
-}
-
-/**
- * A Parameter represents data provided when executing an action.
- *
- * "visible" means reveal if "invisible" was already declared. A second "invisible" might be "reconsidered", or malformed.
- */
-data class Parameter(
-    val name: VarId,
-    val type: Type,
-    val visible: Boolean,
-)
-
 // Expression are mostly straightforward
 sealed class Expr {
     // literals
@@ -77,6 +59,23 @@ data class Join(
     val deposit: Expr.IntVal,
 )
 
+sealed class Type {
+    object IntType : Type()
+    object BoolType : Type()
+    data class SetType(val values: Set<Int>) : Type()
+}
+
+/**
+ * A Parameter represents data provided when executing an action.
+ *
+ * "visible" means reveal if "invisible" was already declared. A second "invisible" might be "reconsidered", or malformed.
+ */
+data class Parameter(
+    val name: VarId,
+    val type: Type,
+    val visible: Boolean,
+)
+
 /**
  * A Signature is something a role does: join, submit data, commit or reveal hidden info.
  */
@@ -111,3 +110,32 @@ data class GameIR(
     val phases: List<Phase>,        // index is phase order; straight-path
     val payoffs: Map<RoleId, Expr>    // evaluated at terminal
 )
+
+fun expandCommitReveal(ir: GameIR): GameIR {
+    val expandedPhases = mutableListOf<Phase>()
+
+    ir.phases.forEach { phase ->
+        val needsCR = phase.actions.any { (role, sig) ->
+            // Check if simultaneous visible
+            sig.parameters.any { it.visible } && phase.actions.size > 1
+        }
+
+        if (needsCR) {
+            // Create commit phase
+            val commitPhase = Phase(phase.actions.mapValues { (role, sig) ->
+                sig.copy(parameters = sig.parameters.map { it.copy(visible = false) } )
+            })
+            expandedPhases.add(commitPhase)
+
+            // Create reveal phase
+            val revealPhase = Phase(phase.actions.mapValues { (role, sig) ->
+                sig.copy(parameters = sig.parameters.map { it.copy(visible = true) } )
+            })
+            expandedPhases.add(revealPhase)
+        } else {
+            expandedPhases.add(phase)
+        }
+    }
+
+    return ir.copy(phases = expandedPhases)
+}

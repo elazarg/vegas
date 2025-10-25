@@ -31,17 +31,29 @@ contract Prisoners {
 
     bool public done_Phase1_B;
 
+    uint256 public A_hidden_c;
+
+    bool public done_A_hidden_c;
+
     bool public A_c;
 
     bool public done_A_c;
 
     bool public done_Phase2_A;
 
+    uint256 public B_hidden_c;
+
+    bool public done_B_hidden_c;
+
     bool public B_c;
 
     bool public done_B_c;
 
     bool public done_Phase2_B;
+
+    bool public done_Phase3_A;
+
+    bool public done_Phase3_B;
 
     modifier at_phase(uint256 _phase) {
         require((phase == _phase), "wrong phase");
@@ -52,7 +64,7 @@ contract Prisoners {
     }
 
     modifier at_final_phase() {
-        require((phase == 3), "game not over");
+        require((phase == 4), "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -96,17 +108,17 @@ contract Prisoners {
         lastTs = block.timestamp;
     }
 
-    function yield_Phase2_A(bool _c) public by(Role.A) at_phase(2) {
+    function yield_Phase2_A(uint256 _hidden_c) public by(Role.A) at_phase(2) {
         require((!done_Phase2_A), "done");
-        A_c = _c;
-        done_A_c = true;
+        A_hidden_c = _hidden_c;
+        done_A_hidden_c = true;
         done_Phase2_A = true;
     }
 
-    function yield_Phase2_B(bool _c) public by(Role.B) at_phase(2) {
+    function yield_Phase2_B(uint256 _hidden_c) public by(Role.B) at_phase(2) {
         require((!done_Phase2_B), "done");
-        B_c = _c;
-        done_B_c = true;
+        B_hidden_c = _hidden_c;
+        done_B_hidden_c = true;
         done_Phase2_B = true;
     }
 
@@ -116,6 +128,31 @@ contract Prisoners {
         require(done_Phase2_B, "B not done");
         emit Broadcast_Phase2();
         phase = 3;
+        lastTs = block.timestamp;
+    }
+
+    function reveal_Phase3_A(bool _c, uint256 salt) public by(Role.A) at_phase(3) {
+        require((!done_Phase3_A), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(A_hidden_c)), "bad reveal");
+        A_c = _c;
+        done_A_c = true;
+        done_Phase3_A = true;
+    }
+
+    function reveal_Phase3_B(bool _c, uint256 salt) public by(Role.B) at_phase(3) {
+        require((!done_Phase3_B), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(B_hidden_c)), "bad reveal");
+        B_c = _c;
+        done_B_c = true;
+        done_Phase3_B = true;
+    }
+
+    function __nextPhase_Phase3() public {
+        require((phase == 3), "wrong phase");
+        require(done_Phase3_A, "A not done");
+        require(done_Phase3_B, "B not done");
+        emit Broadcast_Phase3();
+        phase = 4;
         lastTs = block.timestamp;
     }
 
@@ -138,6 +175,8 @@ contract Prisoners {
     event Broadcast_Phase1();
 
     event Broadcast_Phase2();
+
+    event Broadcast_Phase3();
 
     receive() public payable {
         revert("direct ETH not allowed");
