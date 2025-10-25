@@ -27,6 +27,10 @@ contract ThreeWayLotteryShort {
 
     bool public done_Issuer;
 
+    uint256 public Issuer_hidden_c;
+
+    bool public done_Issuer_hidden_c;
+
     int256 public Issuer_c;
 
     bool public done_Issuer_c;
@@ -34,6 +38,10 @@ contract ThreeWayLotteryShort {
     bool public done_Phase0_Issuer;
 
     bool public done_Alice;
+
+    uint256 public Alice_hidden_c;
+
+    bool public done_Alice_hidden_c;
 
     int256 public Alice_c;
 
@@ -43,11 +51,27 @@ contract ThreeWayLotteryShort {
 
     bool public done_Bob;
 
+    uint256 public Bob_hidden_c;
+
+    bool public done_Bob_hidden_c;
+
     int256 public Bob_c;
 
     bool public done_Bob_c;
 
     bool public done_Phase0_Bob;
+
+    bool public done_Issuer;
+
+    bool public done_Phase1_Issuer;
+
+    bool public done_Alice;
+
+    bool public done_Phase1_Alice;
+
+    bool public done_Bob;
+
+    bool public done_Phase1_Bob;
 
     modifier at_phase(uint256 _phase) {
         require((phase == _phase), "wrong phase");
@@ -58,7 +82,7 @@ contract ThreeWayLotteryShort {
     }
 
     modifier at_final_phase() {
-        require((phase == 1), "game not over");
+        require((phase == 2), "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -66,42 +90,42 @@ contract ThreeWayLotteryShort {
         return keccak256(abi.encodePacked(x, salt));
     }
 
-    function join_Issuer(int256 _c) public payable by(Role.None) at_phase(0) {
+    function join_Issuer(uint256 _hidden_c) public payable by(Role.None) at_phase(0) {
         require((!done_Issuer), "already joined");
         role[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Issuer = true;
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Issuer_c = _c;
-        done_Issuer_c = true;
+        require((!done_Phase0_Issuer), "done");
+        Issuer_hidden_c = _hidden_c;
+        done_Issuer_hidden_c = true;
         done_Phase0_Issuer = true;
     }
 
-    function join_Alice(int256 _c) public payable by(Role.None) at_phase(0) {
+    function join_Alice(uint256 _hidden_c) public payable by(Role.None) at_phase(0) {
         require((!done_Alice), "already joined");
         role[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Alice = true;
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Alice_c = _c;
-        done_Alice_c = true;
+        require((!done_Phase0_Alice), "done");
+        Alice_hidden_c = _hidden_c;
+        done_Alice_hidden_c = true;
         done_Phase0_Alice = true;
     }
 
-    function join_Bob(int256 _c) public payable by(Role.None) at_phase(0) {
+    function join_Bob(uint256 _hidden_c) public payable by(Role.None) at_phase(0) {
         require((!done_Bob), "already joined");
         role[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Bob = true;
-        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
-        Bob_c = _c;
-        done_Bob_c = true;
+        require((!done_Phase0_Bob), "done");
+        Bob_hidden_c = _hidden_c;
+        done_Bob_hidden_c = true;
         done_Phase0_Bob = true;
     }
 
@@ -112,6 +136,43 @@ contract ThreeWayLotteryShort {
         require(done_Phase0_Bob, "Bob not done");
         emit Broadcast_Phase0();
         phase = 1;
+        lastTs = block.timestamp;
+    }
+
+    function join_Issuer(int256 _c, uint256 salt) public by(Role.Issuer) at_phase(1) {
+        require((!done_Phase1_Issuer), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Issuer_c = _c;
+        done_Issuer_c = true;
+        done_Phase1_Issuer = true;
+    }
+
+    function join_Alice(int256 _c, uint256 salt) public by(Role.Alice) at_phase(1) {
+        require((!done_Phase1_Alice), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Alice_c = _c;
+        done_Alice_c = true;
+        done_Phase1_Alice = true;
+    }
+
+    function join_Bob(int256 _c, uint256 salt) public by(Role.Bob) at_phase(1) {
+        require((!done_Phase1_Bob), "done");
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Bob_c = _c;
+        done_Bob_c = true;
+        done_Phase1_Bob = true;
+    }
+
+    function __nextPhase_Phase1() public {
+        require((phase == 1), "wrong phase");
+        require(done_Phase1_Issuer, "Issuer not done");
+        require(done_Phase1_Alice, "Alice not done");
+        require(done_Phase1_Bob, "Bob not done");
+        emit Broadcast_Phase1();
+        phase = 2;
         lastTs = block.timestamp;
     }
 
@@ -131,6 +192,8 @@ contract ThreeWayLotteryShort {
     }
 
     event Broadcast_Phase0();
+
+    event Broadcast_Phase1();
 
     receive() public payable {
         revert("direct ETH not allowed");

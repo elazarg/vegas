@@ -15,7 +15,7 @@ val NO_ROLE = RoleId("None")
 private enum class ExprContext { WHERE_CLAUSE, PAYOFF }
 
 fun genSolidityFromIR(g: GameIR): String {
-    val solAst = irToSolidity(g)
+    val solAst = irToSolidity(expandCommitReveal(g))
     return renderSolidityContract(solAst)
 }
 
