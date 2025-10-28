@@ -79,9 +79,6 @@ internal object Algo {
     }
 }
 
-fun <T: Any> Dag<T>.dependentsMap(): Map<T, Set<T>> =
-    nodes.associateWith { dependentsOf(it) }
-
 interface Reachability<T: Any> {
     fun ancestorsOf(v: T): Set<T>
     fun descendantsOf(v: T): Set<T>
@@ -137,98 +134,4 @@ fun <T : Any> computeReachability(slice: DagSlice<T>): Reachability<T> {
             return desc[ui].get(vi)
         }
     }
-}
-
-data class PathCoverResult<T:Any>(val paths: List<List<T>>)
-
-private const val NIL = -1
-
-/** DAG minimum vertex-disjoint path cover via bipartite reduction + Hopcroft–Karp. */
-fun <T:Any> minPathCover(slice: DagSlice<T>): PathCoverResult<T> {
-    val topo = slice.topo()
-    val index = topo.withIndex().associate { it.value to it.index }
-    val n = topo.size
-
-    // Build adjacency for the bipartite graph (L->R edge for each DAG edge u->v)
-    val adj = Array(n) { IntArray(0) }
-    val temp = Array(n) { ArrayList<Int>() }
-    for ((v, ps) in slice.prereq) {
-        val vi = index.getValue(v)
-        for (p in ps) {
-            val pi = index.getValue(p)
-            // edge p -> v in DAG => edge (p in L) -> (v in R) in bipartite
-            temp[pi].add(vi)
-        }
-    }
-    for (i in 0 until n) adj[i] = temp[i].toIntArray()
-
-    // Hopcroft–Karp
-    val pairU = IntArray(n) { NIL } // left -> right
-    val pairV = IntArray(n) { NIL } // right -> left
-    val dist  = IntArray(n) { 0 }
-
-    fun bfs(): Boolean {
-        val q = ArrayDeque<Int>()
-        for (u in 0 until n) {
-            if (pairU[u] == NIL) { dist[u] = 0; q.addLast(u) } else dist[u] = Int.MAX_VALUE
-        }
-        var found = false
-        while (q.isNotEmpty()) {
-            val u = q.removeFirst()
-            for (v in adj[u]) {
-                val pu = pairV[v]
-                if (pu == NIL) {
-                    found = true
-                } else if (dist[pu] == Int.MAX_VALUE) {
-                    dist[pu] = dist[u] + 1
-                    q.addLast(pu)
-                }
-            }
-        }
-        return found
-    }
-
-    fun dfs(u: Int): Boolean {
-        for (v in adj[u]) {
-            val pu = pairV[v]
-            if (pu == NIL || (dist[pu] == dist[u] + 1 && dfs(pu))) {
-                pairU[u] = v
-                pairV[v] = u
-                return true
-            }
-        }
-        dist[u] = Int.MAX_VALUE
-        return false
-    }
-
-    while (bfs()) {
-        for (u in 0 until n) if (pairU[u] == NIL) dfs(u)
-    }
-
-    // Reconstruct paths: start at vertices with no matched predecessor on the left
-    val hasPred = BooleanArray(n)
-    for (v in 0 until n) {
-        val u = pairV[v]
-        if (u != NIL) hasPred[v] = true
-    }
-
-    val paths = ArrayList<List<T>>()
-    val used = BooleanArray(n)
-    for (u in 0 until n) {
-        if (!hasPred[u]) {
-            // start of a path
-            val path = ArrayList<T>()
-            var x = u
-            while (x != NIL && !used[x]) {
-                path.add(topo[x]); used[x] = true
-                val y = pairU[x]
-                x = if (y == NIL) NIL else y
-            }
-            if (path.isNotEmpty()) paths.add(path)
-        }
-    }
-    // Any unmatched, unused vertices are singleton paths
-    for (i in 0 until n) if (!used[i]) paths.add(listOf(topo[i]))
-
-    return PathCoverResult(paths)
 }

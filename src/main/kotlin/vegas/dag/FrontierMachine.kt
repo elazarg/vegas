@@ -25,7 +25,7 @@ class FrontierMachine<T : Any> private constructor(
     companion object {
         fun <T : Any> from(dag: Dag<T>): FrontierMachine<T> {
             val depsCount = dag.nodes.associateWith { dag.prerequisitesOf(it).size }.toMutableMap()
-            val dependents = dag.dependentsMap()
+            val dependents = dag.nodes.associateWith { dag.dependentsOf(it) }
             val initial = dag.nodes.filter { depsCount[it] == 0 }.toMutableSet()
             return FrontierMachine(dependents, dag.nodes.toMutableSet(), initial, depsCount)
         }
