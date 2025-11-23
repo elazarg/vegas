@@ -858,11 +858,14 @@ class TypeCheckerTest : FreeSpec({
                 B.yieldTo(
                     Host,
                     listOf(B.dec("goat", TypeId("door"))),
-                    where = (B.m(Host, "goat") neq B.m(Guest, "choice")) and
-                            (B.m(Host, "goat") neq B.m(Host, "car"))
+                    where = B.m(Host, "goat") neq B.m(Guest, "choice")
                 ),
                 B.yieldTo(Guest, listOf(B.dec("switch", BOOL))),
-                B.reveal(Host, listOf(B.dec("car", TypeId("door")))),
+                B.reveal(
+                    Host,
+                    listOf(B.dec("car", TypeId("door"))),
+                    where = B.m(Host, "goat") neq B.m(Host, "car")
+                ),
                 value = Value(
                     mapOf(
                         Guest to B.ite(
