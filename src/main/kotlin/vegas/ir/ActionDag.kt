@@ -85,7 +85,7 @@ class ActionDag private constructor(
             // ExplicitDag.from() throws on cycles, so catch and return null
             val dag = try {
                 ExplicitDag.from(nodes, prerequisitesOf, checkAcyclic = true)
-            } catch (e: IllegalArgumentException) {
+            } catch (_: IllegalArgumentException) {
                 return null  // Cycle detected
             }
 
@@ -158,4 +158,136 @@ private fun checkVisibilityOnReads(
         }
     }
     return true
+}
+
+/**
+ * Build an ActionDag from GameIR.
+ *
+ * Returns null if the IR has invalid dependency structure
+ * (cycles, commit-reveal violations, or visibility violations).
+ */
+fun buildActionDag(ir: GameIR): ActionDag? {
+    // Collect all actions
+    val nodes = mutableSetOf<ActionId>()
+    for ((phaseIdx, phase) in ir.phases.withIndex()) {
+        for (role in phase.roles()) {
+            nodes.add(role to phaseIdx)
+        }
+    }
+
+    // Build dependencies
+    val deps = mutableMapOf<ActionId, MutableSet<ActionId>>()
+
+    for ((phaseIdx, phase) in ir.phases.withIndex()) {
+        for ((role, sig) in phase.actions) {
+            val actionId = role to phaseIdx
+            val actionDeps = deps.getOrPut(actionId) { mutableSetOf() }
+
+            // Add dependencies from guard reads
+            for (capturedField in sig.requires.captures) {
+                // Find the latest action before this one that writes this field
+                val writer = findLatestWriter(capturedField, phaseIdx, ir)
+                if (writer != null) {
+                    actionDeps.add(writer)
+                }
+            }
+
+            // Add commit->reveal dependencies
+            for (param in sig.parameters) {
+                val field = FieldRef(role, param.name)
+                if (param.visible) {
+                    // This might be a reveal - find prior commit
+                    val priorCommit = findPriorCommit(field, phaseIdx, ir)
+                    if (priorCommit != null) {
+                        actionDeps.add(priorCommit)
+                    }
+                }
+            }
+        }
+    }
+
+    // Build metadata
+    fun buildMetadata(actionId: ActionId): ActionMetadata {
+        val (role, phaseIdx) = actionId
+        val sig = ir.phases[phaseIdx].actions[role]!!
+
+        val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
+        val guardReads = sig.requires.captures
+
+        // Determine visibility for each written field
+        val visibility = mutableMapOf<FieldRef, Visibility>()
+        for (param in sig.parameters) {
+            val field = FieldRef(role, param.name)
+            val vis = determineVisibility(field, phaseIdx, param.visible, ir)
+            visibility[field] = vis
+        }
+
+        return ActionMetadata(
+            role = role,
+            writes = writes,
+            visibility = visibility,
+            guardReads = guardReads
+        )
+    }
+
+    return ActionDag.from(
+        nodes = nodes,
+        prerequisitesOf = { deps[it].orEmpty() },
+        metadata = ::buildMetadata
+    )
+}
+
+/**
+ * Find the latest action before phaseIdx that writes the given field.
+ */
+private fun findLatestWriter(field: FieldRef, beforePhase: Int, ir: GameIR): ActionId? {
+    for (phaseIdx in (beforePhase - 1) downTo 0) {
+        val sig = ir.phases[phaseIdx].actions[field.role]
+        if (sig != null && sig.parameters.any { it.name == field.param }) {
+            return field.role to phaseIdx
+        }
+    }
+    return null
+}
+
+/**
+ * Find prior commit for a field (if this is a reveal).
+ */
+private fun findPriorCommit(field: FieldRef, beforePhase: Int, ir: GameIR): ActionId? {
+    for (phaseIdx in (beforePhase - 1) downTo 0) {
+        val sig = ir.phases[phaseIdx].actions[field.role]
+        if (sig != null) {
+            val param = sig.parameters.find { it.name == field.param }
+            if (param != null && !param.visible) {
+                // Found a commit (invisible parameter)
+                return field.role to phaseIdx
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Determine visibility for a field write.
+ * - COMMIT: invisible parameter with no prior commit
+ * - REVEAL: visible parameter with prior commit
+ * - PUBLIC: visible parameter with no prior commit
+ */
+private fun determineVisibility(
+    field: FieldRef,
+    phaseIdx: Int,
+    visible: Boolean,
+    ir: GameIR
+): Visibility {
+    if (!visible) {
+        return Visibility.COMMIT
+    }
+
+    // Check if there's a prior commit
+    val priorCommit = findPriorCommit(field, phaseIdx, ir)
+    return if (priorCommit != null) {
+        Visibility.REVEAL
+    } else {
+        Visibility.PUBLIC
+    }
 }
