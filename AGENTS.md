@@ -78,6 +78,35 @@
 4. **Run related tests together**: Use Maven test patterns like `mvn test -Dtest="Prefix*Test"`
 5. **Run continuously during development**: Don't wait until the end to discover test failures
 
+### Step 4 - DAG-based Solidity Backend
+
+**Approach**: Reuse existing helpers by making them `internal`
+- When building a new backend that needs similar translation logic, make helper functions `internal` instead of `private`
+- Examples: `translateType()`, `translateIrExpr()`, `translateWhere()`, `translateDomainGuards()`, `translateAssignments()`, `buildJoinLogic()`, `buildWithdraw()`
+- This allows code reuse without duplication
+
+**Key Implementation Details**:
+1. **Linearization**: Actions need sequential IDs for Solidity constants
+   - `linearizeDag()` sorts by (phase, role name) for determinism
+   - Maps ActionId to Int for use in contract
+
+2. **DAG vs Phase Structure**:
+   - Replace `phase` variable with `actionDone` mapping
+   - Replace `at_phase()` modifier with `depends()` and `notDone()`
+   - Replace `nextPhase()` functions with dependency-based unlocking
+   - Keep `actionTimestamp` for future timeout support
+
+3. **Testing Strategy**:
+   - Test contract structure (verify what's present/absent)
+   - Test modifiers (verify dependency enforcement)
+   - Test action functions (verify behavior)
+   - Don't over-specify output format (e.g., keyword order may vary)
+
+**Common Issues**:
+- **Property vs Method**: `dag.nodes` is a property, not `dag.nodes()`
+- **Type Inference**: Use explicit types in lambdas for compareBy: `compareBy<ActionId> { ... }`
+- **Test Assertions**: Generated Solidity may have different keyword order or extra parentheses than expected - test for presence of key elements, not exact syntax
+
 ## Development Best Practices
 
 1. **Incremental Integration**: When adding major features, use a "strangler fig" pattern:

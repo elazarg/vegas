@@ -12,7 +12,7 @@ val NO_ROLE = RoleId("None")
  * - WHERE_CLAUSE: Reading from function inputs and current storage.
  * - PAYOFF: Reading from final, post-game storage.
  */
-private enum class ExprContext { WHERE_CLAUSE, PAYOFF }
+internal enum class ExprContext { WHERE_CLAUSE, PAYOFF }
 
 fun genSolidityFromIR(g: GameIR): String {
     val solAst = irToSolidity(expandCommitReveal(g))
@@ -134,7 +134,7 @@ private fun by(roleId: RoleId): ModifierCall = ModifierCall("by", listOf(role(ro
 /**
  * Tracks where each (role,param) first appears (commit) and where it is revealed.
  */
-private class ParamHistory(g: GameIR) {
+internal class ParamHistory(g: GameIR) {
     private data class Occ(val phase: Int, val visible: Boolean)
 
     private val occ = mutableMapOf<FieldRef, MutableList<Occ>>()
@@ -585,7 +585,7 @@ private fun buildPayoffFunction(g: GameIR, history: ParamHistory, finalPhase: In
 
 
 /** Withdraw function (matches golden) */
-private fun buildWithdraw(): FunctionDecl {
+internal fun buildWithdraw(): FunctionDecl {
     val bal = "bal"
     return FunctionDecl(
         name = "withdraw",
@@ -611,7 +611,7 @@ private fun buildWithdraw(): FunctionDecl {
  * Helper function to generate the common "join" logic.
  * This includes role assignment, address saving, deposit handling, and 'done' flag.
  */
-private fun buildJoinLogic(role: RoleId, sig: Signature): List<Statement> {
+internal fun buildJoinLogic(role: RoleId, sig: Signature): List<Statement> {
     val deposit = sig.join?.deposit?.v ?: 0
     val statements = mutableListOf<Statement>()
 
@@ -633,7 +633,7 @@ private fun role(byRole: String): SolExpr.EnumValue = enumVal(ROLE_ENUM, byRole)
 
 /* ====================== IR->Solidity translation atoms ====================== */
 
-private fun translateType(t: Type): SolType = when (t) {
+internal fun translateType(t: Type): SolType = when (t) {
     is Type.IntType -> SolType.Int256
     is Type.BoolType -> SolType.Bool
     is Type.SetType -> SolType.Int256 // Enums/sets are represented as integers
@@ -643,7 +643,7 @@ private fun translateType(t: Type): SolType = when (t) {
  * Translates a vegas.ir.Expr into a vegas.backend.solidity.SolExpr.
  * This is the core logic engine that replaces the 'translateWhere' stub.
  */
-private fun translateIrExpr(
+internal fun translateIrExpr(
     expr: Expr,
     g: GameIR,
     history: ParamHistory,
@@ -743,7 +743,7 @@ private fun translateIrExpr(
 
 
 /** Translates the IR 'where' condition into Solidity 'require' statements. */
-private fun translateWhere(
+internal fun translateWhere(
     expr: Expr,
     g: GameIR,
     history: ParamHistory,
@@ -759,7 +759,7 @@ private fun translateWhere(
 }
 
 /** Generates 'require' statements for domain validation (e.g., `x in {1, 2, 3}`) */
-private fun translateDomainGuards(params: List<Parameter>): List<Statement.Require> =
+internal fun translateDomainGuards(params: List<Parameter>): List<Statement.Require> =
     params.filter { it.visible }.mapNotNull { p ->
         when (val t = p.type) {
             is Type.SetType -> {
@@ -776,7 +776,7 @@ private fun translateDomainGuards(params: List<Parameter>): List<Statement.Requi
     }
 
 /** Generates assignment statements to store visible parameters and set their done flags. */
-private fun translateAssignments(role: RoleId, params: List<Parameter>): List<Statement.Assign> =
+internal fun translateAssignments(role: RoleId, params: List<Parameter>): List<Statement.Assign> =
     params.filter { it.visible }.flatMap { p ->
         val storage = v(storageParam(role, p.name, false))
         val input = v(inputParam(p.name, false))
