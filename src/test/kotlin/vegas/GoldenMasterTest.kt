@@ -39,11 +39,11 @@ class GoldenMasterTest : FreeSpec({
         Example("Prisoners"),
         Example("Simple"),
         Example("Trivial1"),
-        Example("Puzzle", disableBackend=setOf("efg", "solidity-dag")),  // IntType enumeration not supported in DAG
+        Example("Puzzle", disableBackend=setOf("gambit")),  // IntType enumeration not supported in Gambit
         Example("ThreeWayLottery"),
         Example("ThreeWayLotteryBuggy"),
         Example("ThreeWayLotteryShort"),
-        Example("TicTacToe", disableBackend=setOf("efg", "solidity-dag")),  // complex game with large state space
+        Example("TicTacToe", disableBackend=setOf("gambit", "solidity-dag")),  // complex game with large state space
     )
 
     val testCases = exampleFiles.flatMap { example ->

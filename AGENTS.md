@@ -70,6 +70,14 @@
 **Cause**: Some constructs (like let expressions) may not yet be supported in IR lowering
 **Solution**: Wrap validation code in try-catch to gracefully handle `IllegalStateException` from `compileToIR()`
 
+#### Issue: Property vs Method confusion
+**Cause**: Kotlin properties accessed like methods (e.g., `dag.nodes()` instead of `dag.nodes`)
+**Solution**: Check API - if it's a property, access it directly without parentheses
+
+#### Issue: Type inference failures in lambdas
+**Cause**: Kotlin can't infer types in complex lambda expressions like `compareBy { ... }`
+**Solution**: Use explicit type parameters: `compareBy<ActionId> { ... }`
+
 ## Testing Strategy
 
 1. **Test in isolation first**: Use synthetic/minimal test cases without full IR
@@ -78,34 +86,46 @@
 4. **Run related tests together**: Use Maven test patterns like `mvn test -Dtest="Prefix*Test"`
 5. **Run continuously during development**: Don't wait until the end to discover test failures
 
-### Step 4 - DAG-based Solidity Backend
+### Golden Master Testing
 
-**Approach**: Reuse existing helpers by making them `internal`
+- **Backend vs Extension Names**: When filtering test cases, ensure `disableBackend` uses backend names, not file extensions
+  - Backend names: `"solidity"`, `"solidity-dag"`, `"gambit"`, `"smt"`
+  - Extension names: `"sol"`, `"efg"`, `"z3"`
+  - Filter by backend name for consistency: `t.backend !in example.disableBackend`
+  - Example: `disableBackend=setOf("gambit")` not `setOf("efg")`
+
+### Generated Code Testing
+
+- Test contract structure (verify what's present/absent)
+- Test modifiers (verify dependency enforcement)
+- Test action functions (verify behavior)
+- Don't over-specify output format (e.g., keyword order may vary)
+- Test for presence of key elements, not exact syntax
+
+## Backend Implementation Patterns
+
+### Code Reuse
+
 - When building a new backend that needs similar translation logic, make helper functions `internal` instead of `private`
-- Examples: `translateType()`, `translateIrExpr()`, `translateWhere()`, `translateDomainGuards()`, `translateAssignments()`, `buildJoinLogic()`, `buildWithdraw()`
-- This allows code reuse without duplication
+- Examples: `translateType()`, `translateIrExpr()`, `translateWhere()`, `translateDomainGuards()`, `translateAssignments()`
+- This allows code reuse without duplication across backends
 
-**Key Implementation Details**:
-1. **Linearization**: Actions need sequential IDs for Solidity constants
-   - `linearizeDag()` sorts by (phase, role name) for determinism
-   - Maps ActionId to Int for use in contract
+### Linearization
 
-2. **DAG vs Phase Structure**:
-   - Replace `phase` variable with `actionDone` mapping
-   - Replace `at_phase()` modifier with `depends()` and `notDone()`
-   - Replace `nextPhase()` functions with dependency-based unlocking
-   - Keep `actionTimestamp` for future timeout support
+- When generating code that needs sequential IDs (e.g., Solidity constants), sort nodes deterministically
+- Example: `linearizeDag()` sorts by (phase, role name) for determinism
+- Maps structured IDs (like ActionId) to simple Ints for use in generated code
 
-3. **Testing Strategy**:
-   - Test contract structure (verify what's present/absent)
-   - Test modifiers (verify dependency enforcement)
-   - Test action functions (verify behavior)
-   - Don't over-specify output format (e.g., keyword order may vary)
+### Backend-Specific Requirements
 
-**Common Issues**:
-- **Property vs Method**: `dag.nodes` is a property, not `dag.nodes()`
-- **Type Inference**: Use explicit types in lambdas for compareBy: `compareBy<ActionId> { ... }`
-- **Test Assertions**: Generated Solidity may have different keyword order or extra parentheses than expected - test for presence of key elements, not exact syntax
+- **Gambit**: Requires enumeration of all possible values to build game tree
+  - Cannot handle unbounded types like bare `int` (must be bounded enums)
+  - Needs all game states enumerable
+
+- **Solidity**: No enumeration needed
+  - Compiles state machine to contract code
+  - Can handle unbounded types (e.g., `int256`) directly
+  - Focus on dependency tracking and execution flow
 
 ## Development Best Practices
 
