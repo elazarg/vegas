@@ -21,6 +21,10 @@ contract Prisoners {
 
     uint256 constant public ACTION_B_2 = 3;
 
+    uint256 constant public ACTION_A_3 = 4;
+
+    uint256 constant public ACTION_B_3 = 5;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -64,7 +68,7 @@ contract Prisoners {
     }
 
     modifier at_final_phase() {
-        require(actionDone[3], "game not over");
+        require(actionDone[5], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -102,6 +106,22 @@ contract Prisoners {
         done_B_hidden_c = true;
         actionDone[3] = true;
         actionTimestamp[3] = block.timestamp;
+    }
+
+    function move_A_3(bool _c, uint256 salt) public by(Role.A) notDone(4) depends(2) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(A_hidden_c)), "bad reveal");
+        A_c = _c;
+        done_A_c = true;
+        actionDone[4] = true;
+        actionTimestamp[4] = block.timestamp;
+    }
+
+    function move_B_3(bool _c, uint256 salt) public by(Role.B) notDone(5) depends(3) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(B_hidden_c)), "bad reveal");
+        B_c = _c;
+        done_B_c = true;
+        actionDone[5] = true;
+        actionTimestamp[5] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {

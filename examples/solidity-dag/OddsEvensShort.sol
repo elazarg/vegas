@@ -17,6 +17,10 @@ contract OddsEvensShort {
 
     uint256 constant public ACTION_Odd_0 = 1;
 
+    uint256 constant public ACTION_Even_1 = 2;
+
+    uint256 constant public ACTION_Odd_1 = 3;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -64,7 +68,7 @@ contract OddsEvensShort {
     }
 
     modifier at_final_phase() {
-        require(actionDone[1], "game not over");
+        require(actionDone[3], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -92,6 +96,22 @@ contract OddsEvensShort {
         done_Even_hidden_c = true;
         actionDone[0] = true;
         actionTimestamp[0] = block.timestamp;
+    }
+
+    function move_Odd_1(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(1) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Odd_hidden_c)), "bad reveal");
+        Odd_c = _c;
+        done_Odd_c = true;
+        actionDone[3] = true;
+        actionTimestamp[3] = block.timestamp;
+    }
+
+    function move_Even_1(bool _c, uint256 salt) public by(Role.Even) notDone(2) depends(0) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Even_hidden_c)), "bad reveal");
+        Even_c = _c;
+        done_Even_c = true;
+        actionDone[2] = true;
+        actionTimestamp[2] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {

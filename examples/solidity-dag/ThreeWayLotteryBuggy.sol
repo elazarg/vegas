@@ -25,6 +25,12 @@ contract ThreeWayLotteryBuggy {
 
     uint256 constant public ACTION_Issuer_3 = 5;
 
+    uint256 constant public ACTION_Alice_4 = 6;
+
+    uint256 constant public ACTION_Bob_4 = 7;
+
+    uint256 constant public ACTION_Issuer_4 = 8;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -80,7 +86,7 @@ contract ThreeWayLotteryBuggy {
     }
 
     modifier at_final_phase() {
-        require(actionDone[5], "game not over");
+        require(actionDone[8], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
@@ -136,6 +142,33 @@ contract ThreeWayLotteryBuggy {
         done_Bob_hidden_c = true;
         actionDone[4] = true;
         actionTimestamp[4] = block.timestamp;
+    }
+
+    function move_Issuer_4(int256 _c, uint256 salt) public by(Role.Issuer) notDone(8) depends(5) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Issuer_c = _c;
+        done_Issuer_c = true;
+        actionDone[8] = true;
+        actionTimestamp[8] = block.timestamp;
+    }
+
+    function move_Alice_4(int256 _c, uint256 salt) public by(Role.Alice) notDone(6) depends(3) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Alice_c = _c;
+        done_Alice_c = true;
+        actionDone[6] = true;
+        actionTimestamp[6] = block.timestamp;
+    }
+
+    function move_Bob_4(int256 _c, uint256 salt) public by(Role.Bob) notDone(7) depends(4) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
+        require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
+        Bob_c = _c;
+        done_Bob_c = true;
+        actionDone[7] = true;
+        actionTimestamp[7] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {

@@ -33,9 +33,14 @@ fun actionFuncName(role: RoleId, phase: Int): String =
 
 /**
  * Main entry: Generate Solidity from IR using ActionDag.
+ * Ensures IR-DAG alignment by expanding commit-reveal first,
+ * then building the DAG from the same expanded IR.
  */
-fun genSolidityFromDag(g: GameIR, dag: ActionDag): String {
-    val solAst = irToDagSolidity(expandCommitReveal(g), dag)
+fun genSolidityFromDag(orig: GameIR): String {
+    val g = expandCommitReveal(orig)           // 1) normalize IR first
+    val dag = buildActionDag(g)                // 2) build DAG from same IR
+        ?: error("Invalid dependency structure")
+    val solAst = irToDagSolidity(g, dag)       // 3) use g + dag consistently
     return renderSolidityContract(solAst)
 }
 

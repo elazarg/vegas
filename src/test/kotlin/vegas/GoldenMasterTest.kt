@@ -11,7 +11,6 @@ import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
-import vegas.ir.buildActionDag
 import java.io.File
 
 data class Example(
@@ -52,9 +51,7 @@ class GoldenMasterTest : FreeSpec({
                 genSolidityFromIR(compileToIR(prog))
             },
             TestCase(example, "sol", "solidity-dag") { prog ->
-                val ir = compileToIR(prog)
-                val dag = buildActionDag(ir) ?: error("Failed to build DAG for ${example.name}")
-                genSolidityFromDag(ir, dag)
+                genSolidityFromDag(compileToIR(prog))
             },
             TestCase(example, "efg", "gambit") { prog ->
                 generateExtensiveFormGame(compileToIR(prog))
