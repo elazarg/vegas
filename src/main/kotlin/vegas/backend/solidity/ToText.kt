@@ -8,7 +8,7 @@ fun renderSolidityContract(contract: SolidityContract): String {
 pragma solidity ^0.8.31;
 
 ${renderContract(contract)}
-""".trimStart())
+""".trimStart()) + "\n"
 }
 
 // ========== Contract Structure ==========
