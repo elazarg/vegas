@@ -4,7 +4,9 @@ import vegas.RoleId
 import vegas.FieldRef
 import vegas.dag.Dag
 import vegas.dag.ExplicitDag
-import vegas.dag.Algo
+import vegas.dag.DagSlice
+import vegas.dag.Reachability
+import vegas.dag.computeReachability
 
 /**
  * ActionId uniquely identifies an action in the game.
@@ -44,7 +46,8 @@ enum class Visibility { COMMIT, REVEAL, PUBLIC }
  */
 class ActionDag private constructor(
     private val underlying: Dag<ActionId>,
-    private val meta: Map<ActionId, ActionMetadata>
+    private val meta: Map<ActionId, ActionMetadata>,
+    private val reach: Reachability<ActionId>
 ) : Dag<ActionId> by underlying {
 
     fun metadata(a: ActionId): ActionMetadata = meta[a]
@@ -60,13 +63,7 @@ class ActionDag private constructor(
      * (neither is reachable from the other).
      */
     fun canExecuteConcurrently(a: ActionId, b: ActionId): Boolean =
-        !reaches(a, b) && !reaches(b, a)
-
-    /**
-     * Helper: check if there's a path from u to v in the DAG.
-     */
-    private fun reaches(u: ActionId, v: ActionId): Boolean =
-        Algo.reaches(u, v, ::prerequisitesOf)
+        !reach.comparable(a, b)
 
     companion object {
         /**
@@ -89,15 +86,19 @@ class ActionDag private constructor(
                 return null  // Cycle detected
             }
 
-            val metaMap = nodes.associateWith(metadata)
-
+            val metaMap = dag.nodes.associateWith(metadata)
+            val slice = DagSlice(
+                dag.nodes,
+                dag.nodes.associateWith(dag::prerequisitesOf)
+            )
+            val reach = computeReachability(slice)
             // Validate commit-reveal ordering
-            if (!checkCommitRevealOrdering(dag, metaMap)) return null
+            if (!checkCommitRevealOrdering(metaMap, reach)) return null
 
             // Validate visibility on reads
-            if (!checkVisibilityOnReads(dag, metaMap)) return null
+            if (!checkVisibilityOnReads(metaMap, reach)) return null
 
-            return ActionDag(dag, metaMap)
+            return ActionDag(dag, metaMap, reach)
         }
     }
 }
@@ -107,8 +108,8 @@ class ActionDag private constructor(
  * at least one commit reaches each reveal.
  */
 private fun checkCommitRevealOrdering(
-    dag: Dag<ActionId>,
-    meta: Map<ActionId, ActionMetadata>
+    meta: Map<ActionId, ActionMetadata>,
+    reach: Reachability<ActionId>
 ): Boolean {
     val commitsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
     val revealsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
@@ -127,7 +128,7 @@ private fun checkCommitRevealOrdering(
         val commits = commitsByField[field] ?: continue // no commit for this field; may be allowed elsewhere
         for (r in reveals) {
             // At least one commit must reach this reveal
-            val ok = commits.any { c -> Algo.reaches(c, r, dag::prerequisitesOf) }
+            val ok = commits.any { c -> reach.reaches(c, r) }
             if (!ok) return false
         }
     }
@@ -139,15 +140,15 @@ private fun checkCommitRevealOrdering(
  * by some predecessor.
  */
 private fun checkVisibilityOnReads(
-    dag: Dag<ActionId>,
-    meta: Map<ActionId, ActionMetadata>
+    meta: Map<ActionId, ActionMetadata>,
+    reach: Reachability<ActionId>
 ): Boolean {
     for ((a, m) in meta) {
         for (field in m.guardReads) {
             // Check if some predecessor b makes field visible
             val ok = meta.any { (b, mb) ->
                 // b is a predecessor of a
-                Algo.reaches(b, a, dag::prerequisitesOf) &&
+                reach.reaches(b, a) &&
                 // and b makes field visible (PUBLIC or REVEAL)
                 when (mb.visibility[field]) {
                     Visibility.PUBLIC, Visibility.REVEAL -> true
@@ -212,7 +213,9 @@ fun buildActionDag(ir: GameIR): ActionDag? {
         val sig = ir.phases[phaseIdx].actions[role]!!
 
         val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
-        val guardReads = sig.requires.captures
+        // Exclude fields being written in this action from guardReads
+        // (they represent constraints on the values being written, not reads of prior values)
+        val guardReads = sig.requires.captures - writes
 
         // Determine visibility for each written field
         val visibility = mutableMapOf<FieldRef, Visibility>()
