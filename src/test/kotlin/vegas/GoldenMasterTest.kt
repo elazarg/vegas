@@ -6,10 +6,12 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.datatest.withData
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.solidity.genSolidityFromIR
+import vegas.backend.solidity.genSolidityFromDag
 import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
+import vegas.ir.buildActionDag
 import java.io.File
 
 data class Example(
@@ -31,25 +33,36 @@ class GoldenMasterTest : FreeSpec({
     val exampleFiles = listOf(
         Example("Bet"),
         Example("MontyHall"),
-        Example("MontyHallChance"),
+        Example("MontyHallChance", disableBackend=setOf("solidity-dag")),  // random/chance not yet supported in DAG
         Example("OddsEvens"),
         Example("OddsEvensShort"),
         Example("Prisoners"),
         Example("Simple"),
         Example("Trivial1"),
-        Example("Puzzle", disableBackend=setOf("efg")),
+        Example("Puzzle", disableBackend=setOf("efg", "solidity-dag")),  // IntType enumeration not supported in DAG
         Example("ThreeWayLottery"),
         Example("ThreeWayLotteryBuggy"),
         Example("ThreeWayLotteryShort"),
-        Example("TicTacToe", disableBackend=setOf("efg")),
+        Example("TicTacToe", disableBackend=setOf("efg", "solidity-dag")),  // complex game with large state space
     )
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
-            TestCase(example, "sol", "solidity") { prog -> genSolidityFromIR(compileToIR(prog)) },
-            TestCase(example, "efg", "gambit") { prog -> generateExtensiveFormGame(compileToIR(prog)) },
-            TestCase(example, "z3", "smt") { prog -> generateSMT(prog) }
-        ).filter { t -> t.extension !in example.disableBackend }
+            TestCase(example, "sol", "solidity") { prog ->
+                genSolidityFromIR(compileToIR(prog))
+            },
+            TestCase(example, "sol", "solidity-dag") { prog ->
+                val ir = compileToIR(prog)
+                val dag = buildActionDag(ir) ?: error("Failed to build DAG for ${example.name}")
+                genSolidityFromDag(ir, dag)
+            },
+            TestCase(example, "efg", "gambit") { prog ->
+                generateExtensiveFormGame(compileToIR(prog))
+            },
+            TestCase(example, "z3", "smt") { prog ->
+                generateSMT(prog)
+            }
+        ).filter { t -> t.backend !in example.disableBackend }
     }
 
     "Golden Master Tests" - {
@@ -139,7 +152,7 @@ private fun parseExample(example: String): GameAst {
 
 private fun sanitizeOutput(content: String, backend: String): String =
     when (backend) {
-        "solidity" -> content
+        "solidity", "solidity-dag" -> content
             .replace(Regex("//.*\\d{10,}.*\n"), "// TIMESTAMP_COMMENT\n")
             .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
             .replace(Regex("\\s+\n"), "\n")
