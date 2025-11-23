@@ -202,7 +202,7 @@ class TypeCheckerTest : FreeSpec({
                         B.yieldTo(P, listOf(B.i("x"))),
                         value = B.pay(
                             P to B.ite(
-                                B.m(P, "x") gt B.b(true),  // int > bool → error
+                                B.m(P, "x") gt B.b(true),  // int > bool -> error
                                 B.n(1),
                                 B.n(0)
                             )
@@ -723,7 +723,7 @@ class TypeCheckerTest : FreeSpec({
                             Q to BinOp("-", B.n(0), B.v("total"))
                         )
                     )
-                ).let { desugar(it) } // convert Outcome.Let → Value
+                ).let { desugar(it) } // convert Outcome.Let -> Value
             )
             shouldNotThrow<StaticError> { typeCheck(p) }
         }

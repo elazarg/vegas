@@ -631,7 +631,7 @@ private fun buildJoinLogic(role: RoleId, sig: Signature): List<Statement> {
 
 private fun role(byRole: String): SolExpr.EnumValue = enumVal(ROLE_ENUM, byRole)
 
-/* ====================== IR→Solidity translation atoms ====================== */
+/* ====================== IR->Solidity translation atoms ====================== */
 
 private fun translateType(t: Type): SolType = when (t) {
     is Type.IntType -> SolType.Int256

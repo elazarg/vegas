@@ -77,6 +77,29 @@ internal object Algo {
         }
         return unmodifiableSet(keep) to unmodifiableMap(p2)
     }
+
+    /**
+     * Check if there's a path from u to v (i.e., u is an ancestor of v).
+     * Uses BFS backward from v through prerequisites.
+     */
+    fun <T: Any> reaches(u: T, v: T, prerequisitesOf: (T) -> Set<T>): Boolean {
+        if (u == v) return true
+
+        val visited = mutableSetOf<T>()
+        val stack = ArrayDeque<T>().apply { addLast(v) }
+
+        while (stack.isNotEmpty()) {
+            val current = stack.removeLast()
+            if (current == u) return true
+            if (!visited.add(current)) continue
+
+            prerequisitesOf(current).forEach { pred ->
+                if (pred !in visited) stack.addLast(pred)
+            }
+        }
+
+        return false
+    }
 }
 
 interface Reachability<T: Any> {

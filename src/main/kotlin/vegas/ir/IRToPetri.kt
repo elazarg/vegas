@@ -13,7 +13,7 @@ private fun pidFieldDone(r: RoleId, v: VarId) = PlaceId("field[${r.name}.${v.nam
 private fun tidAct(i: Int, r: RoleId) = TransId("t[$i]:${r.name}:act")
 private fun tidPhaseComplete(i: Int) = TransId("t[$i]:complete")
 
-// ---------------- IR → Petri translation ----------------
+// ---------------- IR -> Petri translation ----------------
 /**
  * Construct a 1-safe workflow Petri net from a straight-line phased GameIR.
  *
