@@ -17,6 +17,8 @@ contract Puzzle {
 
     uint256 constant public ACTION_A_1 = 1;
 
+    uint256 constant public FINAL_ACTION = 1;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -56,11 +58,22 @@ contract Puzzle {
     }
 
     modifier at_final_phase() {
-        require(actionDone[1], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_Q_0(int256 _x) public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Q), "already joined");
         role[msg.sender] = Role.Q;
         address_Q = msg.sender;
@@ -69,11 +82,11 @@ contract Puzzle {
         done_Q = true;
         Q_x = _x;
         done_Q_x = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
     function move_A_1(int256 _p, int256 _q) public by(Role.None) notDone(1) depends(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_A), "already joined");
         role[msg.sender] = Role.A;
         address_A = msg.sender;
@@ -83,8 +96,7 @@ contract Puzzle {
         done_A_p = true;
         A_q = _q;
         done_A_q = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
     function distributePayoffs() public at_final_phase {

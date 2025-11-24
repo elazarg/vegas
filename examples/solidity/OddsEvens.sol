@@ -25,6 +25,8 @@ contract OddsEvens {
 
     uint256 constant public ACTION_Even_5 = 5;
 
+    uint256 constant public FINAL_ACTION = 5;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -39,7 +41,7 @@ contract OddsEvens {
 
     bool public done_Even;
 
-    uint256 public Odd_hidden_c;
+    bytes32 public Odd_hidden_c;
 
     bool public done_Odd_hidden_c;
 
@@ -47,7 +49,7 @@ contract OddsEvens {
 
     bool public done_Odd_c;
 
-    uint256 public Even_hidden_c;
+    bytes32 public Even_hidden_c;
 
     bool public done_Even_hidden_c;
 
@@ -68,60 +70,66 @@ contract OddsEvens {
     }
 
     modifier at_final_phase() {
-        require(actionDone[5], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_Odd_1() public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Odd), "already joined");
         role[msg.sender] = Role.Odd;
         address_Odd = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Odd = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
     function move_Even_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Even), "already joined");
         role[msg.sender] = Role.Even;
         address_Even = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Even = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
-    function move_Odd_2(uint256 _hidden_c) public by(Role.Odd) notDone(2) {
+    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) notDone(2) {
         Odd_hidden_c = _hidden_c;
         done_Odd_hidden_c = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        _markActionDone(2);
     }
 
-    function move_Even_4(uint256 _hidden_c) public by(Role.Even) notDone(4) {
+    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) notDone(4) {
         Even_hidden_c = _hidden_c;
         done_Even_hidden_c = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        _markActionDone(4);
     }
 
     function move_Odd_3(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(2) depends(4) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Odd_hidden_c)), "bad reveal");
+        _checkReveal(Odd_hidden_c, abi.encodePacked(_c, salt));
         Odd_c = _c;
         done_Odd_c = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        _markActionDone(3);
     }
 
     function move_Even_5(bool _c, uint256 salt) public by(Role.Even) notDone(5) depends(4) depends(2) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Even_hidden_c)), "bad reveal");
+        _checkReveal(Even_hidden_c, abi.encodePacked(_c, salt));
         Even_c = _c;
         done_Even_c = true;
-        actionDone[5] = true;
-        actionTimestamp[5] = block.timestamp;
+        _markActionDone(5);
     }
 
     function distributePayoffs() public at_final_phase {

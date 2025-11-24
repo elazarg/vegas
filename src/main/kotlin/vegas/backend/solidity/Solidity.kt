@@ -9,6 +9,7 @@ sealed class SolType {
     object Bool : SolType()
     object Address : SolType()
     object Bytes32 : SolType()
+    object Bytes : SolType()  // Dynamic bytes array
 
     // Complex types
     data class Mapping(val keyType: SolType, val valueType: SolType) : SolType()
@@ -21,6 +22,7 @@ sealed class SolType {
         Bool -> "bool"
         Address -> "address"
         Bytes32 -> "bytes32"
+        Bytes -> "bytes"
         is Mapping -> "mapping(${keyType.typeName()} => ${valueType.typeName()})"
         is EnumType -> name
     }
@@ -124,7 +126,7 @@ sealed class Statement {
     /**
      * Assignment statement.
      * LHS can be any lvalue (variable, mapping access, member access).
-     * Example: x = 5; role[msg.sender] = Role.Alice; balance = 100;
+     * Example: x = 5; role[msg\.sender] = Role.Alice; balance = 100;
      */
     data class Assign(
         val lhs: SolExpr,
@@ -219,7 +221,7 @@ sealed class SolExpr {
 
     /**
      * Array/mapping index access.
-     * Example: balances[addr], array[i]
+     * Example: balances\[addr], array[i]
      */
     data class Index(val base: SolExpr, val index: SolExpr) : SolExpr()
 

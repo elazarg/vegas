@@ -152,7 +152,6 @@ class ActionDag private constructor(
     fun struct(id: ActionId): ActionStruct = meta(id).struct
     fun owner(id: ActionId): RoleId = struct(id).role
     fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = struct(id).visibility
-    fun guardReads(id: ActionId): Set<FieldRef> = struct(id).guardReads
 
     /** Reachability queries. */
     fun reaches(from: ActionId, to: ActionId): Boolean =

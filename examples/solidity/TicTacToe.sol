@@ -33,6 +33,8 @@ contract TicTacToe {
 
     uint256 constant public ACTION_O_9 = 9;
 
+    uint256 constant public FINAL_ACTION = 9;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -92,38 +94,47 @@ contract TicTacToe {
     }
 
     modifier at_final_phase() {
-        require(actionDone[9], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_X_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_X), "already joined");
         role[msg.sender] = Role.X;
         address_X = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_X = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
     function move_O_1() public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_O), "already joined");
         role[msg.sender] = Role.O;
         address_O = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_O = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
     function move_X_2(int256 _c1) public by(Role.X) notDone(2) {
         require((((_c1 == 0) || (_c1 == 1)) || (_c1 == 4)), "domain");
         X_c1 = _c1;
         done_X_c1 = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        _markActionDone(2);
     }
 
     function move_O_3(int256 _c1) public by(Role.O) notDone(3) depends(2) {
@@ -131,8 +142,7 @@ contract TicTacToe {
         require((X_c1 != _c1), "where");
         O_c1 = _c1;
         done_O_c1 = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        _markActionDone(3);
     }
 
     function move_X_4(int256 _c2) public by(Role.X) notDone(4) depends(2) depends(3) {
@@ -140,8 +150,7 @@ contract TicTacToe {
         require((((X_c1 != O_c1) && (X_c1 != _c2)) && (O_c1 != _c2)), "where");
         X_c2 = _c2;
         done_X_c2 = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        _markActionDone(4);
     }
 
     function move_O_5(int256 _c2) public by(Role.O) notDone(5) depends(2) depends(3) depends(4) {
@@ -149,8 +158,7 @@ contract TicTacToe {
         require(((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != _c2)) && (O_c1 != X_c2)) && (O_c1 != _c2)) && (X_c2 != _c2)), "where");
         O_c2 = _c2;
         done_O_c2 = true;
-        actionDone[5] = true;
-        actionTimestamp[5] = block.timestamp;
+        _markActionDone(5);
     }
 
     function move_X_6(int256 _c3) public by(Role.X) notDone(6) depends(2) depends(3) depends(4) depends(5) {
@@ -158,8 +166,7 @@ contract TicTacToe {
         require(((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != _c3)) && (O_c2 != _c3)), "where");
         X_c3 = _c3;
         done_X_c3 = true;
-        actionDone[6] = true;
-        actionTimestamp[6] = block.timestamp;
+        _markActionDone(6);
     }
 
     function move_O_7(int256 _c3) public by(Role.O) notDone(7) depends(2) depends(3) depends(4) depends(5) depends(6) {
@@ -167,8 +174,7 @@ contract TicTacToe {
         require((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != _c3)) && (O_c2 != X_c3)) && (O_c2 != _c3)) && (X_c3 != _c3)), "where");
         O_c3 = _c3;
         done_O_c3 = true;
-        actionDone[7] = true;
-        actionTimestamp[7] = block.timestamp;
+        _markActionDone(7);
     }
 
     function move_X_8(int256 _c4) public by(Role.X) notDone(8) depends(2) depends(3) depends(4) depends(5) depends(6) depends(7) {
@@ -176,8 +182,7 @@ contract TicTacToe {
         require((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != _c4)) && (O_c3 != _c4)), "where");
         X_c4 = _c4;
         done_X_c4 = true;
-        actionDone[8] = true;
-        actionTimestamp[8] = block.timestamp;
+        _markActionDone(8);
     }
 
     function move_O_9(int256 _c4) public by(Role.O) notDone(9) depends(2) depends(3) depends(4) depends(5) depends(6) depends(7) depends(8) {
@@ -185,8 +190,7 @@ contract TicTacToe {
         require(((((((((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != X_c4)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != X_c4)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != X_c4)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != X_c4)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != X_c4)) && (X_c3 != _c4)) && (O_c3 != X_c4)) && (O_c3 != _c4)) && (X_c4 != _c4)), "where");
         O_c4 = _c4;
         done_O_c4 = true;
-        actionDone[9] = true;
-        actionTimestamp[9] = block.timestamp;
+        _markActionDone(9);
     }
 
     function distributePayoffs() public at_final_phase {

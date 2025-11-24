@@ -24,14 +24,10 @@ enum class ExprContext { WHERE_CLAUSE, PAYOFF }
 
 /**
  * DAG-based Solidity backend.
- * Generates contracts using action dependencies instead of phase barriers.
  */
 
 /**
  * Linearize ActionDag to assign sequential integer IDs to actions.
- *
- * We use a deterministic order: topo order, tie-broken by (phase index, role name).
- * The second component of ActionId is currently the legacy phase index.
  */
 fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
     dag.topo()
@@ -41,16 +37,12 @@ fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
 
 /**
  * Generate action constant name (e.g., "ACTION_Alice_0").
- *
- * The integer here is the linearization index, not the original phase index.
  */
 fun actionConstName(role: RoleId, index: Int): String =
     "ACTION_${role.name}_$index"
 
 /**
  * Generate action function name (e.g., "move_Alice_0").
- *
- * The integer here is the linearization index, not the original phase index.
  */
 fun actionFuncName(role: RoleId, index: Int): String =
     "move_${role.name}_$index"
@@ -92,6 +84,48 @@ private fun buildWithdraw(): FunctionDecl {
 }
 
 /**
+ * Internal helper: Verify commit-reveal scheme.
+ * Single source of truth for the commitment spec: hash(value, salt).
+ */
+private fun buildCheckRevealHelper(): FunctionDecl {
+    return FunctionDecl(
+        name = "_checkReveal",
+        params = listOf(
+            Param(SolType.Bytes32, "commitment"),
+            Param(SolType.Bytes, "preimage")
+        ),
+        visibility = Visibility.INTERNAL,
+        stateMutability = StateMutability.PURE,
+        modifiers = emptyList(),
+        body = listOf(
+            require(
+                keccak256(v("preimage")) eq v("commitment"),
+                "bad reveal"
+            )
+        )
+    )
+}
+
+/**
+ * Internal helper: Mark an action as done and update timestamps.
+ * Encapsulates the "action completion" semantics.
+ */
+private fun buildMarkActionDoneHelper(): FunctionDecl {
+    return FunctionDecl(
+        name = "_markActionDone",
+        params = listOf(Param(SolType.Uint256, "actionId")),
+        visibility = Visibility.INTERNAL,
+        stateMutability = StateMutability.NONPAYABLE,
+        modifiers = emptyList(),
+        body = listOf(
+            assign(index("actionDone", v("actionId")), bool(true)),
+            assign(index("actionTimestamp", v("actionId")), blockTimestamp),
+            assign(v(LAST_TS_VAR), blockTimestamp)
+        )
+    )
+}
+
+/**
  * Translate ActionGameIR (roles + ActionDag + payoffs) to SolidityContract AST.
  */
 fun irToDagSolidity(g: ActionGameIR): SolidityContract {
@@ -112,14 +146,18 @@ fun irToDagSolidity(g: ActionGameIR): SolidityContract {
         values = (listOf(NO_ROLE) + g.roles + g.chanceRoles).map { it.name }
     )
 
-    // Storage (no phase variable, add actionDone/actionTimestamp etc.)
+    // Storage (add actionDone/actionTimestamp etc.)
     val storage = buildDagGameStorage(g, dag, linearization)
 
     // Modifiers (depends, notDone, by, at_final_phase)
-    val modifiers = buildDagModifiers(dag, linearization)
+    val modifiers = buildDagModifiers()
 
-    // Functions (per-action + payoff + withdraw)
+    // Functions (per-action + payoff + withdraw + internal helpers)
     val functions = buildList {
+        // Internal helper functions
+        add(buildCheckRevealHelper())
+        add(buildMarkActionDoneHelper())
+
         // Per-action functions generated directly from the DAG
         addAll(buildActionFunctions(dag, linearization))
 
@@ -154,14 +192,13 @@ fun irToDagSolidity(g: ActionGameIR): SolidityContract {
 
 /**
  * Build storage for DAG-based contract.
- * No phase variable, but add actionDone and actionTimestamp mappings.
  */
 private fun buildDagGameStorage(
     g: ActionGameIR,
     dag: ActionDag,
     linearization: Map<ActionId, Int>
 ): List<StorageDecl> = buildList {
-    // Timing (no phase variable!)
+    // Timing
     add(StorageDecl(SolType.Uint256, Visibility.PUBLIC, LAST_TS_VAR))
 
     // Action tracking
@@ -180,7 +217,7 @@ private fun buildDagGameStorage(
         )
     )
 
-    // Action constants (indexed by linearization index, not legacy phase index)
+    // Action constants
     linearization.forEach { (actionId, idx) ->
         val role = dag.owner(actionId)
         add(
@@ -193,6 +230,25 @@ private fun buildDagGameStorage(
             )
         )
     }
+
+    // FINAL_ACTION constant (terminal action for payoff distribution)
+    val revealIds = dag.metas
+        .filter { it.kind == ActionKind.REVEAL }
+        .map { it.id }
+    val finalActionIdx: Int = if (revealIds.isNotEmpty()) {
+        revealIds.maxOf { id -> linearization.getValue(id) }
+    } else {
+        linearization.values.maxOrNull() ?: 0
+    }
+    add(
+        StorageDecl(
+            type = SolType.Uint256,
+            visibility = Visibility.PUBLIC,
+            name = "FINAL_ACTION",
+            constant = true,
+            value = SolExpr.IntLit(finalActionIdx)
+        )
+    )
 
     // Roles and balances
     add(
@@ -269,10 +325,10 @@ private fun buildDagGameStorage(
                 ?: error("Missing type information for field $field")
 
             if (field in fieldsNeedingCommitReveal) {
-                // Hidden (hash) cell + done flag
+                // Hidden (hash) cell + done flag (stored as bytes32 hash)
                 add(
                     StorageDecl(
-                        SolType.Uint256,
+                        SolType.Bytes32,
                         Visibility.PUBLIC,
                         storageParam(role, field.param, true)
                     )
@@ -328,29 +384,9 @@ private fun buildDagGameStorage(
  * - notDone(a):    require that action a is not yet done
  * - by(r):         require that msg.sender has role r (or NO_ROLE for open joins)
  * - at_final_phase:
- *      require that the "terminal" action is done and that payoffs have not yet
- *      been distributed.
- *
- * "Terminal" is defined as:
- *   - the max linearization index among REVEAL actions, if any exist; otherwise
- *   - the max linearization index among all actions.
+ *      relies on FINAL_ACTION constant computed in storage
  */
-private fun buildDagModifiers(
-    dag: ActionDag,
-    linearization: Map<ActionId, Int>
-): List<ModifierDecl> {
-    // 1. Find candidate terminal actions
-    val revealIds = dag.metas
-        .filter { it.kind == ActionKind.REVEAL }
-        .map { it.id }
-
-    val finalActionIdx: Int = if (revealIds.isNotEmpty()) {
-        revealIds.maxOf { id -> linearization.getValue(id) }
-    } else {
-        // No reveals at all: fall back to the last action in the linearization
-        linearization.values.max()
-    }
-
+private fun buildDagModifiers(): List<ModifierDecl> {
     return listOf(
         // modifier depends(uint actionId) {
         //   require(actionDone[actionId], "dependency not satisfied");
@@ -398,7 +434,7 @@ private fun buildDagModifiers(
         ),
 
         // modifier at_final_phase() {
-        //   require(actionDone[FINAL_ACTION_IDX], "game not over");
+        //   require(actionDone[FINAL_ACTION], "game not over");
         //   require(!payoffs_distributed, "payoffs already sent");
         //   _;
         // }
@@ -407,7 +443,7 @@ private fun buildDagModifiers(
             params = emptyList(),
             body = listOf(
                 require(
-                    index("actionDone", int(finalActionIdx)),
+                    index("actionDone", v("FINAL_ACTION")),
                     "game not over"
                 ),
                 require(
@@ -455,7 +491,13 @@ private fun buildJoinLogic(role: RoleId, spec: ActionSpec): List<Statement> {
     val deposit = spec.join?.deposit?.v ?: 0
     val statements = mutableListOf<Statement>()
 
-    // Ensure the role hasn't joined yet
+    // Ensure the caller doesn't already have a role (single role per address)
+    statements.add(require(
+        index(ROLE_MAPPING, msgSender) eq role(NO_ROLE.name),
+        "already has a role"
+    ))
+
+    // Ensure the role hasn't joined yet (single address per role)
     statements.add(require(not(v(roleDone(role))), "already joined"))
 
     // Assign role to msg.sender
@@ -506,8 +548,7 @@ private fun buildDagYield(
             addAll(translateDomainGuards(spec.params))
             addAll(translateWhere(spec.guardExpr, role, spec.params))
             addAll(translateAssignments(role, spec.params))
-            add(assign(index("actionDone", int(actionIdx)), bool(true)))
-            add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
+            add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
         }
     )
 }
@@ -530,7 +571,7 @@ private fun buildDagCommit(
     }
 
     val inputs = commitParams.map { p ->
-        Param(SolType.Uint256, inputParam(p.name, hidden = true))
+        Param(SolType.Bytes32, inputParam(p.name, hidden = true))
     }
 
     val byRole =
@@ -558,8 +599,7 @@ private fun buildDagCommit(
             ))
         }
 
-        add(assign(index("actionDone", int(actionIdx)), bool(true)))
-        add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
+        add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
     }
 
     return FunctionDecl(
@@ -602,19 +642,14 @@ private fun buildDagReveal(
 
     val body = buildList {
         revealParams.forEach { p ->
-            val computed = SolExpr.Keccak256(
-                SolExpr.AbiEncodePacked(
-                    listOf(
-                        v(inputParam(p.name, hidden = false)),
-                        v("salt")
-                    )
-                )
+            val preimage = abiEncodePacked(
+                v(inputParam(p.name, hidden = false)),
+                v("salt")
             )
-            val stored = v(storageParam(role, p.name, hidden = true))
+            val commitment = v(storageParam(role, p.name, hidden = true))
             add(
-                require(
-                    computed eq toBytes32(stored),
-                    "bad reveal"
+                Statement.ExprStmt(
+                    SolExpr.Call("_checkReveal", listOf(commitment, preimage))
                 )
             )
         }
@@ -623,8 +658,7 @@ private fun buildDagReveal(
         addAll(translateWhere(spec.guardExpr, role, spec.params))
         addAll(translateAssignments(role, revealParams))
 
-        add(assign(index("actionDone", int(actionIdx)), bool(true)))
-        add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
+        add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
     }
 
     return FunctionDecl(

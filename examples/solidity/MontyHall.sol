@@ -33,6 +33,8 @@ contract MontyHall {
 
     uint256 constant public ACTION_Guest_9 = 9;
 
+    uint256 constant public FINAL_ACTION = 9;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -47,7 +49,7 @@ contract MontyHall {
 
     bool public done_Guest;
 
-    uint256 public Host_hidden_car;
+    bytes32 public Host_hidden_car;
 
     bool public done_Host_hidden_car;
 
@@ -55,7 +57,7 @@ contract MontyHall {
 
     bool public done_Host_car;
 
-    uint256 public Guest_hidden_d;
+    bytes32 public Guest_hidden_d;
 
     bool public done_Guest_hidden_d;
 
@@ -63,7 +65,7 @@ contract MontyHall {
 
     bool public done_Guest_d;
 
-    uint256 public Host_hidden_goat;
+    bytes32 public Host_hidden_goat;
 
     bool public done_Host_hidden_goat;
 
@@ -71,7 +73,7 @@ contract MontyHall {
 
     bool public done_Host_goat;
 
-    uint256 public Guest_hidden_switch;
+    bytes32 public Guest_hidden_switch;
 
     bool public done_Guest_hidden_switch;
 
@@ -92,95 +94,97 @@ contract MontyHall {
     }
 
     modifier at_final_phase() {
-        require(actionDone[9], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_Host_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Host), "already joined");
         role[msg.sender] = Role.Host;
         address_Host = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Host = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
     function move_Guest_1() public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Guest), "already joined");
         role[msg.sender] = Role.Guest;
         address_Guest = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Guest = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
-    function move_Host_2(uint256 _hidden_car) public by(Role.Host) notDone(2) {
+    function move_Host_2(bytes32 _hidden_car) public by(Role.Host) notDone(2) {
         Host_hidden_car = _hidden_car;
         done_Host_hidden_car = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        _markActionDone(2);
     }
 
-    function move_Guest_4(uint256 _hidden_d) public by(Role.Guest) notDone(4) {
+    function move_Guest_4(bytes32 _hidden_d) public by(Role.Guest) notDone(4) {
         Guest_hidden_d = _hidden_d;
         done_Guest_hidden_d = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        _markActionDone(4);
     }
 
-    function move_Guest_8(uint256 _hidden_switch) public by(Role.Guest) notDone(8) {
+    function move_Guest_8(bytes32 _hidden_switch) public by(Role.Guest) notDone(8) {
         Guest_hidden_switch = _hidden_switch;
         done_Guest_hidden_switch = true;
-        actionDone[8] = true;
-        actionTimestamp[8] = block.timestamp;
+        _markActionDone(8);
     }
 
     function move_Guest_5(int256 _d, uint256 salt) public by(Role.Guest) notDone(5) depends(4) depends(8) {
-        require((keccak256(abi.encodePacked(_d, salt)) == bytes32(Guest_hidden_d)), "bad reveal");
+        _checkReveal(Guest_hidden_d, abi.encodePacked(_d, salt));
         require((((_d == 0) || (_d == 1)) || (_d == 2)), "domain");
         Guest_d = _d;
         done_Guest_d = true;
-        actionDone[5] = true;
-        actionTimestamp[5] = block.timestamp;
+        _markActionDone(5);
     }
 
-    function move_Host_6(uint256 _hidden_goat) public by(Role.Host) notDone(6) depends(5) {
+    function move_Host_6(bytes32 _hidden_goat) public by(Role.Host) notDone(6) depends(5) {
         Host_hidden_goat = _hidden_goat;
         done_Host_hidden_goat = true;
-        actionDone[6] = true;
-        actionTimestamp[6] = block.timestamp;
+        _markActionDone(6);
     }
 
     function move_Host_7(int256 _goat, uint256 salt) public by(Role.Host) notDone(7) depends(5) depends(6) depends(8) {
-        require((keccak256(abi.encodePacked(_goat, salt)) == bytes32(Host_hidden_goat)), "bad reveal");
+        _checkReveal(Host_hidden_goat, abi.encodePacked(_goat, salt));
         require((((_goat == 0) || (_goat == 1)) || (_goat == 2)), "domain");
         require((_goat != Guest_d), "where");
         Host_goat = _goat;
         done_Host_goat = true;
-        actionDone[7] = true;
-        actionTimestamp[7] = block.timestamp;
+        _markActionDone(7);
     }
 
     function move_Guest_9(bool _switch, uint256 salt) public by(Role.Guest) notDone(9) depends(8) depends(4) depends(6) {
-        require((keccak256(abi.encodePacked(_switch, salt)) == bytes32(Guest_hidden_switch)), "bad reveal");
+        _checkReveal(Guest_hidden_switch, abi.encodePacked(_switch, salt));
         Guest_switch = _switch;
         done_Guest_switch = true;
-        actionDone[9] = true;
-        actionTimestamp[9] = block.timestamp;
+        _markActionDone(9);
     }
 
     function move_Host_3(int256 _car, uint256 salt) public by(Role.Host) notDone(3) depends(7) depends(2) {
-        require((keccak256(abi.encodePacked(_car, salt)) == bytes32(Host_hidden_car)), "bad reveal");
+        _checkReveal(Host_hidden_car, abi.encodePacked(_car, salt));
         require((((_car == 0) || (_car == 1)) || (_car == 2)), "domain");
         require((Host_goat != _car), "where");
         Host_car = _car;
         done_Host_car = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        _markActionDone(3);
     }
 
     function distributePayoffs() public at_final_phase {

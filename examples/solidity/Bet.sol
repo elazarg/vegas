@@ -23,6 +23,8 @@ contract Bet {
 
     uint256 constant public ACTION_Race_4 = 4;
 
+    uint256 constant public FINAL_ACTION = 4;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -37,7 +39,7 @@ contract Bet {
 
     bool public done_Gambler;
 
-    uint256 public Gambler_hidden_bet;
+    bytes32 public Gambler_hidden_bet;
 
     bool public done_Gambler_hidden_bet;
 
@@ -45,7 +47,7 @@ contract Bet {
 
     bool public done_Gambler_bet;
 
-    uint256 public Race_hidden_winner;
+    bytes32 public Race_hidden_winner;
 
     bool public done_Race_hidden_winner;
 
@@ -66,22 +68,33 @@ contract Bet {
     }
 
     modifier at_final_phase() {
-        require(actionDone[4], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_Race_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Race), "already joined");
         role[msg.sender] = Role.Race;
         address_Race = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Race = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
-    function move_Gambler_1(uint256 _hidden_bet) public payable by(Role.None) notDone(1) {
+    function move_Gambler_1(bytes32 _hidden_bet) public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Gambler), "already joined");
         role[msg.sender] = Role.Gambler;
         address_Gambler = msg.sender;
@@ -90,33 +103,29 @@ contract Bet {
         done_Gambler = true;
         Gambler_hidden_bet = _hidden_bet;
         done_Gambler_hidden_bet = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
-    function move_Race_3(uint256 _hidden_winner) public by(Role.Race) notDone(3) {
+    function move_Race_3(bytes32 _hidden_winner) public by(Role.Race) notDone(3) {
         Race_hidden_winner = _hidden_winner;
         done_Race_hidden_winner = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        _markActionDone(3);
     }
 
     function move_Gambler_2(int256 _bet, uint256 salt) public by(Role.Gambler) notDone(2) depends(1) depends(3) {
-        require((keccak256(abi.encodePacked(_bet, salt)) == bytes32(Gambler_hidden_bet)), "bad reveal");
+        _checkReveal(Gambler_hidden_bet, abi.encodePacked(_bet, salt));
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         Gambler_bet = _bet;
         done_Gambler_bet = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        _markActionDone(2);
     }
 
     function move_Race_4(int256 _winner, uint256 salt) public by(Role.Race) notDone(4) depends(3) depends(1) {
-        require((keccak256(abi.encodePacked(_winner, salt)) == bytes32(Race_hidden_winner)), "bad reveal");
+        _checkReveal(Race_hidden_winner, abi.encodePacked(_winner, salt));
         require((((_winner == 1) || (_winner == 2)) || (_winner == 3)), "domain");
         Race_winner = _winner;
         done_Race_winner = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        _markActionDone(4);
     }
 
     function distributePayoffs() public at_final_phase {

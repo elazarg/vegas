@@ -31,6 +31,8 @@ contract ThreeWayLottery {
 
     uint256 constant public ACTION_Bob_8 = 8;
 
+    uint256 constant public FINAL_ACTION = 8;
+
     mapping(address => Role) public role;
 
     mapping(address => int256) public balanceOf;
@@ -49,7 +51,7 @@ contract ThreeWayLottery {
 
     bool public done_Bob;
 
-    uint256 public Issuer_hidden_c;
+    bytes32 public Issuer_hidden_c;
 
     bool public done_Issuer_hidden_c;
 
@@ -57,7 +59,7 @@ contract ThreeWayLottery {
 
     bool public done_Issuer_c;
 
-    uint256 public Alice_hidden_c;
+    bytes32 public Alice_hidden_c;
 
     bool public done_Alice_hidden_c;
 
@@ -65,7 +67,7 @@ contract ThreeWayLottery {
 
     bool public done_Alice_c;
 
-    uint256 public Bob_hidden_c;
+    bytes32 public Bob_hidden_c;
 
     bool public done_Bob_hidden_c;
 
@@ -86,89 +88,93 @@ contract ThreeWayLottery {
     }
 
     modifier at_final_phase() {
-        require(actionDone[8], "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
     function move_Issuer_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Issuer), "already joined");
         role[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Issuer = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        _markActionDone(0);
     }
 
     function move_Alice_1() public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Alice), "already joined");
         role[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Alice = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        _markActionDone(1);
     }
 
     function move_Bob_2() public payable by(Role.None) notDone(2) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Bob), "already joined");
         role[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Bob = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        _markActionDone(2);
     }
 
-    function move_Issuer_3(uint256 _hidden_c) public by(Role.Issuer) notDone(3) {
+    function move_Issuer_3(bytes32 _hidden_c) public by(Role.Issuer) notDone(3) {
         Issuer_hidden_c = _hidden_c;
         done_Issuer_hidden_c = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        _markActionDone(3);
     }
 
-    function move_Alice_5(uint256 _hidden_c) public by(Role.Alice) notDone(5) {
+    function move_Alice_5(bytes32 _hidden_c) public by(Role.Alice) notDone(5) {
         Alice_hidden_c = _hidden_c;
         done_Alice_hidden_c = true;
-        actionDone[5] = true;
-        actionTimestamp[5] = block.timestamp;
+        _markActionDone(5);
     }
 
-    function move_Bob_7(uint256 _hidden_c) public by(Role.Bob) notDone(7) {
+    function move_Bob_7(bytes32 _hidden_c) public by(Role.Bob) notDone(7) {
         Bob_hidden_c = _hidden_c;
         done_Bob_hidden_c = true;
-        actionDone[7] = true;
-        actionTimestamp[7] = block.timestamp;
+        _markActionDone(7);
     }
 
     function move_Issuer_4(int256 _c, uint256 salt) public by(Role.Issuer) notDone(4) depends(3) depends(5) depends(7) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
+        _checkReveal(Issuer_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Issuer_c = _c;
         done_Issuer_c = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        _markActionDone(4);
     }
 
     function move_Alice_6(int256 _c, uint256 salt) public by(Role.Alice) notDone(6) depends(5) depends(3) depends(7) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
+        _checkReveal(Alice_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Alice_c = _c;
         done_Alice_c = true;
-        actionDone[6] = true;
-        actionTimestamp[6] = block.timestamp;
+        _markActionDone(6);
     }
 
     function move_Bob_8(int256 _c, uint256 salt) public by(Role.Bob) notDone(8) depends(7) depends(3) depends(5) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
+        _checkReveal(Bob_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Bob_c = _c;
         done_Bob_c = true;
-        actionDone[8] = true;
-        actionTimestamp[8] = block.timestamp;
+        _markActionDone(8);
     }
 
     function distributePayoffs() public at_final_phase {

@@ -15,7 +15,6 @@ fun v(name: String) = SolExpr.Var(name)
 
 // ===== Member Access =====
 
-infix fun SolExpr.dot(member: String) = SolExpr.Member(this, member)
 operator fun SolExpr.get(index: SolExpr) = SolExpr.Index(this, index)
 
 // Convenience for common patterns
@@ -44,13 +43,6 @@ operator fun SolExpr.times(other: SolExpr) = SolExpr.Mul(this, other)
 operator fun SolExpr.div(other: SolExpr) = SolExpr.Div(this, other)
 operator fun SolExpr.rem(other: SolExpr) = SolExpr.Mod(this, other)
 operator fun SolExpr.unaryMinus() = SolExpr.Neg(this)
-
-
-// ===== Casts =====
-
-fun cast(type: SolType, expr: SolExpr) = SolExpr.Cast(type, expr)
-fun toBytes32(expr: SolExpr) = SolExpr.Cast(SolType.Bytes32, expr)
-
 // ===== Modifiers =====
 
 fun depends(actionId: Int) = ModifierCall("depends", listOf(int(actionId)))
@@ -79,7 +71,7 @@ fun assign(lhs: SolExpr, rhs: SolExpr) =
 
 // ===== Common Patterns =====
 /**
- * Common pattern: balanceOf[msg.sender] = msg.value
+ * Common pattern: balanceOf[msg\.sender] = msg.value
  */
 fun setBalance() = assign(
     lhs = index(BALANCE_MAPPING, msgSender),
