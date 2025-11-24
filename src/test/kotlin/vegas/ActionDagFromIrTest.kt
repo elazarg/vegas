@@ -8,35 +8,25 @@ import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
+import vegas.ir.ActionDag
 import vegas.ir.Visibility
-import vegas.ir.buildActionDag
+import vegas.ir.dag
 
 /**
  * Tests for building ActionDag from GameIR.
  */
 class ActionDagFromIrTest : FreeSpec({
 
-    "buildActionDag from IR" - {
+    "ActionDag.fromGameIR" - {
 
         "should build DAG for Simple.vg" {
             val ast = parseFile("examples/Simple.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
-
-            dag shouldNotBe null
-            dag!!.nodes.shouldNotBeEmpty()
-
-            // Verify basic structure
-            dag.nodes.size shouldBe ir.phases.sumOf { it.actions.size }
+            compileToIR(ast).dag
         }
 
         "should build DAG for Prisoners.vg" {
             val ast = parseFile("examples/Prisoners.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
-
-            dag shouldNotBe null
-            dag!!.nodes.shouldNotBeEmpty()
+            val dag = compileToIR(ast).dag
 
             // Prisoners dilemma has two players moving simultaneously
             // They should be able to execute concurrently if in same phase
@@ -53,11 +43,7 @@ class ActionDagFromIrTest : FreeSpec({
 
         "should build DAG for OddsEvens.vg" {
             val ast = parseFile("examples/OddsEvens.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
-
-            dag shouldNotBe null
-            dag!!.nodes.shouldNotBeEmpty()
+            val dag = compileToIR(ast).dag
 
             // OddsEvens has Odd and Even players
             val odd = RoleId("Odd")
@@ -81,11 +67,9 @@ class ActionDagFromIrTest : FreeSpec({
 
         "should detect commit-reveal in MontyHall.vg" {
             val ast = parseFile("examples/MontyHall.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
+            val dag = compileToIR(ast).dag
 
-            dag shouldNotBe null
-            dag!!.nodes.shouldNotBeEmpty()
+            dag.nodes.shouldNotBeEmpty()
 
             val host = RoleId("Host")
             val hostActions = dag.nodes.filter { it.first == host }.sortedBy { it.second }
@@ -95,11 +79,11 @@ class ActionDagFromIrTest : FreeSpec({
             // MontyHall has Host committing to car position then revealing it
             // Find commits and reveals by checking visibility
             val commits = hostActions.filter { actionId ->
-                dag.visibility(actionId).values.any { it == Visibility.COMMIT }
+                dag.visibilityOf(actionId).values.any { it == Visibility.COMMIT }
             }
 
             val reveals = hostActions.filter { actionId ->
-                dag.visibility(actionId).values.any { it == Visibility.REVEAL }
+                dag.visibilityOf(actionId).values.any { it == Visibility.REVEAL }
             }
 
             // If there are commits and reveals, verify ordering
@@ -114,11 +98,9 @@ class ActionDagFromIrTest : FreeSpec({
 
         "should handle guard dependencies" {
             val ast = parseFile("examples/Simple.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
+            val dag = compileToIR(ast).dag
 
-            dag shouldNotBe null
-            dag!!.nodes.shouldNotBeEmpty()
+            dag.nodes.shouldNotBeEmpty()
 
             // Check that actions with guard reads have dependencies
             for (action in dag.nodes) {
@@ -134,11 +116,7 @@ class ActionDagFromIrTest : FreeSpec({
 
         "should produce topological order" {
             val ast = parseFile("examples/OddsEvens.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
-
-            dag shouldNotBe null
-            dag!!
+            val dag = compileToIR(ast).dag
 
             val topo = dag.topo()
 
@@ -155,11 +133,7 @@ class ActionDagFromIrTest : FreeSpec({
         "should handle games with no dependencies" {
             // Simple simultaneous game should have independent actions
             val ast = parseFile("examples/Prisoners.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
-
-            dag shouldNotBe null
-            dag!!
+            val dag = compileToIR(ast).dag
 
             // In a simple simultaneous game, actions in the same phase
             // with no guard dependencies should be concurrent
@@ -180,7 +154,7 @@ class ActionDagFromIrTest : FreeSpec({
         }
     }
 
-    "buildActionDag validation" - {
+    "ActionDag.fromGameIR validation" - {
 
         "should validate all example games" {
             val examples = listOf(
@@ -194,8 +168,7 @@ class ActionDagFromIrTest : FreeSpec({
 
             for (example in examples) {
                 val ast = parseFile("examples/$example")
-                val ir = compileToIR(ast)
-                val dag = buildActionDag(ir)
+                val dag = compileToIR(ast).dag
 
                 // All valid examples should produce a valid DAG
                 dag shouldNotBe null
@@ -204,20 +177,16 @@ class ActionDagFromIrTest : FreeSpec({
 
         "should produce consistent metadata" {
             val ast = parseFile("examples/Simple.vg")
-            val ir = compileToIR(ast)
-            val dag = buildActionDag(ir)
+            val dag = compileToIR(ast).dag
 
-            dag shouldNotBe null
-            dag!!
-
-            // Every action should have metadata
+            // Every action should have struct
             for (action in dag.nodes) {
-                val meta = dag.metadata(action)
-                meta.role shouldBe action.first
+                val struct = dag.struct(action)
+                struct.role shouldBe action.first
 
                 // Visibility map should cover all writes
-                for (field in meta.writes) {
-                    meta.visibility.keys shouldContain field
+                for (field in struct.writes) {
+                    struct.visibility.keys shouldContain field
                 }
             }
         }

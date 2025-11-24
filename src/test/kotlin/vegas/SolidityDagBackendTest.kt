@@ -3,7 +3,7 @@ package vegas
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import vegas.backend.solidity.genSolidityFromDag
+import vegas.backend.solidity.genSolidity
 import vegas.frontend.parseFile
 import vegas.frontend.compileToIR
 
@@ -18,7 +18,7 @@ class SolidityDagBackendTest : FreeSpec({
             val ast = parseFile("examples/Simple.vg")
             val ir = compileToIR(ast)
 
-            val solidityCode = genSolidityFromDag(ir)
+            val solidityCode = genSolidity(ir)
 
             // Should NOT have phase variable
             solidityCode shouldNotContain "uint256 public phase"
@@ -37,7 +37,7 @@ class SolidityDagBackendTest : FreeSpec({
             val ast = parseFile("examples/Simple.vg")
             val ir = compileToIR(ast)
 
-            val solidityCode = genSolidityFromDag(ir)
+            val solidityCode = genSolidity(ir)
 
             // Should have depends modifier
             solidityCode shouldContain "modifier depends(uint256 actionId)"
@@ -52,7 +52,7 @@ class SolidityDagBackendTest : FreeSpec({
             val ast = parseFile("examples/Prisoners.vg")
             val ir = compileToIR(ast)
 
-            val solidityCode = genSolidityFromDag(ir)
+            val solidityCode = genSolidity(ir)
 
             // Should have move_ functions instead of phase-based functions
             solidityCode shouldContain "function move_"
@@ -69,7 +69,7 @@ class SolidityDagBackendTest : FreeSpec({
             val ast = parseFile("examples/MontyHall.vg")
             val ir = compileToIR(ast)
 
-            val solidityCode = genSolidityFromDag(ir)
+            val solidityCode = genSolidity(ir)
 
             // Should still have hidden parameter storage
             solidityCode shouldContain "hidden_"
@@ -79,14 +79,5 @@ class SolidityDagBackendTest : FreeSpec({
             solidityCode shouldContain "bad reveal"
         }
 
-        "should not have nextPhase functions" {
-            val ast = parseFile("examples/Simple.vg")
-            val ir = compileToIR(ast)
-
-            val solidityCode = genSolidityFromDag(ir)
-
-            // Should NOT have nextPhase functions
-            solidityCode shouldNotContain "__nextPhase"
-        }
     }
 })

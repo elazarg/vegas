@@ -42,17 +42,21 @@ class ExplicitDag<T : Any> internal constructor(
             nodes: Set<T>,
             prerequisitesOf: (T) -> Set<T>,
             checkAcyclic: Boolean = false
-        ): Dag<T> {
-            val nSet = LinkedHashSet<T>(nodes.size).apply { addAll(nodes) }
-            val pMap = LinkedHashMap<T, Set<T>>(nSet.size).apply {
-                for (n in nSet) {
-                    val ps = prerequisitesOf(n)
-                    require(ps.all { it in nSet }) { "Prereq outside node set for $n" }
-                    put(n, unmodifiableSet(LinkedHashSet<T>(ps.size).apply { addAll(ps) }))
+        ): Dag<T>? {
+            try {
+                val nSet = LinkedHashSet<T>(nodes.size).apply { addAll(nodes) }
+                val pMap = LinkedHashMap<T, Set<T>>(nSet.size).apply {
+                    for (n in nSet) {
+                        val ps = prerequisitesOf(n)
+                        require(ps.all { it in nSet }) { "Prereq outside node set for $n" }
+                        put(n, unmodifiableSet(LinkedHashSet<T>(ps.size).apply { addAll(ps) }))
+                    }
                 }
+                if (checkAcyclic) require(Algo.isAcyclic(nSet, pMap)) { "Cycle detected" }
+                return ExplicitDag(unmodifiableSet(nSet), unmodifiableMap(pMap))
+            } catch (_: IllegalStateException) {
+                return null
             }
-            if (checkAcyclic) require(Algo.isAcyclic(nSet, pMap)) { "Cycle detected" }
-            return ExplicitDag(unmodifiableSet(nSet), unmodifiableMap(pMap))
         }
     }
 }

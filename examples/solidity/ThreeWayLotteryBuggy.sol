@@ -7,11 +7,29 @@ contract ThreeWayLotteryBuggy {
 
     enum Role { None, Issuer, Alice, Bob }
 
-    uint256 constant public PHASE_TIME = uint256(500);
-
-    uint256 public phase;
-
     uint256 public lastTs;
+
+    mapping(uint256 => bool) public actionDone;
+
+    mapping(uint256 => uint256) public actionTimestamp;
+
+    uint256 constant public ACTION_Issuer_0 = 0;
+
+    uint256 constant public ACTION_Alice_1 = 1;
+
+    uint256 constant public ACTION_Bob_2 = 2;
+
+    uint256 constant public ACTION_Alice_3 = 3;
+
+    uint256 constant public ACTION_Bob_3 = 4;
+
+    uint256 constant public ACTION_Issuer_3 = 5;
+
+    uint256 constant public ACTION_Alice_4 = 6;
+
+    uint256 constant public ACTION_Bob_4 = 7;
+
+    uint256 constant public ACTION_Issuer_4 = 8;
 
     mapping(address => Role) public role;
 
@@ -27,15 +45,9 @@ contract ThreeWayLotteryBuggy {
 
     bool public done_Issuer;
 
-    bool public done_Phase0_Issuer;
-
     bool public done_Alice;
 
-    bool public done_Phase1_Alice;
-
     bool public done_Bob;
-
-    bool public done_Phase2_Bob;
 
     uint256 public Issuer_hidden_c;
 
@@ -45,8 +57,6 @@ contract ThreeWayLotteryBuggy {
 
     bool public done_Issuer_c;
 
-    bool public done_Phase3_Issuer;
-
     uint256 public Alice_hidden_c;
 
     bool public done_Alice_hidden_c;
@@ -54,8 +64,6 @@ contract ThreeWayLotteryBuggy {
     int256 public Alice_c;
 
     bool public done_Alice_c;
-
-    bool public done_Phase3_Alice;
 
     uint256 public Bob_hidden_c;
 
@@ -65,16 +73,12 @@ contract ThreeWayLotteryBuggy {
 
     bool public done_Bob_c;
 
-    bool public done_Phase3_Bob;
+    modifier depends(uint256 actionId) {
+        require(actionDone[actionId], "dependency not satisfied");
+    }
 
-    bool public done_Phase4_Issuer;
-
-    bool public done_Phase4_Alice;
-
-    bool public done_Phase4_Bob;
-
-    modifier at_phase(uint256 _phase) {
-        require((phase == _phase), "wrong phase");
+    modifier notDone(uint256 actionId) {
+        require((!actionDone[actionId]), "already done");
     }
 
     modifier by(Role r) {
@@ -82,134 +86,89 @@ contract ThreeWayLotteryBuggy {
     }
 
     modifier at_final_phase() {
-        require((phase == 5), "game not over");
+        require(actionDone[8], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function keccak(bool x, uint256 salt) public pure returns (bytes32 out) {
-        return keccak256(abi.encodePacked(x, salt));
-    }
-
-    function join_Issuer() public payable by(Role.None) at_phase(0) {
+    function move_Issuer_0() public payable by(Role.None) notDone(0) {
         require((!done_Issuer), "already joined");
         role[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Issuer = true;
-        done_Phase0_Issuer = true;
+        actionDone[0] = true;
+        actionTimestamp[0] = block.timestamp;
     }
 
-    function __nextPhase_Phase0() public {
-        require((phase == 0), "wrong phase");
-        require(done_Phase0_Issuer, "Issuer not done");
-        emit Broadcast_Phase0();
-        phase = 1;
-        lastTs = block.timestamp;
-    }
-
-    function join_Alice() public payable by(Role.None) at_phase(1) {
+    function move_Alice_1() public payable by(Role.None) notDone(1) {
         require((!done_Alice), "already joined");
         role[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Alice = true;
-        done_Phase1_Alice = true;
+        actionDone[1] = true;
+        actionTimestamp[1] = block.timestamp;
     }
 
-    function __nextPhase_Phase1() public {
-        require((phase == 1), "wrong phase");
-        require(done_Phase1_Alice, "Alice not done");
-        emit Broadcast_Phase1();
-        phase = 2;
-        lastTs = block.timestamp;
-    }
-
-    function join_Bob() public payable by(Role.None) at_phase(2) {
+    function move_Bob_2() public payable by(Role.None) notDone(2) {
         require((!done_Bob), "already joined");
         role[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
         require((msg.value == 10), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Bob = true;
-        done_Phase2_Bob = true;
+        actionDone[2] = true;
+        actionTimestamp[2] = block.timestamp;
     }
 
-    function __nextPhase_Phase2() public {
-        require((phase == 2), "wrong phase");
-        require(done_Phase2_Bob, "Bob not done");
-        emit Broadcast_Phase2();
-        phase = 3;
-        lastTs = block.timestamp;
-    }
-
-    function yield_Phase3_Issuer(uint256 _hidden_c) public by(Role.Issuer) at_phase(3) {
-        require((!done_Phase3_Issuer), "done");
+    function move_Issuer_3(uint256 _hidden_c) public by(Role.Issuer) notDone(5) {
         Issuer_hidden_c = _hidden_c;
         done_Issuer_hidden_c = true;
-        done_Phase3_Issuer = true;
+        actionDone[5] = true;
+        actionTimestamp[5] = block.timestamp;
     }
 
-    function yield_Phase3_Alice(uint256 _hidden_c) public by(Role.Alice) at_phase(3) {
-        require((!done_Phase3_Alice), "done");
+    function move_Alice_3(uint256 _hidden_c) public by(Role.Alice) notDone(3) {
         Alice_hidden_c = _hidden_c;
         done_Alice_hidden_c = true;
-        done_Phase3_Alice = true;
+        actionDone[3] = true;
+        actionTimestamp[3] = block.timestamp;
     }
 
-    function yield_Phase3_Bob(uint256 _hidden_c) public by(Role.Bob) at_phase(3) {
-        require((!done_Phase3_Bob), "done");
+    function move_Bob_3(uint256 _hidden_c) public by(Role.Bob) notDone(4) {
         Bob_hidden_c = _hidden_c;
         done_Bob_hidden_c = true;
-        done_Phase3_Bob = true;
+        actionDone[4] = true;
+        actionTimestamp[4] = block.timestamp;
     }
 
-    function __nextPhase_Phase3() public {
-        require((phase == 3), "wrong phase");
-        require(done_Phase3_Issuer, "Issuer not done");
-        require(done_Phase3_Alice, "Alice not done");
-        require(done_Phase3_Bob, "Bob not done");
-        emit Broadcast_Phase3();
-        phase = 4;
-        lastTs = block.timestamp;
-    }
-
-    function reveal_Phase4_Issuer(int256 _c, uint256 salt) public by(Role.Issuer) at_phase(4) {
-        require((!done_Phase4_Issuer), "done");
+    function move_Issuer_4(int256 _c, uint256 salt) public by(Role.Issuer) notDone(8) depends(5) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Issuer_c = _c;
         done_Issuer_c = true;
-        done_Phase4_Issuer = true;
+        actionDone[8] = true;
+        actionTimestamp[8] = block.timestamp;
     }
 
-    function reveal_Phase4_Alice(int256 _c, uint256 salt) public by(Role.Alice) at_phase(4) {
-        require((!done_Phase4_Alice), "done");
+    function move_Alice_4(int256 _c, uint256 salt) public by(Role.Alice) notDone(6) depends(3) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Alice_c = _c;
         done_Alice_c = true;
-        done_Phase4_Alice = true;
+        actionDone[6] = true;
+        actionTimestamp[6] = block.timestamp;
     }
 
-    function reveal_Phase4_Bob(int256 _c, uint256 salt) public by(Role.Bob) at_phase(4) {
-        require((!done_Phase4_Bob), "done");
+    function move_Bob_4(int256 _c, uint256 salt) public by(Role.Bob) notDone(7) depends(4) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Bob_c = _c;
         done_Bob_c = true;
-        done_Phase4_Bob = true;
-    }
-
-    function __nextPhase_Phase4() public {
-        require((phase == 4), "wrong phase");
-        require(done_Phase4_Issuer, "Issuer not done");
-        require(done_Phase4_Alice, "Alice not done");
-        require(done_Phase4_Bob, "Bob not done");
-        emit Broadcast_Phase4();
-        phase = 5;
-        lastTs = block.timestamp;
+        actionDone[7] = true;
+        actionTimestamp[7] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {
@@ -226,16 +185,6 @@ contract ThreeWayLotteryBuggy {
         (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
         require(ok, "ETH send failed");
     }
-
-    event Broadcast_Phase0();
-
-    event Broadcast_Phase1();
-
-    event Broadcast_Phase2();
-
-    event Broadcast_Phase3();
-
-    event Broadcast_Phase4();
 
     receive() public payable {
         revert("direct ETH not allowed");

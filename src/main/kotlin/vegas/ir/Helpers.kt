@@ -2,6 +2,7 @@ package vegas.ir
 
 import vegas.FieldRef
 import vegas.RoleId
+import vegas.frontend.Phase
 
 /** Where a (role,var) appears, and whether it’s commit or reveal. */
 data class Occurrence(val phase: Int, val visible: Boolean)

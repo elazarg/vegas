@@ -538,7 +538,7 @@ class TypeCheckerTest : FreeSpec({
         "boolean operators require booleans" - {
 
             "accept valid boolean operations" {
-                val valid = listOf<Exp>(
+                val valid = listOf(
                     B.b(true) and B.b(false),
                     B.b(true) or B.b(false),
                     B.not(B.b(true)),
@@ -554,7 +554,7 @@ class TypeCheckerTest : FreeSpec({
             }
 
             "reject invalid boolean operations" {
-                val invalid = listOf<Exp>(
+                val invalid = listOf(
                     B.n(5) and B.b(true),
                     B.b(false) or B.n(3),
                     B.not(B.n(42))

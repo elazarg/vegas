@@ -3,7 +3,7 @@ package vegas.backend.scribble
 import vegas.FieldRef
 import vegas.RoleId
 import vegas.ir.GameIR
-import vegas.ir.Phase
+import vegas.frontend.Phase
 import vegas.ir.Signature
 import vegas.ir.Type
 

@@ -5,12 +5,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.datatest.withData
 import vegas.backend.gambit.generateExtensiveFormGame
-import vegas.backend.solidity.genSolidityFromIR
-import vegas.backend.solidity.genSolidityFromDag
+import vegas.backend.solidity.genSolidity
 import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
+import vegas.frontend.compileToOldIR
 import java.io.File
 
 data class Example(
@@ -32,7 +32,7 @@ class GoldenMasterTest : FreeSpec({
     val exampleFiles = listOf(
         Example("Bet"),
         Example("MontyHall"),
-        Example("MontyHallChance", disableBackend=setOf("solidity-dag")),  // random/chance not yet supported in DAG
+        Example("MontyHallChance", disableBackend=setOf("solidity")),  // random/chance not yet supported in DAG
         Example("OddsEvens"),
         Example("OddsEvensShort"),
         Example("Prisoners"),
@@ -42,19 +42,16 @@ class GoldenMasterTest : FreeSpec({
         Example("ThreeWayLottery"),
         Example("ThreeWayLotteryBuggy"),
         Example("ThreeWayLotteryShort"),
-        Example("TicTacToe", disableBackend=setOf("gambit", "solidity-dag")),  // complex game with large state space
+        Example("TicTacToe", disableBackend=setOf("gambit")),  // complex game with large state space
     )
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
             TestCase(example, "sol", "solidity") { prog ->
-                genSolidityFromIR(compileToIR(prog))
-            },
-            TestCase(example, "sol", "solidity-dag") { prog ->
-                genSolidityFromDag(compileToIR(prog))
+                genSolidity(compileToIR(prog))
             },
             TestCase(example, "efg", "gambit") { prog ->
-                generateExtensiveFormGame(compileToIR(prog))
+                generateExtensiveFormGame(compileToOldIR(prog))
             },
             TestCase(example, "z3", "smt") { prog ->
                 generateSMT(prog)
@@ -109,15 +106,15 @@ class GoldenMasterTest : FreeSpec({
             val program = parseExample(example)
             val ir = compileToIR(program)
 
-            val output1 = genSolidityFromIR(ir)
-            val output2 = genSolidityFromIR(ir)
+            val output1 = genSolidity(ir)
+            val output2 = genSolidity(ir)
 
             sanitizeOutput(output1, "solidity") shouldBe sanitizeOutput(output2, "solidity")
         }
 
         "Gambit generation should preserve game structure" {
             val program = parseExample("Prisoners")
-            val ir = compileToIR(program)
+            val ir = compileToOldIR(program)
             val efg = generateExtensiveFormGame(ir)
 
             efg shouldContain "EFG 2 R"
@@ -149,7 +146,7 @@ private fun parseExample(example: String): GameAst {
 
 private fun sanitizeOutput(content: String, backend: String): String =
     when (backend) {
-        "solidity", "solidity-dag" -> content
+        "solidity" -> content
             .replace(Regex("//.*\\d{10,}.*\n"), "// TIMESTAMP_COMMENT\n")
             .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
             .replace(Regex("\\s+\n"), "\n")

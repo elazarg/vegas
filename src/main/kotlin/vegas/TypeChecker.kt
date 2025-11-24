@@ -13,7 +13,6 @@ import vegas.frontend.Span
 import vegas.frontend.TypeExp
 import vegas.frontend.VarDec
 import vegas.frontend.compileToIR
-import vegas.ir.buildActionDag
 
 internal class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
     fun span(): Span? = if (node != null)  SourceLoc.get(node) else null
@@ -77,11 +76,7 @@ fun typeCheck(program: GameAst) {
     // Note: compileToIR() may throw IllegalStateException for unsupported features (e.g., let expressions)
     // We only want to validate games that CAN be compiled to IR
     try {
-        val ir = compileToIR(program)
-        buildActionDag(ir) ?: throw StaticError(
-            "Invalid dependency structure (cycle or visibility violation)",
-            program.game
-        )
+        compileToIR(program)
     } catch (_: IllegalStateException) {
         // IR lowering not supported for this construct (e.g., let expressions)
         // Skip ActionDag validation - the game may type check but can't be compiled yet
