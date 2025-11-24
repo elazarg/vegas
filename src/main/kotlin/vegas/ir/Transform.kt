@@ -28,7 +28,7 @@ private fun desugar(outcome: Outcome, names: List<Pair<VarDec, Exp>>): Outcome.V
         fun safeGetRole(m: Map<Role, Exp>, role: Role): Exp {
             try {
                 return m.getValue(role)
-            } catch (e: NoSuchElementException) {
+            } catch (_: NoSuchElementException) {
                 throw StaticError("$role is not a role", role)
             }
         }

@@ -7,7 +7,6 @@ data class Env<T>(val g: Map<VarId, T>, val r: Map<RoleId, T>, val h: Map<FieldR
     operator fun plus(p: Pair<VarId, T>) = Env(g + p, r, h)
     operator fun plus(p: Map<VarId, T>) = Env(g + p, r, h)
     infix fun withMap(p: Map<FieldRef, T>) = Env(g, r, h + p)
-    infix fun withRole(p: Pair<RoleId, T>) = Env(g, r + p, h)
 
     fun getValue(role: RoleId, field: VarId) = getValue(FieldRef(role, field))
     fun getValue(m: FieldRef) = h.getValue(m)

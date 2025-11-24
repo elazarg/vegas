@@ -202,7 +202,7 @@ class TypeCheckerTest : FreeSpec({
                         B.yieldTo(P, listOf(B.i("x"))),
                         value = B.pay(
                             P to B.ite(
-                                B.m(P, "x") gt B.b(true),  // int > bool → error
+                                B.m(P, "x") gt B.b(true),  // int > bool -> error
                                 B.n(1),
                                 B.n(0)
                             )
@@ -538,7 +538,7 @@ class TypeCheckerTest : FreeSpec({
         "boolean operators require booleans" - {
 
             "accept valid boolean operations" {
-                val valid = listOf<Exp>(
+                val valid = listOf(
                     B.b(true) and B.b(false),
                     B.b(true) or B.b(false),
                     B.not(B.b(true)),
@@ -554,7 +554,7 @@ class TypeCheckerTest : FreeSpec({
             }
 
             "reject invalid boolean operations" {
-                val invalid = listOf<Exp>(
+                val invalid = listOf(
                     B.n(5) and B.b(true),
                     B.b(false) or B.n(3),
                     B.not(B.n(42))
@@ -723,7 +723,7 @@ class TypeCheckerTest : FreeSpec({
                             Q to BinOp("-", B.n(0), B.v("total"))
                         )
                     )
-                ).let { desugar(it) } // convert Outcome.Let → Value
+                ).let { desugar(it) } // convert Outcome.Let -> Value
             )
             shouldNotThrow<StaticError> { typeCheck(p) }
         }
@@ -858,11 +858,14 @@ class TypeCheckerTest : FreeSpec({
                 B.yieldTo(
                     Host,
                     listOf(B.dec("goat", TypeId("door"))),
-                    where = (B.m(Host, "goat") neq B.m(Guest, "choice")) and
-                            (B.m(Host, "goat") neq B.m(Host, "car"))
+                    where = B.m(Host, "goat") neq B.m(Guest, "choice")
                 ),
                 B.yieldTo(Guest, listOf(B.dec("switch", BOOL))),
-                B.reveal(Host, listOf(B.dec("car", TypeId("door")))),
+                B.reveal(
+                    Host,
+                    listOf(B.dec("car", TypeId("door"))),
+                    where = B.m(Host, "goat") neq B.m(Host, "car")
+                ),
                 value = Value(
                     mapOf(
                         Guest to B.ite(

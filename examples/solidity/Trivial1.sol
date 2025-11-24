@@ -7,11 +7,15 @@ contract Trivial1 {
 
     enum Role { None, A }
 
-    uint256 constant public PHASE_TIME = uint256(500);
-
-    uint256 public phase;
-
     uint256 public lastTs;
+
+    mapping(uint256 => bool) public actionDone;
+
+    mapping(uint256 => uint256) public actionTimestamp;
+
+    uint256 constant public ACTION_A_0 = 0;
+
+    uint256 constant public FINAL_ACTION = 0;
 
     mapping(address => Role) public role;
 
@@ -23,10 +27,12 @@ contract Trivial1 {
 
     bool public done_A;
 
-    bool public done_Phase0_A;
+    modifier depends(uint256 actionId) {
+        require(actionDone[actionId], "dependency not satisfied");
+    }
 
-    modifier at_phase(uint256 _phase) {
-        require((phase == _phase), "wrong phase");
+    modifier notDone(uint256 actionId) {
+        require((!actionDone[actionId]), "already done");
     }
 
     modifier by(Role r) {
@@ -34,28 +40,27 @@ contract Trivial1 {
     }
 
     modifier at_final_phase() {
-        require((phase == 1), "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function keccak(bool x, uint256 salt) public pure returns (bytes32 out) {
-        return keccak256(abi.encodePacked(x, salt));
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
     }
 
-    function join_A() public by(Role.None) at_phase(0) {
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    function move_A_0() public by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_A), "already joined");
         role[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
-        done_Phase0_A = true;
-    }
-
-    function __nextPhase_Phase0() public {
-        require((phase == 0), "wrong phase");
-        require(done_Phase0_A, "A not done");
-        emit Broadcast_Phase0();
-        phase = 1;
-        lastTs = block.timestamp;
+        _markActionDone(0);
     }
 
     function distributePayoffs() public at_final_phase {
@@ -70,8 +75,6 @@ contract Trivial1 {
         (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
         require(ok, "ETH send failed");
     }
-
-    event Broadcast_Phase0();
 
     receive() public payable {
         revert("direct ETH not allowed");

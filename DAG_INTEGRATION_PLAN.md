@@ -1,269 +1,723 @@
-## Doc 1 (revised) — ADR-DAG-001: Execution DAG, Visibility & Witness/Property Semantics
+# Vegas DAG Integration – Stepwise Plan
 
-**Related Documents:**
-- `DESIGN.md` - Detailed implementation specification, testing strategy, and backend integration details
-- This document (DAG_INTEGRATION_PLAN.md) - Core architectural decisions and semantic model
+**Goal:** Replace phase-based scheduling with DAG-based action dependencies in small, working increments.
 
-### 1. Core semantic model
+**Key stance**
 
-We keep the earlier decision:
+* We specialize to an **`ActionDag`**: a DAG over `ActionId`.
+* We keep the existing generic graph primitives (`Dag<T>`, `ExplicitDag`) as infrastructure only.
+* At each step:
 
-* Nodes = **actions**.
-* Edges = **must-happen-before** dependencies.
-* Per-field **visibility** = `COMMIT | REVEAL | PUBLIC`.
-
-But we now *explicitly* think of each node as carrying a **witness + properties** pair:
-
-* `w` — a tuple of *witness values* (some hidden, some public).
-* `P` — a set of *public properties* (predicates) over:
-
-    * current and past witnesses,
-    * any other global state.
-
-Concretely in Vegas today:
-
-* Witnesses are the **parameters** of the action (`Signature.parameters`), some of which are `hidden`.
-* Public properties are the **`where` clause** and any other semantic constraints we decide to treat as “announced facts”.
-
-So semantically an action is:
-
-```text
-Action node A:
-  witnesses  : w_A   (values chosen/controlled at this node)
-  properties : P_A   (boolean formulas, publicly asserted)
-
-Execution:
-  - w_A may be partially hidden or public (COMMIT / REVEAL / PUBLIC).
-  - P_A becomes common knowledge once A has occurred.
-```
-
-This gives us two “channels” per node:
-
-1. **Witness channel:** actual values (maybe private, maybe public).
-2. **Property channel:** public boolean information about those values.
-
-The DAG is about *witness flow*: who must happen before whom, so that properties and guards make sense. The visibility annotations say which witnesses become visible at which node. The property channel is “logically public” and doesn’t need its own graph structure.
-
-### 2. Commitment schemes as concrete patterns
-
-Two canonical patterns you wrote down:
-
-1. **Simple equality commit–reveal**
-
-    * Commit node:
-
-      ```text
-      Node C:
-        witness: x (hidden)
-        properties: { true }
-        visibility(x) = COMMIT
-      ```
-
-    * Reveal node:
-
-      ```text
-      Node R:
-        witness: y (public)
-        properties: { y = x }
-        visibility(x) = COMMIT (still hidden storage)
-        visibility(y) = REVEAL (public)
-      ```
-
-   Implementation choices:
-
-    * *Deferred check*: store `x` hidden, on `R` check `y == x`.
-    * *Crypto*: store `hash(x, nonce)` at `C`, then at `R` check `hash(y, nonce) == stored_hash`.
-
-   Same semantics in our model: `P_R` includes the equality property; how you enforce it (plain check vs crypto) is orthogonal.
-
-2. **Existential/image style**
-
-    * Commit node:
-
-      ```text
-      Node C:
-        witness: x (hidden)
-        properties: { ∃y. image(x, y) }
-        visibility(x) = COMMIT
-      ```
-
-    * Reveal node:
-
-      ```text
-      Node R:
-        witness: y (public)
-        properties: { image(x, y) }
-        visibility(y) = REVEAL
-      ```
-
-   Again:
-
-    * *Deferred check*: at `R` you check `image(x, y)` directly.
-    * *Crypto*: `C` proves `∃y. image(x, y)` in ZK; `R` may later reveal a particular witness `y` or never reveal it.
-
-Our design needs to *allow* these patterns; it doesn’t need to know which enforcement mechanism you picked.
-
-### 3. What we commit to structurally
-
-We **bake in** three things:
-
-1. **Node abstraction**: every action node is conceptually `(w, P)` even if the implementation only partially exposes that.
-2. **Visibility model**:
-
-    * Witnesses can be hidden or public; we track this as `Visibility` per field.
-    * Properties `P` are **always public** (for now: all players see the same `P`).
-3. **DAG role**:
-
-    * Enforce “you can’t talk about a witness before some node created it”.
-    * Enforce “you can’t use a *public* property of a witness before the node that announced that property”.
-
-No extra graph for properties. Knowledge about properties is purely “after the node executes, P holds and everyone knows it”.
+    * the code builds and runs,
+    * tests pass,
+    * and the new piece is actually used (or at least reachable via CLI/API).
 
 ---
 
-## Doc 2 (revised) — SPEC-DAG-001: DependencyDag & Metadata with Witness/Property View
+## Step Dependencies
 
-We keep the shape of `DependencyDag`, but we tweak the *interpretation* of metadata to match the witness/property picture.
+```text
+Step -1: Environment check
+   ↓
+Step 0: Baseline verification
+   ↓
+Step 1: ActionDag in isolation (types + validation)
+   ↓
+Step 2: IR → ActionDag
+   ↓
+Step 3: Typechecker integration
+   ↓
+Step 4: Solidity DAG backend (side-by-side)
+   ↓
+Step 5: Flip Solidity default to DAG
+   ↓
+Step 6: Gambit backend over DAG
+   ↓
+Step 6.5: (Optional) SMT/DQBF backend over DAG
+   ↓
+Step 7: Remove phase-based semantics
+   ↓
+Step 8: Optional refinements
+```
 
-### 1. ActionMetadata
+Some steps (e.g. 5 and 6) are partially parallelizable once 2–4 are stable.
 
-We extend the commentary around it, and (optionally) add an explicit “witness vs property” split if you want.
+---
 
-Minimum change (no extra runtime overhead):
+## Error Handling Strategy (applies to all steps)
+
+To keep behaviour consistent:
+
+* `ActionDag.from(...)` returns **`null`** on invalid graphs (cycles, visibility violations).
+* The **typechecker** converts `null` into a user-facing diagnostic: “Invalid dependency structure…”.
+* **Backends** (`generateSolidityFromDag`, Gambit DAG backend, etc.) assume they get a valid `ActionDag` and may use `?: error("Invalid dependency structure")` as a last resort.
+
+This keeps user-visible errors centralized in the checker; backends are allowed to be “assertive”.
+
+---
+
+## Step -1 – Environment Verification
+
+**Goal:** Ensure you can build and run tests, and know where core pieces live.
+
+**Checklist (fill in locally):**
+
+* [ ] Build toolchain works (`mvn test`).
+* [ ] Test suite runs (even if some tests currently fail).
+* [ ] You know where to find:
+
+    * [ ] IR types (e.g. `GameIR`, signatures, phases).
+    * [ ] Existing DAG infra (`vegas/dag/`).
+    * [ ] Backends (Solidity, Gambit, SMT if present).
+    * [ ] Example games (`*.vg`).
+* [ ] You’ve scanned `DESIGN.md` for the high-level semantics you’re aiming for.
+
+**Exit criteria**
+
+You can run the build/tests consistently and navigate to the relevant modules without guessing.
+
+---
+
+## Step 0 – Verify Baseline Behaviour
+
+**Goal:** Lock in a known-good baseline for the *current* (phase-based) system.
+
+**Checklist:**
+
+* [ ] Run the test suite once.
+* [ ] Confirm that example games:
+
+    * parse,
+    * build IR,
+    * and generate Solidity via the current backend.
+* [ ] Optionally, note:
+
+    * time to run tests,
+    * rough number of tests passing.
+
+You don’t need to change code here; just ensure you have a mental “baseline” to compare against once DAG-based code starts touching backends.
+
+**Exit criteria**
+
+* You know that:
+
+    * the phase-based pipeline currently works “well enough” for examples,
+    * and any regressions you see later are likely DAG integration issues.
+
+---
+
+## Step 1 – Introduce `ActionId` and `ActionDag` (In Isolation)
+
+**Goal:** Create and test a specialized DAG abstraction (`ActionDag`) independent of IR/backends.
+
+### 1.1 Define `ActionId` & `ActionMetadata`
+
+**File:** `vegas/ir/ActionDag.kt` (new)
 
 ```kotlin
+typealias ActionId = Pair<RoleId, Int> // (role, stepIndex)
+
 data class ActionMetadata(
     val role: RoleId,
-
-    // Witness fields: action's parameters (values chosen here).
-    // Some will be hidden (COMMIT), some public (REVEAL/PUBLIC).
-    val writes: Set<FieldRef>,
-
-    // Visibility of each witness at this node.
+    val writes: Set<FieldRef>,            // fields written/introduced
     val visibility: Map<FieldRef, Visibility>,
-
-    // Fields that the *guard* (where clause) may read as witnesses.
-    val guardReads: Set<FieldRef>
-
-    // (Future) publicProperties: we can add a field here if/when we want
-    // to track public facts explicitly; for now, they are derived from the
-    // where-clause AST.
+    val guardReads: Set<FieldRef>         // fields read in guards/where
 )
 
-enum class Visibility {
-    COMMIT,  // witness exists, stored hidden
-    REVEAL,  // witness existing from commit is now made public
-    PUBLIC   // witness is public from its first occurrence
+enum class Visibility { COMMIT, REVEAL, PUBLIC }
+```
+
+### 1.2 Define `ActionDag` wrapper
+
+**File:** `vegas/ir/ActionDag.kt`
+
+```kotlin
+class ActionDag private constructor(
+    private val underlying: Dag<ActionId>,
+    private val meta: Map<ActionId, ActionMetadata>
+) : Dag<ActionId> by underlying {
+
+    fun metadata(a: ActionId): ActionMetadata = meta[a]!!
+    fun owner(a: ActionId): RoleId = metadata(a).role
+    fun writes(a: ActionId): Set<FieldRef> = metadata(a).writes
+    fun visibility(a: ActionId): Map<FieldRef, Visibility> = metadata(a).visibility
+    fun guardReads(a: ActionId): Set<FieldRef> = metadata(a).guardReads
+
+    fun canExecuteConcurrently(a: ActionId, b: ActionId): Boolean =
+        !Algo.reaches(a, b, ::prerequisitesOf) &&
+        !Algo.reaches(b, a, ::prerequisitesOf)
+
+    companion object {
+        fun from(
+            nodes: Set<ActionId>,
+            prerequisitesOf: (ActionId) -> Set<ActionId>,
+            metadata: (ActionId) -> ActionMetadata
+        ): ActionDag? {
+            val dag = ExplicitDag.from(nodes, prerequisitesOf, checkAcyclic = true)
+                ?: return null
+            val metaMap = nodes.associateWith(metadata)
+
+            if (!checkCommitRevealOrdering(dag, metaMap)) return null
+            if (!checkVisibilityOnReads(dag, metaMap)) return null
+
+            return ActionDag(dag, metaMap)
+        }
+    }
 }
 ```
 
-In comments / docs, we explain:
+### 1.3 Implement validation helpers
 
-* `writes` = witnesses introduced or updated at this node.
-* `visibility(f)` = how that witness is exposed at this node.
-* The **public properties** of the node are the boolean formulas in `sig.requires.condition` plus any other domain invariants you encode.
-
-If you *want* to make properties first-class, you can add:
+Still in `vegas/ir/ActionDag.kt`:
 
 ```kotlin
-data class Prop(
-    val expr: Exp,            // boolean expression (where clause fragment)
-    val dependsOn: Set<FieldRef> // fields it semantically depends on (optional)
-)
+private fun checkCommitRevealOrdering(
+    dag: Dag<ActionId>,
+    meta: Map<ActionId, ActionMetadata>
+): Boolean {
+    // For each field that has both COMMIT and REVEAL:
+    // - find the commit action(s)
+    // - find the reveal action(s)
+    // - require: every reveal has some commit that reaches it
+    val commitsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
+    val revealsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
 
-data class ActionMetadata(
-    ...
-    val properties: List<Prop> = emptyList()
-)
+    for ((a, m) in meta) {
+        m.visibility.forEach { (field, vis) ->
+            when (vis) {
+                Visibility.COMMIT -> commitsByField.getOrPut(field) { mutableListOf() }.add(a)
+                Visibility.REVEAL -> revealsByField.getOrPut(field) { mutableListOf() }.add(a)
+                Visibility.PUBLIC -> {}
+            }
+        }
+    }
+
+    for ((field, reveals) in revealsByField) {
+        val commits = commitsByField[field].orEmpty()
+        if (commits.isEmpty()) continue // no prior commit; may be allowed or rejected elsewhere
+        for (r in reveals) {
+            // At least one commit must reach this reveal
+            val ok = commits.any { c -> Algo.reaches(c, r, dag::prerequisitesOf) }
+            if (!ok) return false
+        }
+    }
+    return true
+}
+
+private fun checkVisibilityOnReads(
+    dag: Dag<ActionId>,
+    meta: Map<ActionId, ActionMetadata>
+): Boolean {
+    // Actions may only read fields that are PUBLIC or REVEALed by some predecessor
+    for ((a, m) in meta) {
+        for (field in m.guardReads) {
+            val ok = meta.any { (b, mb) ->
+                // b is predecessor of a
+                Algo.reaches(b, a, dag::prerequisitesOf) &&
+                // and b makes field visible (PUBLIC or REVEAL)
+                when (mb.visibility[field]) {
+                    Visibility.PUBLIC, Visibility.REVEAL -> true
+                    else -> false
+                }
+            }
+            if (!ok) return false
+        }
+    }
+    return true
+}
 ```
 
-For now, `properties` can just be `listOf(Prop(sig.requires.condition, getReferencedFields(sig.requires.condition)))` if you want the hook, but DAG validity logic doesn’t need to inspect the actual formulas.
+You can refine the exact policy later (e.g. decide whether reading an unrevealed but public initial field is allowed), but this makes the plan executable.
 
-### 2. DAG invariants in witness/property terms
+### 1.4 Core tests for `ActionDag`
 
-`isValidVisibilityStructure` is exactly your “no illegal talk about hidden stuff” rule:
+**File:** `src/test/kotlin/vegas/ActionDagCoreTest.kt`
 
-* For each field `f`:
+Create small, synthetic DAGs (no IR yet):
 
-    * All `REVEAL`/`PUBLIC` writes of `f` must be causally *after* any `COMMIT` writes of `f` (if they exist).
-* For each `guardReads` entry:
+* chain A → B → C,
+* diamond A → B, A → C, {B,C} → D,
+* intentionally cyclic graph (A → B, B → A).
 
-    * If a property or guard reads `f`, then some `REVEAL`/`PUBLIC` write of `f` must be a predecessor of this node (unless `f` is a “public from birth” field).
+Test:
 
-This is precisely: you can only use public facts about a witness once some node has made them public (either by revealing the witness itself or announcing a property about it). Commit-only nodes don’t yet give you public facts; they only bind the witness.
+* `ActionDag.from` returns non-null for acyclic cases,
+* `topo()` never orders a node after its dependents,
+* `canExecuteConcurrently` matches reachability,
+* `from` returns null for cycle case.
 
-Crypto vs plain checks doesn’t change this graph.
+**Exit criteria**
 
----
-
-## Doc 3 (minor tweak) — PLAN-DAG-001: Backends With Witness/Property View
-
-The backend plan mostly stays as before, but we clarify how they treat witnesses vs properties.
-
-### 1. Solidity backend
-
-* **Witnesses**:
-
-    * Hidden witnesses: stored in hidden storage (commitments, hashes, or even cleartext in a private mapping if you don’t care about on-chain secrecy in dev).
-    * Public witnesses: function parameters and/or public storage.
-
-* **Properties**:
-
-    * Implemented as runtime `require(...)` checks using:
-
-        * where clauses (possibly deferred to reveal),
-        * equality between committed and revealed witnesses,
-        * other domain invariants.
-
-The patterns you mentioned:
-
-* `x: true` / `y: x = y`:
-
-    * `x` is a hidden witness committed earlier; `y` is a public witness at reveal; equality check is encoded in the reveal function.
-* `x: ∃y. image(x, y)` / `y: image(x, y)`:
-
-    * At commit: either no on-chain check (just a promise), or an on-chain proof check.
-    * At reveal: on-chain check `image(x, y)`.
-
-Our DAG only cares that:
-
-* Commit node produces `x` (hidden witness).
-* Reveal node depends on commit and reads `x`.
-* Any future guards that use `y` or `image(x, y)` depend on the reveal node.
-
-### 2. Gambit backend
-
-* The **witness values** become the underlying state in the game tree.
-* The **public properties** become part of what is “known” at nodes:
-
-    * At a node, a player’s information set incorporates all public witnesses and all `P` from predecessors.
-* With the current all-or-nothing visibility, those properties are known to everyone at the same time.
-
-Later, if you ever add per-player properties (ZK style), you’d extend the metadata to track “who knows which P” instead of changing the DAG structure.
-
-### 3. SMT / DQBF backend
-
-* Quantified variables correspond to witnesses (fields).
-* Constraints encode properties (`P`) over those witnesses.
-* Dependency sets in DQBF come from DAG reachability:
-  a witness `f` can depend only on witnesses in its predecessors.
-
-Again, the witness/property split is purely semantic: the solver sees variables and constraints, you know which constraints you want to treat as “properties” vs “guards”.
+* `ActionDag` is implemented and unit-tested in isolation.
+* No integration with IR or backends yet.
 
 ---
 
-### TL;DR of the revision
+## Step 2 – Build `ActionDag` from `GameIR` (Not Yet Used by Backends)
 
-* We keep the **DAG** exactly as before (actions, edges, visibility per field).
+**Goal:** Add an IR→`ActionDag` projection, exercised only by tests or a debug command.
 
-* We *rephrase* and slightly extend the design so that every action node is explicitly:
+### 2.1 Implement IR→ActionDag
 
-  > “choose witnesses `w`, then publicly assert properties `P(w, past)`”
+**File:** `vegas/ir/ActionDag.kt`
 
-* Commit–reveal patterns become just special cases of how you split witnesses and properties across nodes, not special cases in the DAG structure.
+```kotlin
+fun buildActionDag(ir: GameIR): ActionDag? {
+    val nodes = mutableSetOf<ActionId>()
+    val deps = mutableMapOf<ActionId, MutableSet<ActionId>>()
 
-* The design now clearly leaves room for:
+    // 1. Create nodes
+    ir.phases.forEachIndexed { step, phase ->
+        phase.actions.forEach { (role, _) ->
+            nodes += ActionId(role, step)
+        }
+    }
 
-    * More expressive properties (`∃y. image(x, y)` etc.),
-    * Crypto-based enforcement (instead of plain `require`),
-    * Future ZK/MPC work, without changing the core DAG story.
+    // 2. Populate dependencies and metadata helpers
+    fun prereqs(a: ActionId): Set<ActionId> =
+        deps[a].orEmpty()
+
+    fun buildMeta(a: ActionId): ActionMetadata {
+        val (role, step) = a
+        val sig = ir.phases[step].actions[role]!!
+
+        // This logic can be as simple or precise as you want initially
+        val writes = inferWritesFromSignature(role, sig)
+        val visibility = inferVisibilityForWrites(role, step, ir, sig, writes)
+        val guardReads = inferGuardReads(sig)
+
+        return ActionMetadata(
+            role = role,
+            writes = writes,
+            visibility = visibility,
+            guardReads = guardReads
+        )
+    }
+
+    // TODO: fill deps[...] based on:
+    // - guardReads: depend on prior writers of those fields
+    // - commit→reveal: reveal depends on commit
+    // The exact shape can be iterated later; start conservative.
+
+    return ActionDag.from(nodes, ::prereqs, ::buildMeta)
+}
+```
+
+Use simple, obviously sound heuristics first (e.g. actions in later phases depend on all actions in earlier phases) and then refine as you better model guard-reads and commit-reveal.
+
+### 2.2 IR→ActionDag tests
+
+**File:** `src/test/kotlin/vegas/ActionDagFromIrTest.kt`
+
+For each example game:
+
+* parse → IR → `buildActionDag(ir)`:
+
+    * assert non-null,
+    * assert `dag.nodes` non-empty,
+    * for a game with obvious commit/reveal structure, assert:
+
+        * commits precede reveals in `topo()` or via `Algo.reaches`.
+
+**Exit criteria**
+
+* For existing example IRs, you can build an `ActionDag`.
+* This still isn’t wired into the typechecker or backends.
+
+---
+
+## Step 3 – Integrate `ActionDag` into Typechecking
+
+**Goal:** Make invalid dependency/visibility structures a *static error*, but keep all runtime semantics phase-based.
+
+### 3.1 Checker hook
+
+**File:** typechecker module (e.g. `vegas/TypeChecker.kt`)
+
+After existing static checks:
+
+```kotlin
+val ir = ast.toIR()
+val dag = buildActionDag(ir)
+
+if (dag == null) {
+    errors += StaticError(
+        message = "Invalid dependency structure (cycle or visibility violation)",
+        location = ast.location // or nearest relevant node
+    )
+}
+```
+
+### 3.2 Negative tests
+
+**File:** `src/test/kotlin/vegas/ActionDagTypecheckTest.kt`
+
+Create a couple of small `.vg` files that:
+
+* read a hidden/committed field before reveal,
+* explicitly create a cycle in dependencies (if you have syntax for that, or via malformed phases).
+
+Assert:
+
+* compilation fails with an error containing “Invalid dependency structure”.
+
+**Exit criteria**
+
+* For valid games, compilation behaves exactly as before.
+* For intentionally invalid dependency structures, the checker rejects them.
+
+Backends are still untouched at this step.
+
+---
+
+## Step 4 – DAG-Based Solidity Backend (Alongside Phase-Based Backend)
+
+**Goal:** Generate Solidity directly from `ActionDag`, but keep phase-based backend as a reference for now.
+
+### 4.1 Linearize `ActionDag` for action IDs
+
+**File:** `vegas/backend/solidity/DagFromIr.kt` (new)
+
+```kotlin
+fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
+    dag.nodes
+        .sortedWith(compareBy({ it.second }, { it.first.name }))
+        .mapIndexed { idx, id -> id to idx }
+        .toMap()
+```
+
+Use these indices for:
+
+* `uint constant ACTION_Foo_Bar = k;`
+* `mapping(uint => bool) actionDone;`
+* `mapping(uint => uint) actionTimestamp;` (for future timeouts).
+
+### 4.2 Modifiers
+
+In the Solidity DSL model:
+
+```solidity
+mapping(uint => bool) public actionDone;
+mapping(uint => uint) public actionTimestamp;
+
+modifier depends(uint actionId) {
+    require(actionDone[actionId], "dependency not satisfied");
+    _;
+}
+
+modifier notDone(uint actionId) {
+    require(!actionDone[actionId], "already done");
+    _;
+}
+```
+
+### 4.3 Per-action functions
+
+In `generateSolidityFromDag(ir, dag: ActionDag)`:
+
+* Compute `val index = linearizeDag(dag)`.
+* For each `actionId` in `dag.topo()`:
+
+    * Collect prerequisites: `dag.prerequisitesOf(actionId)`.
+    * Generate a function:
+
+      ```solidity
+      function move_Role_step(...)
+          external
+          by(Role)
+          notDone(ACTION_Role_step)
+          depends(ACTION_dep1)
+          depends(ACTION_dep2)
+      {
+          // existing phase-based payload logic, minus phase checks
+  
+          actionDone[ACTION_Role_step] = true;
+          actionTimestamp[ACTION_Role_step] = block.timestamp;
+      }
+      ```
+
+Payload logic (commit/reveal/public, where clause checks) should be re-used from the existing backend, just without referencing `phase`.
+
+### 4.4 API/CLI switch
+
+Add a function:
+
+```kotlin
+fun compileToSolidity(ast: GameAst, useDag: Boolean = false): SolidityContract {
+    val ir = ast.toIR()
+    val dag = buildActionDag(ir) ?: error("Invalid dependency structure")
+    return if (useDag) generateSolidityFromDag(ir, dag)
+           else generateSolidityFromIr(ir) // existing phase-based backend
+}
+```
+
+CLI example:
+
+```bash
+vegas solidity --use-dag examples/MontyHall.vg
+```
+
+(Implementation of the flag is up to your CLI layer.)
+
+### 4.5 Tests
+
+**File:** `src/test/kotlin/vegas/SolidityDagBackendTest.kt`
+
+For each example:
+
+* generate Solidity via both backends:
+
+    * assert the DAG-based contract:
+
+        * has no `phase` storage variable,
+        * defines `ACTION_` constants,
+        * uses `actionDone` and `depends`.
+    * optionally, run `solc` on the output and assert success.
+
+For one or two simple traces, you can also:
+
+* exercise both contracts in a lightweight harness and check they accept/reject the same call sequences.
+
+**Exit criteria**
+
+* DAG-based Solidity generation works on examples.
+* Old backend is still available for comparison.
+
+---
+
+## Step 5 – Make DAG-Based Solidity the Default
+
+**Goal:** Flip the default to the DAG backend; keep the phase backend as an explicit legacy option.
+
+### 5.1 Flip default
+
+Change:
+
+```kotlin
+fun compileToSolidity(ast: GameAst, useLegacyPhaseBackend: Boolean = false): SolidityContract
+```
+
+and invert the boolean logic so that:
+
+* default (`false`) uses DAG backend,
+* `true` opts into legacy phase backend.
+
+Update CLI help accordingly (`--legacy-phase-backend` instead of `--use-dag`).
+
+### 5.2 Tests
+
+* Keep testing the DAG backend as main path.
+* Add one test that still exercises the legacy backend so it doesn’t silently break while it exists.
+
+**Exit criteria**
+
+* The DAG backend is the normal way of generating Solidity.
+* Phase-based backend is only used intentionally.
+
+---
+
+## Step 6 – Gambit / EFG Backend over `ActionDag`
+
+**Goal:** Rebuild the Gambit EFG using `ActionDag` instead of phases, to get accurate simultaneity and information sets.
+
+### 6.1 Implement `DagGameTreeBuilder`
+
+**File:** `vegas/backend/gambit/DagFromIr.kt` (new)
+
+Sketch:
+
+```kotlin
+class DagGameTreeBuilder(
+    private val ir: GameIR,
+    private val dag: ActionDag
+) {
+    fun build(): GameTree {
+        val frontier = FrontierMachine.from(dag) // or your existing constructor
+        return buildFromFrontier(frontier, State.empty())
+    }
+
+    private fun buildFromFrontier(
+        frontier: FrontierMachine<ActionId>,
+        state: State
+    ): GameTree {
+        if (frontier.isComplete()) {
+            val payoffs = evalPayoffs(ir, state)
+            return GameTree.Terminal(payoffs)
+        }
+
+        val enabled = frontier.enabled() // set of ActionId
+        val byRole = enabled.groupBy { dag.owner(it) }
+
+        // pick a role to move (deterministic order)
+        val (role, actions) = byRole.entries.sortedBy { it.key.name }.first()
+
+        val knownFields = computeKnownFields(actions)
+        val infosetId = infosetManager.getInfoset(role, knownFields)
+
+        val choices = actions.flatMap { actionId ->
+            val sig = ir.phases[actionId.second].actions[actionId.first]!!
+            val legalPackets = enumeratePackets(sig, state, role)
+                .filter { pkt -> guardHolds(sig, state, pkt) }
+
+            legalPackets.map { pkt ->
+                val newState = applyMove(state, role, pkt)
+                val newFrontier = frontier.copy().apply { resolve(actionId) }
+                val subtree = buildFromFrontier(newFrontier, newState)
+
+                GameTree.Choice(
+                    action = pkt,
+                    subtree = subtree,
+                    probability = chanceProbabilityIfNeeded(role, legalPackets.size)
+                )
+            }
+        }
+
+        return GameTree.Decision(role, infosetId, choices)
+    }
+
+    private fun computeKnownFields(actions: List<ActionId>): Set<FieldRef> {
+        // Fields known for these actions: those written by predecessors with
+        // non-COMMIT visibility.
+        val result = mutableSetOf<FieldRef>()
+        for (a in actions) {
+            dag.prerequisitesOf(a).forEach { pred ->
+                dag.writes(pred).forEach { field ->
+                    val vis = dag.visibility(pred)[field]
+                    if (vis == Visibility.PUBLIC || vis == Visibility.REVEAL) {
+                        result += field
+                    }
+                }
+            }
+        }
+        return result
+    }
+}
+```
+
+You can refine `State`, `Knowledge`, and information-set management as needed; the point is that knowledge comes from DAG-visible predecessors, not from phase numbers.
+
+### 6.2 Side-by-side migration
+
+Add:
+
+```kotlin
+fun compileToGambit(ast: GameAst, useDag: Boolean = false): EfgGame {
+    val ir = ast.toIR()
+    return if (useDag) {
+        val dag = buildActionDag(ir) ?: error("Invalid dependency structure")
+        val tree = DagGameTreeBuilder(ir, dag).build()
+        tree.toEfg()
+    } else {
+        existingGambitBackend(ir) // phase-based
+    }
+}
+```
+
+### 6.3 Tests
+
+**File:** `src/test/kotlin/vegas/GambitDagBackendTest.kt`
+
+For at least one example:
+
+* generate EFG via both backends,
+* assert:
+
+    * same leaf payoffs,
+    * same move labels,
+    * information sets are consistent, with DAG possibly giving *finer* ones (this may need manual inspection / more nuanced assertions).
+
+Also:
+
+* test that two actions that `ActionDag` considers concurrent (mutually non-reachable) show up as simultaneous / in the same information block where appropriate.
+
+**Exit criteria**
+
+* Gambit export works with DAG,
+* Phase-based Gambit backend is no longer needed (can be removed in Step 7).
+
+---
+
+## Step 6.5 – (Optional) SMT / DQBF Backend over `ActionDag`
+
+**Goal:** If you already have an SMT/DQBF backend, decide explicitly whether to align it with `ActionDag` now or treat it as future work.
+
+**Two options:**
+
+1. **If SMT backend exists and you care about it now:**
+
+    * Introduce a DAG-aware variant, e.g.:
+
+      ```kotlin
+      fun generateDQBF(ir: GameIR, dag: ActionDag): String {
+          val quantifiers = dag.topo().map { action ->
+              val role = dag.owner(action)
+              val vars = dag.writes(action)
+              val deps = dag.prerequisitesOf(action).flatMap { dag.writes(it) }
+ 
+              // map role → ∃ or ∀, vars+deps to DQBF syntax
+              ...
+          }
+          ...
+      }
+      ```
+
+    * Add a `useDag` flag analogous to Gambit/Solidity.
+
+2. **If SMT backend is incomplete or low-priority:**
+
+    * Explicitly mark it as **future work** in docs and ignore it during Steps 0–7.
+    * Optionally add a note in `DESIGN.md`: “SMT/DQBF backend will be updated to use `ActionDag` after core Solidity + Gambit migration.”
+
+**Exit criteria**
+
+* You’ve made an explicit decision for SMT:
+
+    * either migrated it to use DAG,
+    * or consciously deferred it.
+
+---
+
+## Step 7 – Remove Phase-Based Scheduling Semantics
+
+**Goal:** Once Solidity and Gambit are DAG-based, remove the old phase-barrier semantics.
+
+**What to remove**
+
+* `phase` variables and `nextPhase` functions in Solidity backend.
+* Phase-based Gambit backend and any code that treats phase number as a semantic barrier.
+* Any “phase” references that exist purely for ordering/synchronisation (you can keep phase indices as neutral IR step indices if helpful for debugging).
+
+**What to keep**
+
+* `ActionId`’s integer component as “step index” or “IR position” if convenient.
+* Any phase information that is *purely syntactic* or helpful for error messages, as long as the semantics are entirely DAG-driven.
+
+**Tests**
+
+* Remove tests that assert “phase must be X” semantics.
+* Assert that:
+
+    * all contract preconditions are expressed via `depends` / `actionDone`,
+    * EFG generation uses `ActionDag`, never phase numbers, for simultaneity / info sets.
+
+**Exit criteria**
+
+* The only semantic story is the `ActionDag` and its metadata.
+* Phases, if present at all, are implementation details of the IR, not part of the semantics.
+
+---
+
+## Step 8 – Optional Refinements
+
+After Steps 1–7 are stable:
+
+* Improve error messages for DAG failures:
+
+    * explicit cycle path,
+    * name of the field causing a visibility violation.
+* Enrich `ActionMetadata` with explicit property bundles derived from `where` clauses.
+* Add more thorough backend equivalence tests:
+
+    * property-based tests generating random strategies and comparing resulting payoffs,
+    * stricter comparisons of EFG structures.
+

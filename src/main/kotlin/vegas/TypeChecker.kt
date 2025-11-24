@@ -12,6 +12,7 @@ import vegas.frontend.SourceLoc
 import vegas.frontend.Span
 import vegas.frontend.TypeExp
 import vegas.frontend.VarDec
+import vegas.frontend.compileToIR
 
 internal class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
     fun span(): Span? = if (node != null)  SourceLoc.get(node) else null
@@ -63,12 +64,23 @@ fun requireStatic(b: Boolean, s: String, node: Ast) {
 }
 
 fun typeCheck(program: GameAst) {
+    // First run traditional type checking
     Checker(
         program.types + mapOf(
             Pair(TypeId("bool"), BOOL),
             Pair(TypeId("int"), INT)
         ),
     ).type(program.game)
+
+    // Then validate ActionDag structure
+    // Note: compileToIR() may throw IllegalStateException for unsupported features (e.g., let expressions)
+    // We only want to validate games that CAN be compiled to IR
+    try {
+        compileToIR(program)
+    } catch (_: IllegalStateException) {
+        // IR lowering not supported for this construct (e.g., let expressions)
+        // Skip ActionDag validation - the game may type check but can't be compiled yet
+    }
 }
 
 

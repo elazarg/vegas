@@ -1,0 +1,9 @@
+// Invalid: B tries to read A's hidden field before it is revealed
+
+type bit = {0, 1}
+
+join A() $ 100;
+join B() $ 100;
+yield A(secret: hidden bit);
+yield B(guess: bit) where B.guess == A.secret;  // ERROR: reads hidden field
+withdraw { A -> 0; B -> 200 }

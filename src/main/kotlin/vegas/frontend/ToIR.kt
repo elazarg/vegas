@@ -5,6 +5,7 @@ import vegas.RoleId
 import vegas.frontend.Exp as AstExpr
 import vegas.frontend.TypeExp as AstType
 import vegas.ir.*
+import vegas.ir.ActionDag.Companion.fromGraph
 
 /**
  * Compile AST to IR.
@@ -16,7 +17,7 @@ import vegas.ir.*
  * - Transform expressions: isDefined/isUndefined->IsDefined
  * - Desugar outcomes to payoff expressions
  */
-fun compileToIR(ast: GameAst): GameIR {
+fun compileToOldIR(ast: GameAst): GameIR {
     val typeEnv = ast.types
     val roles = findRoleIds(ast.game)
     val chanceRoles = findChanceRoleIds(ast.game)
@@ -33,7 +34,166 @@ fun compileToIR(ast: GameAst): GameIR {
     )
 }
 
+fun compileToIR(ast: GameAst): ActionGameIR {
+    val typeEnv = ast.types
+    val roles = findRoleIds(ast.game)
+    val chanceRoles = findChanceRoleIds(ast.game)
+
+    val phases = collectPhases(ast.game, typeEnv)
+    val payoffs = extractPayoffs(ast.game, typeEnv)
+
+    val dag = actionDagFromPhases(phases)
+        ?: error("ActionDag construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
+
+    return ActionGameIR(
+        name = ast.name,
+        roles = roles,
+        chanceRoles = chanceRoles,
+        phases = ActionDag.expandCommitReveal(dag),
+        payoffs = payoffs,
+    )
+}
+
 // ========== Phase Collection ==========
+
+/** Exactly one Signature per RoleId in a Phase.
+ *
+ * SIMULTANEITY SEMANTICS:
+ * Simultaneous (independent) if neither depends on the other
+ * (no path in dependency graph). Simultaneous actions:
+ * - Compute infosets and legality from SAME pre-state snapshot
+ * - Can execute in any order (commute)
+ * - Belong to same information set if they can't observe each other's choices
+ * */
+data class Phase(val actions: Map<RoleId, Signature>) {
+    fun roles(): Set<RoleId> = actions.keys
+    fun signature(role: RoleId) = actions[role]
+}
+
+
+private fun findLatestWriter(
+    field: FieldRef,
+    beforePhase: Int,
+    phases: List<Phase>,
+): ActionId? {
+    for (p in beforePhase - 1 downTo 0) {
+        val sig = phases[p].actions[field.role] ?: continue
+        if (sig.parameters.any { it.name == field.param })
+            return field.role to p
+    }
+    return null
+}
+
+private fun findPriorCommit(
+    field: FieldRef,
+    beforePhase: Int,
+    phases: List<Phase>,
+): ActionId? {
+    for (p in beforePhase - 1 downTo 0) {
+        val sig = phases[p].actions[field.role] ?: continue
+        val param = sig.parameters.find { it.name == field.param }
+        if (param != null && !param.visible)
+            return field.role to p
+    }
+    return null
+}
+
+/**
+ * Build an [ActionDag] from a linear list of [Phase]s, without going
+ * through [GameIR].
+ *
+ * Returns null if:
+ *  - the induced dependency graph is cyclic, or
+ *  - commit/reveal ordering is illegal, or
+ *  - guards read fields that are never visible beforehand.
+ */
+fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
+    val nodes = mutableSetOf<ActionId>()
+    val deps = mutableMapOf<ActionId, MutableSet<ActionId>>()
+
+    // 1) Nodes
+    phases.forEachIndexed { pIdx, phase ->
+        phase.actions.forEach { (role, _) ->
+            val id = role to pIdx
+            nodes += id
+            deps.getOrPut(id) { mutableSetOf() }
+        }
+    }
+
+    // 2) Dependency inference (data + commit/reveal)
+    phases.forEachIndexed { pIdx, phase ->
+        phase.actions.forEach { (role, sig) ->
+            val id = role to pIdx
+            val dset = deps.getOrPut(id) { mutableSetOf() }
+
+            // Guard-data deps: latest writer of each captured field
+            sig.requires.captures.forEach { field ->
+                val w = findLatestWriter(field, pIdx, phases)
+                if (w != null) dset += w
+            }
+
+            // Commit-reveal deps: reveal depends on prior commit
+            sig.parameters.forEach { p ->
+                if (p.visible) {
+                    val f = FieldRef(role, p.name)
+                    val com = findPriorCommit(f, pIdx, phases)
+                    if (com != null) dset += com
+                }
+            }
+        }
+    }
+
+    // 3) Per-action payloads (spec + struct)
+    val payloads = mutableMapOf<ActionId, ActionMeta>()
+    phases.forEachIndexed { pIdx, phase ->
+        phase.actions.forEach { (role, sig) ->
+            val id = role to pIdx
+
+            val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
+            val guardReads = sig.requires.captures
+
+            val visibility = buildVisibilityMap(role, pIdx, sig, phases)
+
+            val struct = ActionStruct(
+                role = role,
+                writes = writes,
+                visibility = visibility,
+                guardReads = guardReads,
+            )
+
+            val params = sig.parameters.map { ActionParam(it.name, it.type) }
+
+            val spec = ActionSpec(
+                params = params,
+                join = sig.join,
+                guardExpr = sig.requires.condition,
+            )
+
+            payloads[id] = ActionMeta(id = id, spec = spec, struct = struct)
+        }
+    }
+
+    return fromGraph(nodes, deps, payloads)
+}
+
+private fun buildVisibilityMap(
+    role: RoleId,
+    phaseIdx: Int,
+    sig: Signature,
+    phases: List<Phase>,
+): Map<FieldRef, Visibility> {
+    val map = mutableMapOf<FieldRef, Visibility>()
+    sig.parameters.map { p ->
+        val field = FieldRef(role, p.name)
+        map[field] = if (!p.visible) {
+            Visibility.COMMIT
+        } else {
+            val priorCommit = findPriorCommit(field, phaseIdx, phases)
+            if (priorCommit != null) Visibility.REVEAL else Visibility.PUBLIC
+        }
+    }
+    return map
+}
 
 private fun collectPhases(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): List<Phase> {
     return when (ext) {

@@ -2,6 +2,7 @@
 __pycache__
 .diff
 .idea
+.claude
 test-diffs/
 target/
 vegas/bin/*

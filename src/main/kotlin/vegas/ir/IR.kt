@@ -3,6 +3,8 @@ package vegas.ir
 import vegas.RoleId
 import vegas.VarId
 import vegas.FieldRef
+import vegas.frontend.Phase
+import vegas.frontend.actionDagFromPhases
 
 // Expression are mostly straightforward
 sealed class Expr {
@@ -85,31 +87,33 @@ data class Signature(
     val requires: Requirement      // guard for this role's action (snapshot semantics)
 )
 
-/** Exactly one Signature per RoleId in a Phase.
- *
- * SIMULTANEITY SEMANTICS:
- * Simultaneous (independent) if neither depends on the other
- * (no path in dependency graph). Simultaneous actions:
- * - Compute infosets and legality from SAME pre-state snapshot
- * - Can execute in any order (commute)
- * - Belong to same information set if they can't observe each other's choices
- * */
-data class Phase(val actions: Map<RoleId, Signature>) {
-    fun roles(): Set<RoleId> = actions.keys
-    fun signature(role: RoleId) = actions[role]
-}
-
 /**
  * A GameIR describes a multi-party interaction where roles perform actions
  * that may depend on each other, leading to payoffs for each role.
  */
-data class GameIR(
+data class GGameIR<T>(
     val name: String,
     val roles: Set<RoleId>,
     val chanceRoles: Set<RoleId>,
-    val phases: List<Phase>,        // index is phase order; straight-path
+    val phases: T,        // index is phase order; straight-path
     val payoffs: Map<RoleId, Expr>    // evaluated at terminal
 )
+
+typealias GameIR = GGameIR<List<Phase>>
+typealias ActionGameIR = GGameIR<ActionDag>
+
+val ActionGameIR.dag: ActionDag get() = phases
+
+fun GameIR.toActionGameIr(): ActionGameIR? {
+    val dag = actionDagFromPhases(phases) ?: return null
+    return ActionGameIR(
+        name = name,
+        roles = roles,
+        chanceRoles = chanceRoles,
+        phases = dag,
+        payoffs = payoffs,
+    )
+}
 
 fun expandCommitReveal(ir: GameIR): GameIR {
     val expandedPhases = mutableListOf<Phase>()

@@ -7,11 +7,23 @@ contract Bet {
 
     enum Role { None, Gambler, Race }
 
-    uint256 constant public PHASE_TIME = uint256(500);
-
-    uint256 public phase;
-
     uint256 public lastTs;
+
+    mapping(uint256 => bool) public actionDone;
+
+    mapping(uint256 => uint256) public actionTimestamp;
+
+    uint256 constant public ACTION_Race_0 = 0;
+
+    uint256 constant public ACTION_Gambler_1 = 1;
+
+    uint256 constant public ACTION_Gambler_2 = 2;
+
+    uint256 constant public ACTION_Race_3 = 3;
+
+    uint256 constant public ACTION_Race_4 = 4;
+
+    uint256 constant public FINAL_ACTION = 4;
 
     mapping(address => Role) public role;
 
@@ -25,24 +37,30 @@ contract Bet {
 
     bool public done_Race;
 
-    bool public done_Phase0_Race;
-
     bool public done_Gambler;
+
+    bytes32 public Gambler_hidden_bet;
+
+    bool public done_Gambler_hidden_bet;
 
     int256 public Gambler_bet;
 
     bool public done_Gambler_bet;
 
-    bool public done_Phase1_Gambler;
+    bytes32 public Race_hidden_winner;
+
+    bool public done_Race_hidden_winner;
 
     int256 public Race_winner;
 
     bool public done_Race_winner;
 
-    bool public done_Phase2_Race;
+    modifier depends(uint256 actionId) {
+        require(actionDone[actionId], "dependency not satisfied");
+    }
 
-    modifier at_phase(uint256 _phase) {
-        require((phase == _phase), "wrong phase");
+    modifier notDone(uint256 actionId) {
+        require((!actionDone[actionId]), "already done");
     }
 
     modifier by(Role r) {
@@ -50,67 +68,64 @@ contract Bet {
     }
 
     modifier at_final_phase() {
-        require((phase == 3), "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function keccak(bool x, uint256 salt) public pure returns (bytes32 out) {
-        return keccak256(abi.encodePacked(x, salt));
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
     }
 
-    function join_Race() public payable by(Role.None) at_phase(0) {
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    function move_Race_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Race), "already joined");
         role[msg.sender] = Role.Race;
         address_Race = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Race = true;
-        done_Phase0_Race = true;
+        _markActionDone(0);
     }
 
-    function __nextPhase_Phase0() public {
-        require((phase == 0), "wrong phase");
-        require(done_Phase0_Race, "Race not done");
-        emit Broadcast_Phase0();
-        phase = 1;
-        lastTs = block.timestamp;
-    }
-
-    function join_Gambler(int256 _bet) public payable by(Role.None) at_phase(1) {
+    function move_Gambler_1(bytes32 _hidden_bet) public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Gambler), "already joined");
         role[msg.sender] = Role.Gambler;
         address_Gambler = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Gambler = true;
+        Gambler_hidden_bet = _hidden_bet;
+        done_Gambler_hidden_bet = true;
+        _markActionDone(1);
+    }
+
+    function move_Race_3(bytes32 _hidden_winner) public by(Role.Race) notDone(3) {
+        Race_hidden_winner = _hidden_winner;
+        done_Race_hidden_winner = true;
+        _markActionDone(3);
+    }
+
+    function move_Gambler_2(int256 _bet, uint256 salt) public by(Role.Gambler) notDone(2) depends(1) depends(3) {
+        _checkReveal(Gambler_hidden_bet, abi.encodePacked(_bet, salt));
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         Gambler_bet = _bet;
         done_Gambler_bet = true;
-        done_Phase1_Gambler = true;
+        _markActionDone(2);
     }
 
-    function __nextPhase_Phase1() public {
-        require((phase == 1), "wrong phase");
-        require(done_Phase1_Gambler, "Gambler not done");
-        emit Broadcast_Phase1();
-        phase = 2;
-        lastTs = block.timestamp;
-    }
-
-    function yield_Phase2_Race(int256 _winner) public by(Role.Race) at_phase(2) {
-        require((!done_Phase2_Race), "done");
+    function move_Race_4(int256 _winner, uint256 salt) public by(Role.Race) notDone(4) depends(3) depends(1) {
+        _checkReveal(Race_hidden_winner, abi.encodePacked(_winner, salt));
         require((((_winner == 1) || (_winner == 2)) || (_winner == 3)), "domain");
         Race_winner = _winner;
         done_Race_winner = true;
-        done_Phase2_Race = true;
-    }
-
-    function __nextPhase_Phase2() public {
-        require((phase == 2), "wrong phase");
-        require(done_Phase2_Race, "Race not done");
-        emit Broadcast_Phase2();
-        phase = 3;
-        lastTs = block.timestamp;
+        _markActionDone(4);
     }
 
     function distributePayoffs() public at_final_phase {
@@ -126,12 +141,6 @@ contract Bet {
         (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
         require(ok, "ETH send failed");
     }
-
-    event Broadcast_Phase0();
-
-    event Broadcast_Phase1();
-
-    event Broadcast_Phase2();
 
     receive() public payable {
         revert("direct ETH not allowed");

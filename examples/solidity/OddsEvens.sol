@@ -7,11 +7,25 @@ contract OddsEvens {
 
     enum Role { None, Odd, Even }
 
-    uint256 constant public PHASE_TIME = uint256(500);
-
-    uint256 public phase;
-
     uint256 public lastTs;
+
+    mapping(uint256 => bool) public actionDone;
+
+    mapping(uint256 => uint256) public actionTimestamp;
+
+    uint256 constant public ACTION_Even_0 = 0;
+
+    uint256 constant public ACTION_Odd_1 = 1;
+
+    uint256 constant public ACTION_Odd_2 = 2;
+
+    uint256 constant public ACTION_Odd_3 = 3;
+
+    uint256 constant public ACTION_Even_4 = 4;
+
+    uint256 constant public ACTION_Even_5 = 5;
+
+    uint256 constant public FINAL_ACTION = 5;
 
     mapping(address => Role) public role;
 
@@ -25,13 +39,9 @@ contract OddsEvens {
 
     bool public done_Odd;
 
-    bool public done_Phase0_Odd;
-
     bool public done_Even;
 
-    bool public done_Phase0_Even;
-
-    uint256 public Odd_hidden_c;
+    bytes32 public Odd_hidden_c;
 
     bool public done_Odd_hidden_c;
 
@@ -39,9 +49,7 @@ contract OddsEvens {
 
     bool public done_Odd_c;
 
-    bool public done_Phase1_Odd;
-
-    uint256 public Even_hidden_c;
+    bytes32 public Even_hidden_c;
 
     bool public done_Even_hidden_c;
 
@@ -49,14 +57,12 @@ contract OddsEvens {
 
     bool public done_Even_c;
 
-    bool public done_Phase1_Even;
+    modifier depends(uint256 actionId) {
+        require(actionDone[actionId], "dependency not satisfied");
+    }
 
-    bool public done_Phase2_Odd;
-
-    bool public done_Phase2_Even;
-
-    modifier at_phase(uint256 _phase) {
-        require((phase == _phase), "wrong phase");
+    modifier notDone(uint256 actionId) {
+        require((!actionDone[actionId]), "already done");
     }
 
     modifier by(Role r) {
@@ -64,89 +70,66 @@ contract OddsEvens {
     }
 
     modifier at_final_phase() {
-        require((phase == 3), "game not over");
+        require(actionDone[FINAL_ACTION], "game not over");
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function keccak(bool x, uint256 salt) public pure returns (bytes32 out) {
-        return keccak256(abi.encodePacked(x, salt));
+    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
     }
 
-    function join_Odd() public payable by(Role.None) at_phase(0) {
+    function _markActionDone(uint256 actionId) internal {
+        actionDone[actionId] = true;
+        actionTimestamp[actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    function move_Odd_1() public payable by(Role.None) notDone(1) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Odd), "already joined");
         role[msg.sender] = Role.Odd;
         address_Odd = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Odd = true;
-        done_Phase0_Odd = true;
+        _markActionDone(1);
     }
 
-    function join_Even() public payable by(Role.None) at_phase(0) {
+    function move_Even_0() public payable by(Role.None) notDone(0) {
+        require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Even), "already joined");
         role[msg.sender] = Role.Even;
         address_Even = msg.sender;
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Even = true;
-        done_Phase0_Even = true;
+        _markActionDone(0);
     }
 
-    function __nextPhase_Phase0() public {
-        require((phase == 0), "wrong phase");
-        require(done_Phase0_Odd, "Odd not done");
-        require(done_Phase0_Even, "Even not done");
-        emit Broadcast_Phase0();
-        phase = 1;
-        lastTs = block.timestamp;
-    }
-
-    function yield_Phase1_Odd(uint256 _hidden_c) public by(Role.Odd) at_phase(1) {
-        require((!done_Phase1_Odd), "done");
+    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) notDone(2) {
         Odd_hidden_c = _hidden_c;
         done_Odd_hidden_c = true;
-        done_Phase1_Odd = true;
+        _markActionDone(2);
     }
 
-    function yield_Phase1_Even(uint256 _hidden_c) public by(Role.Even) at_phase(1) {
-        require((!done_Phase1_Even), "done");
+    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) notDone(4) {
         Even_hidden_c = _hidden_c;
         done_Even_hidden_c = true;
-        done_Phase1_Even = true;
+        _markActionDone(4);
     }
 
-    function __nextPhase_Phase1() public {
-        require((phase == 1), "wrong phase");
-        require(done_Phase1_Odd, "Odd not done");
-        require(done_Phase1_Even, "Even not done");
-        emit Broadcast_Phase1();
-        phase = 2;
-        lastTs = block.timestamp;
-    }
-
-    function reveal_Phase2_Odd(bool _c, uint256 salt) public by(Role.Odd) at_phase(2) {
-        require((!done_Phase2_Odd), "done");
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Odd_hidden_c)), "bad reveal");
+    function move_Odd_3(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(2) depends(4) {
+        _checkReveal(Odd_hidden_c, abi.encodePacked(_c, salt));
         Odd_c = _c;
         done_Odd_c = true;
-        done_Phase2_Odd = true;
+        _markActionDone(3);
     }
 
-    function reveal_Phase2_Even(bool _c, uint256 salt) public by(Role.Even) at_phase(2) {
-        require((!done_Phase2_Even), "done");
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Even_hidden_c)), "bad reveal");
+    function move_Even_5(bool _c, uint256 salt) public by(Role.Even) notDone(5) depends(4) depends(2) {
+        _checkReveal(Even_hidden_c, abi.encodePacked(_c, salt));
         Even_c = _c;
         done_Even_c = true;
-        done_Phase2_Even = true;
-    }
-
-    function __nextPhase_Phase2() public {
-        require((phase == 2), "wrong phase");
-        require(done_Phase2_Odd, "Odd not done");
-        require(done_Phase2_Even, "Even not done");
-        emit Broadcast_Phase2();
-        phase = 3;
-        lastTs = block.timestamp;
+        _markActionDone(5);
     }
 
     function distributePayoffs() public at_final_phase {
@@ -162,12 +145,6 @@ contract OddsEvens {
         (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
         require(ok, "ETH send failed");
     }
-
-    event Broadcast_Phase0();
-
-    event Broadcast_Phase1();
-
-    event Broadcast_Phase2();
 
     receive() public payable {
         revert("direct ETH not allowed");
