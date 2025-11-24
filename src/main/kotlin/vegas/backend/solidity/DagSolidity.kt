@@ -323,6 +323,7 @@ private fun buildDagGameStorage(
         }
     }
 }
+
 /**
  * Build DAG-based modifiers.
  *
@@ -330,71 +331,97 @@ private fun buildDagGameStorage(
  * - notDone(a):    require that action a is not yet done
  * - by(r):         require that msg.sender has role r (or NO_ROLE for open joins)
  * - at_final_phase:
- *      require that the max reveal action (or last action if no reveals) is done
- *      and that payoffs have not yet been distributed
+ *      require that the "terminal" action is done and that payoffs have not yet
+ *      been distributed.
+ *
+ * "Terminal" is defined as:
+ *   - the max linearization index among REVEAL actions, if any exist; otherwise
+ *   - the max linearization index among all actions.
  */
 private fun buildDagModifiers(
     dag: ActionDag,
     linearization: Map<ActionId, Int>
 ): List<ModifierDecl> {
-    // Find the maximum reveal action index, or fall back to last action
-    val revealIndices = dag.metas
+    // 1. Find candidate terminal actions
+    val revealIds = dag.metas
         .filter { it.kind == ActionKind.REVEAL }
-        .map { linearization.getValue(it.id) }
+        .map { it.id }
 
-    val finalActionIdx = if (revealIndices.isNotEmpty()) {
-        revealIndices.max()
+    val finalActionIdx: Int = if (revealIds.isNotEmpty()) {
+        revealIds.maxOf { id -> linearization.getValue(id) }
     } else {
-        linearization.size - 1
+        // No reveals at all: fall back to the last action in the linearization
+        linearization.values.max()
     }
 
     return listOf(
-    // modifier depends(uint actionId) { require(actionDone[actionId], "dependency not satisfied"); _; }
-    ModifierDecl(
-        name = "depends",
-        params = listOf(Param(SolType.Uint256, "actionId")),
-        body = listOf(
-            require(
-                index("actionDone", v("actionId")),
-                "dependency not satisfied"
+        // modifier depends(uint actionId) {
+        //   require(actionDone[actionId], "dependency not satisfied");
+        //   _;
+        // }
+        ModifierDecl(
+            name = "depends",
+            params = listOf(Param(SolType.Uint256, "actionId")),
+            body = listOf(
+                require(
+                    index("actionDone", v("actionId")),
+                    "dependency not satisfied"
+                )
             )
-        )
-    ),
-    // modifier notDone(uint actionId) { require(!actionDone[actionId], "already done"); _; }
-    ModifierDecl(
-        name = "notDone",
-        params = listOf(Param(SolType.Uint256, "actionId")),
-        body = listOf(
-            require(
-                not(index("actionDone", v("actionId"))),
-                "already done"
+        ),
+
+        // modifier notDone(uint actionId) {
+        //   require(!actionDone[actionId], "already done");
+        //   _;
+        // }
+        ModifierDecl(
+            name = "notDone",
+            params = listOf(Param(SolType.Uint256, "actionId")),
+            body = listOf(
+                require(
+                    not(index("actionDone", v("actionId"))),
+                    "already done"
+                )
             )
-        )
-    ),
-    // modifier by(Role r) { require(role[msg.sender] == r, "bad role"); _; }
-    ModifierDecl(
-        name = "by",
-        params = listOf(Param(SolType.EnumType(ROLE_ENUM), "r")),
-        body = listOf(
-            require(index(ROLE_MAPPING, msgSender) eq v("r"), "bad role")
-        )
-    ),
-    // modifier at_final_phase() {
-    //   require(actionDone[FINAL_ACTION_IDX], "game not over");
-    //   require(!payoffs_distributed, "payoffs already sent");
-    //   _;
-    // }
-    ModifierDecl(
-        name = "at_final_phase",
-        params = emptyList(),
-        body = listOf(
-            // NOTE: we use the max reveal action index (or last action if no reveals).
-            require(index("actionDone", int(finalActionIdx)), "game not over"),
-            require(not(v("payoffs_distributed")), "payoffs already sent")
+        ),
+
+        // modifier by(Role r) {
+        //   require(role[msg.sender] == r, "bad role");
+        //   _;
+        // }
+        ModifierDecl(
+            name = "by",
+            params = listOf(Param(SolType.EnumType(ROLE_ENUM), "r")),
+            body = listOf(
+                require(
+                    index(ROLE_MAPPING, msgSender) eq v("r"),
+                    "bad role"
+                )
+            )
+        ),
+
+        // modifier at_final_phase() {
+        //   require(actionDone[FINAL_ACTION_IDX], "game not over");
+        //   require(!payoffs_distributed, "payoffs already sent");
+        //   _;
+        // }
+        ModifierDecl(
+            name = "at_final_phase",
+            params = emptyList(),
+            body = listOf(
+                require(
+                    index("actionDone", int(finalActionIdx)),
+                    "game not over"
+                ),
+                require(
+                    not(v("payoffs_distributed")),
+                    "payoffs already sent"
+                )
+            )
         )
     )
-)
 }
+
 /**
  * Build per-action functions based on the ActionDag.
  */
@@ -504,6 +531,9 @@ private fun buildDagCommit(
     val spec   = meta.spec
     val struct = meta.struct
 
+    val isJoin  = spec.join != null
+    val deposit = spec.join?.deposit?.v ?: 0
+
     val commitParams = spec.params.filter { p ->
         FieldRef(role, p.name) in struct.commitFields
     }
@@ -512,9 +542,19 @@ private fun buildDagCommit(
         Param(SolType.Uint256, inputParam(p.name, hidden = true))
     }
 
+    val byRole =
+        if (isJoin) NO_ROLE else role
+
     val body = buildList {
+        // For join commits, do the join logic here (role assignment, deposit, done_role flag)
+        if (isJoin) {
+            addAll(buildJoinLogic(role, spec))
+        }
+
+        // Guard: usually 'true' for commit nodes after expandCommitReveal, but harmless
         addAll(translateWhere(spec.guardExpr, role, spec.params))
 
+        // Store hidden commits for each committed field
         commitParams.forEach { p ->
             val pName = p.name
             add(assign(
@@ -540,14 +580,18 @@ private fun buildDagCommit(
         name = actionFuncName(role, actionIdx),
         params = inputs,
         visibility = Visibility.PUBLIC,
-        stateMutability = StateMutability.NONPAYABLE,
+        stateMutability = if (deposit > 0)
+            StateMutability.PAYABLE
+        else
+            StateMutability.NONPAYABLE,
         modifiers = listOf(
-            by(role),  // Always by(role) - role must already be owned
+            by(byRole),
             ModifierCall("notDone", listOf(int(actionIdx)))
         ) + depModifiers,
         body = body
     )
 }
+
 
 /** DAG-based reveal. */
 private fun buildDagReveal(

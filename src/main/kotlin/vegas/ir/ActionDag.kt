@@ -214,16 +214,15 @@ class ActionDag private constructor(
 
             val split: Set<ActionId> = riskPartners.filterValues { it.isNotEmpty() }.keys
 
-            // Nothing concurrent so nothing to do
+            // Nothing concurrent ⇒ nothing to do
             if (split.isEmpty()) return dag
 
-            // For now, refuse simultaneous-join actions: they should be encoded as join; yield
-            for (id in split) {
-                val meta = dag.meta(id)
-                require(meta.spec.join == null) {
-                    "expandCommitReveal: simultaneous public action with join not supported; rewrite as join; yield"
-                }
-            }
+            // NOTE: previously we refused simultaneous-join actions here:
+            // for (id in split) {
+            //     val meta = dag.meta(id)
+            //     require(meta.spec.join == null) { ... }
+            // }
+            // That restriction is now removed; joins are carried onto the commit node.
 
             // 3. Allocate fresh ids for commit/reveal nodes
             val commitId = mutableMapOf<ActionId, ActionId>()
@@ -289,13 +288,17 @@ class ActionDag private constructor(
                 }
                 val revealStruct = struct.copy(visibility = revealVis)
 
-                // Commit spec: trivial guard, no join
+                // Commit spec:
+                //  - KEEP join (deposit happens at commit time)
+                //  - trivial guard (always allowed to commit)
                 val commitSpec = spec.copy(
-                    join = null,
+                    join = spec.join,
                     guardExpr = Expr.BoolVal(true)
                 )
 
-                // Reveal spec: original guard, no join
+                // Reveal spec:
+                //  - original guard
+                //  - NO join (deposit already done)
                 val revealSpec = spec.copy(
                     join = null
                 )
@@ -344,13 +347,15 @@ class ActionDag private constructor(
                     checkAcyclic = true
                 ) ?: error("expandCommitReveal produced a cyclic graph")
 
+            val slice = newUnderlying.sliceFrom(newNodes) as DagSlice<ActionId>
+            val newReach = computeReachability(slice)
+
             return ActionDag(
                 dag = newUnderlying,
                 payloads = newMetas,
-                reach = computeReachability(newUnderlying.sliceFrom(newNodes) as DagSlice<ActionId>)
+                reach = newReach
             )
         }
-
     }
 }
 

@@ -13,17 +13,17 @@ contract ThreeWayLotteryShort {
 
     mapping(uint256 => uint256) public actionTimestamp;
 
-    uint256 constant public ACTION_Alice_0 = 0;
+    uint256 constant public ACTION_Issuer_0 = 0;
 
-    uint256 constant public ACTION_Bob_0 = 1;
+    uint256 constant public ACTION_Issuer_1 = 1;
 
-    uint256 constant public ACTION_Issuer_0 = 2;
+    uint256 constant public ACTION_Alice_2 = 2;
 
-    uint256 constant public ACTION_Alice_1 = 3;
+    uint256 constant public ACTION_Alice_3 = 3;
 
-    uint256 constant public ACTION_Bob_1 = 4;
+    uint256 constant public ACTION_Bob_4 = 4;
 
-    uint256 constant public ACTION_Issuer_1 = 5;
+    uint256 constant public ACTION_Bob_5 = 5;
 
     mapping(address => Role) public role;
 
@@ -39,6 +39,10 @@ contract ThreeWayLotteryShort {
 
     bool public done_Issuer;
 
+    bool public done_Alice;
+
+    bool public done_Bob;
+
     uint256 public Issuer_hidden_c;
 
     bool public done_Issuer_hidden_c;
@@ -46,8 +50,6 @@ contract ThreeWayLotteryShort {
     int256 public Issuer_c;
 
     bool public done_Issuer_c;
-
-    bool public done_Alice;
 
     uint256 public Alice_hidden_c;
 
@@ -57,8 +59,6 @@ contract ThreeWayLotteryShort {
 
     bool public done_Alice_c;
 
-    bool public done_Bob;
-
     uint256 public Bob_hidden_c;
 
     bool public done_Bob_hidden_c;
@@ -66,12 +66,6 @@ contract ThreeWayLotteryShort {
     int256 public Bob_c;
 
     bool public done_Bob_c;
-
-    bool public done_Issuer;
-
-    bool public done_Alice;
-
-    bool public done_Bob;
 
     modifier depends(uint256 actionId) {
         require(actionDone[actionId], "dependency not satisfied");
@@ -90,7 +84,7 @@ contract ThreeWayLotteryShort {
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function move_Issuer_0(uint256 _hidden_c) public payable by(Role.None) notDone(2) {
+    function move_Issuer_0(uint256 _hidden_c) public payable by(Role.None) notDone(0) {
         require((!done_Issuer), "already joined");
         role[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
@@ -99,11 +93,11 @@ contract ThreeWayLotteryShort {
         done_Issuer = true;
         Issuer_hidden_c = _hidden_c;
         done_Issuer_hidden_c = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        actionDone[0] = true;
+        actionTimestamp[0] = block.timestamp;
     }
 
-    function move_Alice_0(uint256 _hidden_c) public payable by(Role.None) notDone(0) {
+    function move_Alice_2(uint256 _hidden_c) public payable by(Role.None) notDone(2) {
         require((!done_Alice), "already joined");
         role[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
@@ -112,11 +106,11 @@ contract ThreeWayLotteryShort {
         done_Alice = true;
         Alice_hidden_c = _hidden_c;
         done_Alice_hidden_c = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        actionDone[2] = true;
+        actionTimestamp[2] = block.timestamp;
     }
 
-    function move_Bob_0(uint256 _hidden_c) public payable by(Role.None) notDone(1) {
+    function move_Bob_4(uint256 _hidden_c) public payable by(Role.None) notDone(4) {
         require((!done_Bob), "already joined");
         role[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
@@ -125,20 +119,20 @@ contract ThreeWayLotteryShort {
         done_Bob = true;
         Bob_hidden_c = _hidden_c;
         done_Bob_hidden_c = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        actionDone[4] = true;
+        actionTimestamp[4] = block.timestamp;
     }
 
-    function move_Issuer_1(int256 _c, uint256 salt) public by(Role.Issuer) notDone(5) depends(2) {
+    function move_Issuer_1(int256 _c, uint256 salt) public by(Role.Issuer) notDone(1) depends(0) depends(2) depends(4) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Issuer_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Issuer_c = _c;
         done_Issuer_c = true;
-        actionDone[5] = true;
-        actionTimestamp[5] = block.timestamp;
+        actionDone[1] = true;
+        actionTimestamp[1] = block.timestamp;
     }
 
-    function move_Alice_1(int256 _c, uint256 salt) public by(Role.Alice) notDone(3) depends(0) {
+    function move_Alice_3(int256 _c, uint256 salt) public by(Role.Alice) notDone(3) depends(2) depends(0) depends(4) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Alice_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Alice_c = _c;
@@ -147,13 +141,13 @@ contract ThreeWayLotteryShort {
         actionTimestamp[3] = block.timestamp;
     }
 
-    function move_Bob_1(int256 _c, uint256 salt) public by(Role.Bob) notDone(4) depends(1) {
+    function move_Bob_5(int256 _c, uint256 salt) public by(Role.Bob) notDone(5) depends(4) depends(0) depends(2) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Bob_hidden_c)), "bad reveal");
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Bob_c = _c;
         done_Bob_c = true;
-        actionDone[4] = true;
-        actionTimestamp[4] = block.timestamp;
+        actionDone[5] = true;
+        actionTimestamp[5] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {

@@ -13,13 +13,13 @@ contract OddsEvensShort {
 
     mapping(uint256 => uint256) public actionTimestamp;
 
-    uint256 constant public ACTION_Even_0 = 0;
+    uint256 constant public ACTION_Odd_0 = 0;
 
-    uint256 constant public ACTION_Odd_0 = 1;
+    uint256 constant public ACTION_Odd_1 = 1;
 
-    uint256 constant public ACTION_Even_1 = 2;
+    uint256 constant public ACTION_Even_2 = 2;
 
-    uint256 constant public ACTION_Odd_1 = 3;
+    uint256 constant public ACTION_Even_3 = 3;
 
     mapping(address => Role) public role;
 
@@ -33,6 +33,8 @@ contract OddsEvensShort {
 
     bool public done_Odd;
 
+    bool public done_Even;
+
     uint256 public Odd_hidden_c;
 
     bool public done_Odd_hidden_c;
@@ -41,8 +43,6 @@ contract OddsEvensShort {
 
     bool public done_Odd_c;
 
-    bool public done_Even;
-
     uint256 public Even_hidden_c;
 
     bool public done_Even_hidden_c;
@@ -50,10 +50,6 @@ contract OddsEvensShort {
     bool public Even_c;
 
     bool public done_Even_c;
-
-    bool public done_Odd;
-
-    bool public done_Even;
 
     modifier depends(uint256 actionId) {
         require(actionDone[actionId], "dependency not satisfied");
@@ -72,7 +68,7 @@ contract OddsEvensShort {
         require((!payoffs_distributed), "payoffs already sent");
     }
 
-    function move_Odd_0(uint256 _hidden_c) public payable by(Role.None) notDone(1) {
+    function move_Odd_0(uint256 _hidden_c) public payable by(Role.None) notDone(0) {
         require((!done_Odd), "already joined");
         role[msg.sender] = Role.Odd;
         address_Odd = msg.sender;
@@ -81,11 +77,11 @@ contract OddsEvensShort {
         done_Odd = true;
         Odd_hidden_c = _hidden_c;
         done_Odd_hidden_c = true;
-        actionDone[1] = true;
-        actionTimestamp[1] = block.timestamp;
+        actionDone[0] = true;
+        actionTimestamp[0] = block.timestamp;
     }
 
-    function move_Even_0(uint256 _hidden_c) public payable by(Role.None) notDone(0) {
+    function move_Even_2(uint256 _hidden_c) public payable by(Role.None) notDone(2) {
         require((!done_Even), "already joined");
         role[msg.sender] = Role.Even;
         address_Even = msg.sender;
@@ -94,24 +90,24 @@ contract OddsEvensShort {
         done_Even = true;
         Even_hidden_c = _hidden_c;
         done_Even_hidden_c = true;
-        actionDone[0] = true;
-        actionTimestamp[0] = block.timestamp;
+        actionDone[2] = true;
+        actionTimestamp[2] = block.timestamp;
     }
 
-    function move_Odd_1(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(1) {
+    function move_Odd_1(bool _c, uint256 salt) public by(Role.Odd) notDone(1) depends(0) depends(2) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Odd_hidden_c)), "bad reveal");
         Odd_c = _c;
         done_Odd_c = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
+        actionDone[1] = true;
+        actionTimestamp[1] = block.timestamp;
     }
 
-    function move_Even_1(bool _c, uint256 salt) public by(Role.Even) notDone(2) depends(0) {
+    function move_Even_3(bool _c, uint256 salt) public by(Role.Even) notDone(3) depends(2) depends(0) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(Even_hidden_c)), "bad reveal");
         Even_c = _c;
         done_Even_c = true;
-        actionDone[2] = true;
-        actionTimestamp[2] = block.timestamp;
+        actionDone[3] = true;
+        actionTimestamp[3] = block.timestamp;
     }
 
     function distributePayoffs() public at_final_phase {

@@ -29,11 +29,11 @@ contract Puzzle {
 
     bool public done_Q;
 
+    bool public done_A;
+
     int256 public Q_x;
 
     bool public done_Q_x;
-
-    bool public done_A;
 
     int256 public A_p;
 

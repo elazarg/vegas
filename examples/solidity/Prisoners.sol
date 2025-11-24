@@ -19,11 +19,11 @@ contract Prisoners {
 
     uint256 constant public ACTION_A_2 = 2;
 
-    uint256 constant public ACTION_B_2 = 3;
+    uint256 constant public ACTION_A_3 = 3;
 
-    uint256 constant public ACTION_A_3 = 4;
+    uint256 constant public ACTION_B_4 = 4;
 
-    uint256 constant public ACTION_B_3 = 5;
+    uint256 constant public ACTION_B_5 = 5;
 
     mapping(address => Role) public role;
 
@@ -101,22 +101,22 @@ contract Prisoners {
         actionTimestamp[2] = block.timestamp;
     }
 
-    function move_B_2(uint256 _hidden_c) public by(Role.B) notDone(3) {
+    function move_B_4(uint256 _hidden_c) public by(Role.B) notDone(4) {
         B_hidden_c = _hidden_c;
         done_B_hidden_c = true;
-        actionDone[3] = true;
-        actionTimestamp[3] = block.timestamp;
-    }
-
-    function move_A_3(bool _c, uint256 salt) public by(Role.A) notDone(4) depends(2) {
-        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(A_hidden_c)), "bad reveal");
-        A_c = _c;
-        done_A_c = true;
         actionDone[4] = true;
         actionTimestamp[4] = block.timestamp;
     }
 
-    function move_B_3(bool _c, uint256 salt) public by(Role.B) notDone(5) depends(3) {
+    function move_A_3(bool _c, uint256 salt) public by(Role.A) notDone(3) depends(2) depends(4) {
+        require((keccak256(abi.encodePacked(_c, salt)) == bytes32(A_hidden_c)), "bad reveal");
+        A_c = _c;
+        done_A_c = true;
+        actionDone[3] = true;
+        actionTimestamp[3] = block.timestamp;
+    }
+
+    function move_B_5(bool _c, uint256 salt) public by(Role.B) notDone(5) depends(4) depends(2) {
         require((keccak256(abi.encodePacked(_c, salt)) == bytes32(B_hidden_c)), "bad reveal");
         B_c = _c;
         done_B_c = true;
