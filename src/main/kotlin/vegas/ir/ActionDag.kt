@@ -112,7 +112,7 @@ data class ActionMeta(
     val spec: ActionSpec,
     val struct: ActionStruct,
 ) {
-    val kind: ActionKind by lazy { inferKind(spec, struct) }
+    val kind: ActionKind by lazy { inferKind(struct) }
 }
 
 /**
@@ -147,19 +147,12 @@ class ActionDag private constructor(
     fun spec(id: ActionId): ActionSpec = meta(id).spec
     fun kind(id: ActionId): ActionKind = meta(id).kind
     fun params(id: ActionId): List<ActionParam> = meta(id).spec.params
-    fun guardExpr(id: ActionId): Expr = meta(id).spec.guardExpr
-    fun joinInfo(id: ActionId): Join? = meta(id).spec.join
 
     /** Structural shortcuts. */
     fun struct(id: ActionId): ActionStruct = meta(id).struct
     fun owner(id: ActionId): RoleId = struct(id).role
-    fun writesOf(id: ActionId): Set<FieldRef> = struct(id).writes
     fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = struct(id).visibility
     fun guardReads(id: ActionId): Set<FieldRef> = struct(id).guardReads
-
-    fun commitFieldsOf(id: ActionId): Set<FieldRef> = struct(id).commitFields
-    fun revealFieldsOf(id: ActionId): Set<FieldRef> = struct(id).revealFields
-    fun publicFieldsOf(id: ActionId): Set<FieldRef> = struct(id).publicFields
 
     /** Reachability queries. */
     fun reaches(from: ActionId, to: ActionId): Boolean =
@@ -364,7 +357,6 @@ class ActionDag private constructor(
 /* -------------------------------------------------------------------------- */
 
 private fun inferKind(
-    spec: ActionSpec,
     struct: ActionStruct,
 ): ActionKind {
     val hasCommit = struct.visibility.values.any { it == Visibility.COMMIT }

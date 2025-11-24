@@ -8,7 +8,6 @@ import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
-import vegas.ir.ActionDag
 import vegas.ir.Visibility
 import vegas.ir.dag
 
@@ -93,24 +92,6 @@ class ActionDagFromIrTest : FreeSpec({
 
                 // Commit should come before reveal (not necessarily immediately)
                 (firstCommit.second < firstReveal.second) shouldBe true
-            }
-        }
-
-        "should handle guard dependencies" {
-            val ast = parseFile("examples/Simple.vg")
-            val dag = compileToIR(ast).dag
-
-            dag.nodes.shouldNotBeEmpty()
-
-            // Check that actions with guard reads have dependencies
-            for (action in dag.nodes) {
-                val guardReads = dag.guardReads(action)
-                if (guardReads.isNotEmpty()) {
-                    // This action reads some fields, so it should have prerequisites
-                    // (unless reading initial state, which we don't model yet)
-                    val prereqs = dag.prerequisitesOf(action)
-                    // Note: prereqs might be empty if reading initial/constant values
-                }
             }
         }
 

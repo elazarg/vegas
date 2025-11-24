@@ -102,10 +102,7 @@ fun irToDagSolidity(g: ActionGameIR): SolidityContract {
     // Constructor: set lastTs = block.timestamp
     val ctor = Constructor(
         body = listOf(
-            Statement.Assign(
-                lhs = SolExpr.Var(LAST_TS_VAR),
-                rhs = SolExpr.Member(SolExpr.Var("block"), "timestamp")
-            )
+            assign(v(LAST_TS_VAR), blockTimestamp)
         )
     )
 
@@ -432,12 +429,11 @@ private fun buildActionFunctions(
     // Generate functions in topological order for determinism
     dag.topo().forEach { actionId ->
         val meta = dag.meta(actionId)
-        val role = meta.struct.role
         val actionIdx = linearization.getValue(actionId)
 
         // Collect dependency modifiers from prerequisites
         val depModifiers = dag.prerequisitesOf(actionId).map { dep ->
-            ModifierCall("depends", listOf(int(linearization.getValue(dep))))
+            depends(linearization.getValue(dep))
         }
 
         val fn = when (meta.kind) {
@@ -501,7 +497,7 @@ private fun buildDagYield(
         else StateMutability.NONPAYABLE,
         modifiers = listOf(
             by(if (isJoin) NO_ROLE else role),
-            ModifierCall("notDone", listOf(int(actionIdx)))
+            notDone(actionIdx)
         ) + depModifiers,
         body = buildList {
             if (isJoin) {
@@ -511,12 +507,7 @@ private fun buildDagYield(
             addAll(translateWhere(spec.guardExpr, role, spec.params))
             addAll(translateAssignments(role, spec.params))
             add(assign(index("actionDone", int(actionIdx)), bool(true)))
-            add(
-                assign(
-                    index("actionTimestamp", int(actionIdx)),
-                    SolExpr.Member(SolExpr.Var("block"), "timestamp")
-                )
-            )
+            add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
         }
     )
 }
@@ -568,12 +559,7 @@ private fun buildDagCommit(
         }
 
         add(assign(index("actionDone", int(actionIdx)), bool(true)))
-        add(
-            assign(
-                index("actionTimestamp", int(actionIdx)),
-                SolExpr.Member(SolExpr.Var("block"), "timestamp")
-            )
-        )
+        add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
     }
 
     return FunctionDecl(
@@ -586,7 +572,7 @@ private fun buildDagCommit(
             StateMutability.NONPAYABLE,
         modifiers = listOf(
             by(byRole),
-            ModifierCall("notDone", listOf(int(actionIdx)))
+            notDone(actionIdx)
         ) + depModifiers,
         body = body
     )
@@ -627,7 +613,7 @@ private fun buildDagReveal(
             val stored = v(storageParam(role, p.name, hidden = true))
             add(
                 require(
-                    computed eq SolExpr.Cast(SolType.Bytes32, stored),
+                    computed eq toBytes32(stored),
                     "bad reveal"
                 )
             )
@@ -638,12 +624,7 @@ private fun buildDagReveal(
         addAll(translateAssignments(role, revealParams))
 
         add(assign(index("actionDone", int(actionIdx)), bool(true)))
-        add(
-            assign(
-                index("actionTimestamp", int(actionIdx)),
-                SolExpr.Member(SolExpr.Var("block"), "timestamp")
-            )
-        )
+        add(assign(index("actionTimestamp", int(actionIdx)), blockTimestamp))
     }
 
     return FunctionDecl(
@@ -653,7 +634,7 @@ private fun buildDagReveal(
         stateMutability = StateMutability.NONPAYABLE,
         modifiers = listOf(
             by(role),
-            ModifierCall("notDone", listOf(int(actionIdx)))
+            notDone(actionIdx)
         ) + depModifiers,
         body = body
     )
@@ -687,7 +668,7 @@ private fun buildDagPayoffFunction(
         params = emptyList(),
         visibility = Visibility.PUBLIC,
         stateMutability = StateMutability.NONPAYABLE,
-        modifiers = listOf(ModifierCall("at_final_phase", emptyList())),
+        modifiers = listOf(atFinalPhase()),
         body = body
     )
 }

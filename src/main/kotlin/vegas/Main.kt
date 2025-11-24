@@ -8,7 +8,6 @@ import vegas.backend.solidity.genSolidity
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
-import vegas.frontend.compileToIR
 import vegas.frontend.compileToOldIR
 import vegas.ir.toActionGameIr
 import java.nio.file.Paths
