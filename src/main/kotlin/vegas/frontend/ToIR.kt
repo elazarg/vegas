@@ -126,6 +126,14 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
             val id = role to pIdx
             val dset = deps.getOrPut(id) { mutableSetOf() }
 
+            // Phase-order dependency: immediately prior phase must have happened
+            val prevPhase = pIdx - 1
+            if (prevPhase >= 0) {
+                phases[prevPhase].actions.keys.forEach { priorRole ->
+                    dset += priorRole to prevPhase
+                }
+            }
+
             // Guard-data deps: latest writer of each captured field
             sig.requires.captures.forEach { field ->
                 val w = findLatestWriter(field, pIdx, phases)

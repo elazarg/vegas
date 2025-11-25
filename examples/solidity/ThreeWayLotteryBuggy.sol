@@ -113,7 +113,7 @@ contract ThreeWayLotteryBuggy {
         _markActionDone(0);
     }
 
-    function move_Alice_1() public payable by(Role.None) notDone(1) {
+    function move_Alice_1() public payable by(Role.None) notDone(1) depends(0) {
         require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Alice), "already joined");
         role[msg.sender] = Role.Alice;
@@ -124,7 +124,7 @@ contract ThreeWayLotteryBuggy {
         _markActionDone(1);
     }
 
-    function move_Bob_2() public payable by(Role.None) notDone(2) {
+    function move_Bob_2() public payable by(Role.None) notDone(2) depends(1) {
         require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Bob), "already joined");
         role[msg.sender] = Role.Bob;
@@ -135,25 +135,25 @@ contract ThreeWayLotteryBuggy {
         _markActionDone(2);
     }
 
-    function move_Issuer_3(bytes32 _hidden_c) public by(Role.Issuer) notDone(3) {
+    function move_Issuer_3(bytes32 _hidden_c) public by(Role.Issuer) notDone(3) depends(2) {
         Issuer_hidden_c = _hidden_c;
         done_Issuer_hidden_c = true;
         _markActionDone(3);
     }
 
-    function move_Alice_5(bytes32 _hidden_c) public by(Role.Alice) notDone(5) {
+    function move_Alice_5(bytes32 _hidden_c) public by(Role.Alice) notDone(5) depends(2) {
         Alice_hidden_c = _hidden_c;
         done_Alice_hidden_c = true;
         _markActionDone(5);
     }
 
-    function move_Bob_7(bytes32 _hidden_c) public by(Role.Bob) notDone(7) {
+    function move_Bob_7(bytes32 _hidden_c) public by(Role.Bob) notDone(7) depends(2) {
         Bob_hidden_c = _hidden_c;
         done_Bob_hidden_c = true;
         _markActionDone(7);
     }
 
-    function move_Issuer_4(int256 _c, uint256 salt) public by(Role.Issuer) notDone(4) depends(3) depends(5) depends(7) {
+    function move_Issuer_4(int256 _c, uint256 salt) public by(Role.Issuer) notDone(4) depends(2) depends(3) depends(5) depends(7) {
         _checkReveal(Issuer_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Issuer_c = _c;
@@ -161,7 +161,7 @@ contract ThreeWayLotteryBuggy {
         _markActionDone(4);
     }
 
-    function move_Alice_6(int256 _c, uint256 salt) public by(Role.Alice) notDone(6) depends(5) depends(3) depends(7) {
+    function move_Alice_6(int256 _c, uint256 salt) public by(Role.Alice) notDone(6) depends(2) depends(5) depends(3) depends(7) {
         _checkReveal(Alice_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Alice_c = _c;
@@ -169,7 +169,7 @@ contract ThreeWayLotteryBuggy {
         _markActionDone(6);
     }
 
-    function move_Bob_8(int256 _c, uint256 salt) public by(Role.Bob) notDone(8) depends(7) depends(3) depends(5) {
+    function move_Bob_8(int256 _c, uint256 salt) public by(Role.Bob) notDone(8) depends(2) depends(7) depends(3) depends(5) {
         _checkReveal(Bob_hidden_c, abi.encodePacked(_c, salt));
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         Bob_c = _c;

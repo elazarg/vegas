@@ -17,13 +17,9 @@ contract Bet {
 
     uint256 constant public ACTION_Gambler_1 = 1;
 
-    uint256 constant public ACTION_Gambler_2 = 2;
+    uint256 constant public ACTION_Race_2 = 2;
 
-    uint256 constant public ACTION_Race_3 = 3;
-
-    uint256 constant public ACTION_Race_4 = 4;
-
-    uint256 constant public FINAL_ACTION = 4;
+    uint256 constant public FINAL_ACTION = 2;
 
     mapping(address => Role) public role;
 
@@ -39,17 +35,9 @@ contract Bet {
 
     bool public done_Gambler;
 
-    bytes32 public Gambler_hidden_bet;
-
-    bool public done_Gambler_hidden_bet;
-
     int256 public Gambler_bet;
 
     bool public done_Gambler_bet;
-
-    bytes32 public Race_hidden_winner;
-
-    bool public done_Race_hidden_winner;
 
     int256 public Race_winner;
 
@@ -93,7 +81,7 @@ contract Bet {
         _markActionDone(0);
     }
 
-    function move_Gambler_1(bytes32 _hidden_bet) public payable by(Role.None) notDone(1) {
+    function move_Gambler_1(int256 _bet) public payable by(Role.None) notDone(1) depends(0) {
         require((role[msg.sender] == Role.None), "already has a role");
         require((!done_Gambler), "already joined");
         role[msg.sender] = Role.Gambler;
@@ -101,31 +89,17 @@ contract Bet {
         require((msg.value == 100), "bad stake");
         balanceOf[msg.sender] = msg.value;
         done_Gambler = true;
-        Gambler_hidden_bet = _hidden_bet;
-        done_Gambler_hidden_bet = true;
-        _markActionDone(1);
-    }
-
-    function move_Race_3(bytes32 _hidden_winner) public by(Role.Race) notDone(3) {
-        Race_hidden_winner = _hidden_winner;
-        done_Race_hidden_winner = true;
-        _markActionDone(3);
-    }
-
-    function move_Gambler_2(int256 _bet, uint256 salt) public by(Role.Gambler) notDone(2) depends(1) depends(3) {
-        _checkReveal(Gambler_hidden_bet, abi.encodePacked(_bet, salt));
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         Gambler_bet = _bet;
         done_Gambler_bet = true;
-        _markActionDone(2);
+        _markActionDone(1);
     }
 
-    function move_Race_4(int256 _winner, uint256 salt) public by(Role.Race) notDone(4) depends(3) depends(1) {
-        _checkReveal(Race_hidden_winner, abi.encodePacked(_winner, salt));
+    function move_Race_2(int256 _winner) public by(Role.Race) notDone(2) depends(1) {
         require((((_winner == 1) || (_winner == 2)) || (_winner == 3)), "domain");
         Race_winner = _winner;
         done_Race_winner = true;
-        _markActionDone(4);
+        _markActionDone(2);
     }
 
     function distributePayoffs() public at_final_phase {

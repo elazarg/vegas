@@ -106,26 +106,26 @@ contract OddsEvens {
         _markActionDone(0);
     }
 
-    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) notDone(2) {
+    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) notDone(2) depends(1) depends(0) {
         Odd_hidden_c = _hidden_c;
         done_Odd_hidden_c = true;
         _markActionDone(2);
     }
 
-    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) notDone(4) {
+    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) notDone(4) depends(1) depends(0) {
         Even_hidden_c = _hidden_c;
         done_Even_hidden_c = true;
         _markActionDone(4);
     }
 
-    function move_Odd_3(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(2) depends(4) {
+    function move_Odd_3(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(1) depends(0) depends(2) depends(4) {
         _checkReveal(Odd_hidden_c, abi.encodePacked(_c, salt));
         Odd_c = _c;
         done_Odd_c = true;
         _markActionDone(3);
     }
 
-    function move_Even_5(bool _c, uint256 salt) public by(Role.Even) notDone(5) depends(4) depends(2) {
+    function move_Even_5(bool _c, uint256 salt) public by(Role.Even) notDone(5) depends(1) depends(0) depends(4) depends(2) {
         _checkReveal(Even_hidden_c, abi.encodePacked(_c, salt));
         Even_c = _c;
         done_Even_c = true;

@@ -10,7 +10,6 @@ import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
-import vegas.frontend.compileToOldIR
 import java.io.File
 
 data class Example(
@@ -32,7 +31,7 @@ class GoldenMasterTest : FreeSpec({
     val exampleFiles = listOf(
         Example("Bet"),
         Example("MontyHall"),
-        Example("MontyHallChance", disableBackend=setOf("solidity")),  // random/chance not yet supported in DAG
+        Example("MontyHallChance"),
         Example("OddsEvens"),
         Example("OddsEvensShort"),
         Example("Prisoners"),
@@ -51,10 +50,10 @@ class GoldenMasterTest : FreeSpec({
                 genSolidity(compileToIR(prog))
             },
             TestCase(example, "efg", "gambit") { prog ->
-                generateExtensiveFormGame(compileToOldIR(prog))
+                generateExtensiveFormGame(compileToIR(prog))
             },
             TestCase(example, "z3", "smt") { prog ->
-                generateSMT(prog)
+                generateSMT(compileToIR(prog))
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -114,7 +113,7 @@ class GoldenMasterTest : FreeSpec({
 
         "Gambit generation should preserve game structure" {
             val program = parseExample("Prisoners")
-            val ir = compileToOldIR(program)
+            val ir = compileToIR(program)
             val efg = generateExtensiveFormGame(ir)
 
             efg shouldContain "EFG 2 R"
@@ -122,7 +121,7 @@ class GoldenMasterTest : FreeSpec({
 
         "SMT generation should be valid SMT-LIB" {
             val program = parseExample("Simple")
-            val smtOutput = generateSMT(program)
+            val smtOutput = generateSMT(compileToIR(program))
 
             smtOutput shouldContain "(check-sat)"
             smtOutput shouldContain "(get-model)"

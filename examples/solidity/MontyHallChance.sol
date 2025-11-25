@@ -1,11 +1,11 @@
 pragma solidity ^0.8.31;
 
-contract MontyHall {
+contract MontyHallChance {
     constructor() {
         lastTs = block.timestamp;
     }
 
-    enum Role { None, Host, Guest }
+    enum Role { None, Guest, Host }
 
     uint256 public lastTs;
 
@@ -33,9 +33,9 @@ contract MontyHall {
 
     mapping(address => int256) public balanceOf;
 
-    address public address_Host;
-
     address public address_Guest;
+
+    address public address_Host;
 
     bool public payoffs_distributed;
 
@@ -125,9 +125,9 @@ contract MontyHall {
         _markActionDone(3);
     }
 
-    function move_Host_4(int256 _goat) public by(Role.Host) notDone(4) depends(3) {
+    function move_Host_4(int256 _goat) public by(Role.Host) notDone(4) depends(3) depends(2) {
         require((((_goat == 0) || (_goat == 1)) || (_goat == 2)), "domain");
-        require((_goat != Guest_d), "where");
+        require(((_goat != Guest_d) && (_goat != Host_car)), "where");
         Host_goat = _goat;
         done_Host_goat = true;
         _markActionDone(4);
@@ -139,10 +139,9 @@ contract MontyHall {
         _markActionDone(5);
     }
 
-    function move_Host_6(int256 _car, uint256 salt) public by(Role.Host) notDone(6) depends(5) depends(4) depends(2) {
+    function move_Host_6(int256 _car, uint256 salt) public by(Role.Host) notDone(6) depends(5) depends(2) {
         _checkReveal(Host_hidden_car, abi.encodePacked(_car, salt));
         require((((_car == 0) || (_car == 1)) || (_car == 2)), "domain");
-        require((Host_goat != _car), "where");
         Host_car = _car;
         done_Host_car = true;
         _markActionDone(6);
@@ -150,8 +149,8 @@ contract MontyHall {
 
     function distributePayoffs() public at_final_phase {
         payoffs_distributed = true;
-        balanceOf[address_Host] = ((done_Host_car && done_Guest_switch)) ? 0 : ((!done_Host_car)) ? (-100) : 0;
-        balanceOf[address_Guest] = ((done_Host_car && done_Guest_switch)) ? (((Guest_d != Host_car) == Guest_switch)) ? 20 : (-20) : ((!done_Host_car)) ? 20 : (-100);
+        balanceOf[address_Guest] = (((done_Host_car && done_Host_goat) && done_Guest_switch)) ? (((Guest_d != Host_car) == Guest_switch)) ? 20 : (-20) : (((!done_Host_car) || (!done_Host_goat))) ? 20 : (-100);
+        balanceOf[address_Host] = (((done_Host_car && done_Host_goat) && done_Guest_switch)) ? 0 : (((!done_Host_car) || (!done_Host_goat))) ? (-100) : 0;
     }
 
     function withdraw() public {
