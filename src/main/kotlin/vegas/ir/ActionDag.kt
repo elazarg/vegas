@@ -206,15 +206,8 @@ class ActionDag private constructor(
 
             val split: Set<ActionId> = riskPartners.filterValues { it.isNotEmpty() }.keys
 
-            // Nothing concurrent ⇒ nothing to do
+            // Nothing concurrent, so nothing to do
             if (split.isEmpty()) return dag
-
-            // NOTE: previously we refused simultaneous-join actions here:
-            // for (id in split) {
-            //     val meta = dag.meta(id)
-            //     require(meta.spec.join == null) { ... }
-            // }
-            // That restriction is now removed; joins are carried onto the commit node.
 
             // 3. Allocate fresh ids for commit/reveal nodes
             val commitId = mutableMapOf<ActionId, ActionId>()

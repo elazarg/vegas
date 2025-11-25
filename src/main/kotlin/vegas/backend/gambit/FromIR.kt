@@ -370,7 +370,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
 
         // Guard: evaluated on player's knowledge with this action's packet overlayed.
         return rawPackets.filter { pkt ->
-            // FIX: Unwrap Hidden values for the actor's own guard evaluation.
+            // Unwrap Hidden values for the actor's own guard evaluation.
             // The player knows what they are choosing right now.
             val unwrappedPkt = pkt.mapValues { (_, v) ->
                 if (v is IrVal.Hidden) v.inner else v

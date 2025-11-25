@@ -10,6 +10,7 @@ import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
+import vegas.ir.toGraphviz
 import java.io.File
 
 data class Example(
@@ -54,6 +55,9 @@ class GoldenMasterTest : FreeSpec({
             },
             TestCase(example, "z3", "smt") { prog ->
                 generateSMT(compileToIR(prog))
+            },
+            TestCase(example, "gc", "graphviz") { prog ->
+                compileToIR(prog).toGraphviz()
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }

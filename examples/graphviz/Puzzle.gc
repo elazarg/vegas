@@ -1,0 +1,21 @@
+digraph "Puzzle" {
+  rankdir=LR;
+  node [fontname="Helvetica", fontsize=10, style=filled, penwidth=0.5];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+  splines=true;
+  subgraph "cluster_0" {
+    label="A";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_A_1" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#1</font></td></tr><tr><td><b>p</b>, <b>q</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+  }
+  subgraph "cluster_1" {
+    label="Q";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_Q_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><b>x</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+  }
+  "n_Q_0" -> "n_A_1";
+}

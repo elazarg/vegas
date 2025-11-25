@@ -1,0 +1,33 @@
+digraph "Prisoners" {
+  rankdir=LR;
+  node [fontname="Helvetica", fontsize=10, style=filled, penwidth=0.5];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+  splines=true;
+  subgraph "cluster_0" {
+    label="A";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_A_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_A_3" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#3</font></td></tr><tr><td><font point-size="14">&#128274;</font> <b>c</b></td></tr></table>>, shape=box, fillcolor="#FFD1DC", penwidth=1.5];
+    "n_A_4" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#4</font></td></tr><tr><td><font point-size="14">&#128065;</font> <b>c</b></td></tr></table>>, shape=box, fillcolor="#C1E1C1", penwidth=0.5];
+  }
+  subgraph "cluster_1" {
+    label="B";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_B_1" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#1</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_B_5" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#5</font></td></tr><tr><td><font point-size="14">&#128274;</font> <b>c</b></td></tr></table>>, shape=box, fillcolor="#FFD1DC", penwidth=1.5];
+    "n_B_6" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#6</font></td></tr><tr><td><font point-size="14">&#128065;</font> <b>c</b></td></tr></table>>, shape=box, fillcolor="#C1E1C1", penwidth=0.5];
+  }
+  "n_A_0" -> "n_B_1";
+  "n_B_1" -> "n_A_3";
+  "n_B_1" -> "n_A_4";
+  "n_A_3" -> "n_A_4";
+  "n_B_5" -> "n_A_4";
+  "n_B_1" -> "n_B_5";
+  "n_B_1" -> "n_B_6";
+  "n_B_5" -> "n_B_6";
+  "n_A_3" -> "n_B_6";
+}

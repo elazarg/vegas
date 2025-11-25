@@ -1,0 +1,58 @@
+digraph "TicTacToe" {
+  rankdir=LR;
+  node [fontname="Helvetica", fontsize=10, style=filled, penwidth=0.5];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+  splines=true;
+  subgraph "cluster_0" {
+    label="O";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_O_1" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#1</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_O_3" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#3</font></td></tr><tr><td><b>c1</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_O_5" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#5</font></td></tr><tr><td><b>c2</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_O_7" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#7</font></td></tr><tr><td><b>c3</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_O_9" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#9</font></td></tr><tr><td><b>c4</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+  }
+  subgraph "cluster_1" {
+    label="X";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_X_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_X_2" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#2</font></td></tr><tr><td><b>c1</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_X_4" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#4</font></td></tr><tr><td><b>c2</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_X_6" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#6</font></td></tr><tr><td><b>c3</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_X_8" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#8</font></td></tr><tr><td><b>c4</b></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+  }
+  "n_X_0" -> "n_O_1";
+  "n_O_1" -> "n_X_2";
+  "n_X_2" -> "n_O_3";
+  "n_O_3" -> "n_X_4";
+  "n_X_2" -> "n_X_4";
+  "n_X_4" -> "n_O_5";
+  "n_X_2" -> "n_O_5";
+  "n_O_3" -> "n_O_5";
+  "n_O_5" -> "n_X_6";
+  "n_X_2" -> "n_X_6";
+  "n_O_3" -> "n_X_6";
+  "n_X_4" -> "n_X_6";
+  "n_X_6" -> "n_O_7";
+  "n_X_2" -> "n_O_7";
+  "n_O_3" -> "n_O_7";
+  "n_X_4" -> "n_O_7";
+  "n_O_5" -> "n_O_7";
+  "n_O_7" -> "n_X_8";
+  "n_X_2" -> "n_X_8";
+  "n_O_3" -> "n_X_8";
+  "n_X_4" -> "n_X_8";
+  "n_O_5" -> "n_X_8";
+  "n_X_6" -> "n_X_8";
+  "n_X_8" -> "n_O_9";
+  "n_X_2" -> "n_O_9";
+  "n_O_3" -> "n_O_9";
+  "n_X_4" -> "n_O_9";
+  "n_O_5" -> "n_O_9";
+  "n_X_6" -> "n_O_9";
+  "n_O_7" -> "n_O_9";
+}
