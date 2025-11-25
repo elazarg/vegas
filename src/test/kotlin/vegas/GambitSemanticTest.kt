@@ -203,7 +203,10 @@ class GambitSemanticTest : FreeSpec({
     )
 
     fun List<DecisionNode>.hasFullBoolMenu() =
-        any { it.actions.toSet() == setOf("true", "false", "None") }
+        any {
+            it.actions.toSet() == setOf("true", "false", "Quit") ||
+            it.actions.toSet() == setOf("Hidden(true)", "Hidden(false)", "Quit")
+        }
 
     data class InfosetSig(
         val player: Int,
@@ -256,38 +259,35 @@ class GambitSemanticTest : FreeSpec({
         "visibility from actual writer (no leak to Bob)" {
             // Regression test for critical visibility bug:
             // Alice writes x as visible, then overwrites as hidden.
-            // Bob should NOT see x (uses Alice's second write visibility).
+            // Bob should NOT see the VALUE of x (uses Alice's second write visibility).
             //
             // This is primarily a regression test (game compiles without crash).
-            // Bob may have different action sets based on whether Alice bailed,
-            // but not based on the hidden value of Alice.x.
+            // Bob can still make guesses, but he shouldn't have different nodes
+            // based on the hidden value of Alice.x (only based on whether Alice bailed).
 
             val efg = compileGame(VISIBILITY_ACTUAL_WRITER)
             val bobNodes = decisionNodesForPlayer(efg, 2)
             bobNodes.isNotEmpty() shouldBe true
 
-            // Bob should have decision nodes (strategic role with bail)
-            bobNodes.all { it.actions.contains("None") } shouldBe true
+            // Bob can make choices (he has a full bool menu with bail option)
+            bobNodes.hasFullBoolMenu() shouldBe true
 
             // Game should complete without errors
             efg shouldContain "t \"\""
         }
 
         "COMMIT visibility - others cannot see commits" {
-            // Alice commits secret (hidden), Bob tries to use it.
-            // Bob should NOT see Alice's secret value.
-            //
-            // Smoke test.
-
             val efg = compileGame(COMMIT_NOT_VISIBLE)
-            val bobNodes = decisionNodesForPlayer(efg, 2)
-            bobNodes.isNotEmpty() shouldBe true
 
-            // Strategic roles always have bail option
-            efg shouldContain "\"None\""
+            // Alice has at least 2 branches (True/False)
+            // Bob acts after Alice.
+            val bobInfosets = infosetsForPlayer(efg, 2)
 
-            // Game completes
-            efg shouldContain "t \"\""
+            // Bob should have exactly 2 infosets:
+            // 1. Alice committed (value hidden, but commitment visible)
+            // 2. Alice bailed (distinct from commitment)
+            // If he saw the committed VALUE, he would have 3+ (true, false, bail).
+            bobInfosets.map { it.infoset }.distinct().size shouldBe 2
         }
 
         "COMMIT visibility - owner sees own commits" {
@@ -348,7 +348,7 @@ class GambitSemanticTest : FreeSpec({
             aliceNodes.any { it.actions.toSet().size > 1 } shouldBe true
 
             // Some node where Alice only has bail
-            aliceNodes.any { it.actions.toSet() == setOf("None") } shouldBe true
+            aliceNodes.any { it.actions.toSet() == setOf("Quit") } shouldBe true
 
             // Terminals with bail penalties
             efg shouldContain "{ -100"
@@ -377,13 +377,27 @@ class GambitSemanticTest : FreeSpec({
             val efg = compileGame(SIMUL_MIXED)
 
             // Alice (player 1) has bail
-            decisionNodesForPlayer(efg, 1).any { "None" in it.actions } shouldBe true
+            decisionNodesForPlayer(efg, 1).any { "Quit" in it.actions } shouldBe true
 
             // Bob (player 2) has bail
-            decisionNodesForPlayer(efg, 2).any { "None" in it.actions } shouldBe true
+            decisionNodesForPlayer(efg, 2).any { "Quit" in it.actions } shouldBe true
 
             // bail-related terminals exist
             efg shouldContain "{ 0 0 }"
+        }
+
+        "Public Abandonment - observers distinguish bail from hidden commit" {
+            // Re-use COMMIT_NOT_VISIBLE or similar
+            val efg = compileGame(COMMIT_NOT_VISIBLE)
+
+            // Alice commits (Hidden) OR Bails.
+            // Bob acts.
+            val bobInfosets = infosetsForPlayer(efg, 2).map { it.infoset }.distinct()
+
+            // Bob should have exactly 2 infosets:
+            // 1. Alice committed (value hidden, so merged into one state)
+            // 2. Alice bailed (publicly visible state)
+            bobInfosets.size shouldBe 2
         }
     }
 

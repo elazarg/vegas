@@ -1,6 +1,4 @@
 EFG 2 R "Trivial1" { "A" }
 "Generated from ActionDag"
 
-p "" 1 1 "" { "None" "None" } 0
 t "" 1 "" { 0 }
-t "" 2 "" { 0 }
