@@ -7,34 +7,7 @@ import vegas.frontend.TypeExp as AstType
 import vegas.ir.*
 import vegas.ir.ActionDag.Companion.fromGraph
 
-/**
- * Compile AST to IR.
- *
- * Transformations:
- * - Flatten Ext tree into phases
- * - Group simultaneous queries (same Bind) into single phase
- * - Elaborate types: TypeId->resolved, Range->SetType, Hidden->visible flag
- * - Transform expressions: isDefined/isUndefined->IsDefined
- * - Desugar outcomes to payoff expressions
- */
-fun compileToOldIR(ast: GameAst): GameIR {
-    val typeEnv = ast.types
-    val roles = findRoleIds(ast.game)
-    val chanceRoles = findChanceRoleIds(ast.game)
-
-    val phases = collectPhases(ast.game, typeEnv)
-    val payoffs = extractPayoffs(ast.game, typeEnv)
-
-    return GameIR(
-        name = ast.name,
-        roles = roles,
-        chanceRoles = chanceRoles,
-        phases = phases,
-        payoffs = payoffs
-    )
-}
-
-fun compileToIR(ast: GameAst): ActionGameIR {
+fun compileToIR(ast: GameAst): GameIR {
     val typeEnv = ast.types
     val roles = findRoleIds(ast.game)
     val chanceRoles = findChanceRoleIds(ast.game)
@@ -45,11 +18,11 @@ fun compileToIR(ast: GameAst): ActionGameIR {
     val dag = actionDagFromPhases(phases)
         ?: error("ActionDag construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
 
-    return ActionGameIR(
+    return GameIR(
         name = ast.name,
         roles = roles,
         chanceRoles = chanceRoles,
-        phases = ActionDag.expandCommitReveal(dag),
+        dag = ActionDag.expandCommitReveal(dag),
         payoffs = payoffs,
     )
 }
@@ -67,7 +40,6 @@ fun compileToIR(ast: GameAst): ActionGameIR {
  * */
 data class Phase(val actions: Map<RoleId, Signature>) {
     fun roles(): Set<RoleId> = actions.keys
-    fun signature(role: RoleId) = actions[role]
 }
 
 

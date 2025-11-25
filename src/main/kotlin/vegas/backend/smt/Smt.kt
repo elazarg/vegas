@@ -2,13 +2,12 @@ package vegas.backend.smt
 
 import vegas.FieldRef
 import vegas.RoleId
-import vegas.ir.ActionGameIR
+import vegas.ir.GameIR
 import vegas.ir.ActionId
 import vegas.ir.Expr
 import vegas.ir.Type
-import vegas.ir.dag
 
-fun generateSMT(ir: ActionGameIR): String {
+fun generateSMT(ir: GameIR): String {
     val sb = StringBuilder()
     val dag = ir.dag
 

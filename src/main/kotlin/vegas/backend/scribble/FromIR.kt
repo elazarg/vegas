@@ -31,17 +31,7 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
 // ========== Phase to Scribble Actions ==========
 
 private fun phasesToScribble(g: GameIR): List<Sast.Action> {
-    val paramHistory = buildParamHistory(g)
-
-    val phaseActions = g.phases.flatMapIndexed { phaseIdx, phase ->
-        phaseToScribble(phase, phaseIdx, paramHistory, g.roles)
-    }
-
-    val withdrawals = g.payoffs.keys.map { role ->
-        Sast.Action.Send("Withdraw", emptyList(), role, setOf(SERVER))
-    }
-
-    return phaseActions + withdrawals
+    throw NotImplementedError("Scribble backend not yet migrated to ActionDag")
 }
 
 private fun phaseToScribble(
@@ -120,19 +110,7 @@ private fun signatureToScribble(
 private data class ParamOccurrence(val phase: Int, val visible: Boolean)
 
 private fun buildParamHistory(g: GameIR): Map<FieldRef, List<ParamOccurrence>> {
-    val history = mutableMapOf<FieldRef, MutableList<ParamOccurrence>>()
-
-    g.phases.forEachIndexed { phaseIdx, phase ->
-        phase.actions.forEach { (role, sig) ->
-            sig.parameters.forEach { param ->
-                val key = FieldRef(role, param.name)
-                history.getOrPut(key) { mutableListOf() }
-                    .add(ParamOccurrence(phaseIdx, param.visible))
-            }
-        }
-    }
-
-    return history.mapValues { it.value.toList() }
+    throw NotImplementedError("Scribble backend not yet migrated to ActionDag")
 }
 
 // ========== Utilities ==========

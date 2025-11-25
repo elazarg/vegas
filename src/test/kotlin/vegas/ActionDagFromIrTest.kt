@@ -9,7 +9,6 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.ir.Visibility
-import vegas.ir.dag
 
 /**
  * Tests for building ActionDag from GameIR.

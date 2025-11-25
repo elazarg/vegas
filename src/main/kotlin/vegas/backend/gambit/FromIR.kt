@@ -7,18 +7,17 @@ import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
 import vegas.ir.ActionDag
-import vegas.ir.ActionGameIR
+import vegas.ir.GameIR
 import vegas.ir.ActionId
 import vegas.ir.ActionStruct
 import vegas.ir.Expr
 import vegas.ir.Type
 import vegas.ir.Visibility
-import vegas.ir.dag
 
 /**
  * Build a Gambit EFG string from the ActionDag-based IR.
  */
-fun generateExtensiveFormGame(ir: ActionGameIR): String {
+fun generateExtensiveFormGame(ir: GameIR): String {
     val builder = DagGameTreeBuilder(ir)
     val tree = builder.build()
     return ExtensiveFormGame(
@@ -32,14 +31,69 @@ fun generateExtensiveFormGame(ir: ActionGameIR): String {
 private data class ProducedValue(val source: ActionId, val value: IrVal)
 private typealias State = Map<FieldRef, ProducedValue>
 
-private class DagGameTreeBuilder(private val ir: ActionGameIR) {
+private class DagGameTreeBuilder(private val ir: GameIR) {
     private val dag: ActionDag = ir.dag
     private val infosets = InfosetManager(ir.roles)
     private val chancePlayers: Set<RoleId> = ir.chanceRoles
 
+    /**
+     * Cache for visibility computation. Centralizes "what can observer see at target action?"
+     * logic and ensures visibility is computed once per (target, observer) pair.
+     */
+    private class VisibilityCache(
+        private val dag: ActionDag,
+        private val state: State,
+    ) {
+        private val cache = mutableMapOf<Pair<ActionId, RoleId>, Map<FieldRef, IrVal>>()
+
+        fun view(target: ActionId, observer: RoleId): Map<FieldRef, IrVal> =
+            cache.getOrPut(target to observer) {
+                computeStateView(target, observer)
+            }
+
+        private fun computeStateView(target: ActionId, observer: RoleId): Map<FieldRef, IrVal> {
+            val view = mutableMapOf<FieldRef, IrVal>()
+
+            // 1. All actions that causally precede (or equal) target
+            val reachable = dag.actions.filter { dag.reaches(it, target) }
+
+            // 2. All fields they might write (candidate fields for infoset keys)
+            val candidateFields: Set<FieldRef> =
+                reachable.flatMap { dag.visibilityOf(it).keys }.toSet()
+
+            for (field in candidateFields) {
+                val produced = state[field]
+                val visibleValue =
+                    if (produced != null && dag.reaches(produced.source, target)) {
+                        // Use the visibility of the *actual writer*
+                        val writerVis = dag.visibilityOf(produced.source)[field]
+                            ?: error("No visibility info for $field written by ${produced.source}")
+                        when (writerVis) {
+                            Visibility.PUBLIC, Visibility.REVEAL -> produced.value.unwrap()
+                            Visibility.COMMIT ->
+                                if (field.role == observer) produced.value.unwrap()
+                                else IrVal.Undefined
+                        }
+                    } else {
+                        IrVal.Undefined
+                    }
+
+                view[field] = visibleValue
+            }
+
+            return view
+        }
+    }
+
     fun build(): GameTree {
         val frontier = FrontierMachine.from(dag)
         return buildFromFrontier(frontier, emptyMap())
+    }
+
+    private fun stateHasUndefined(role: RoleId, state: State): Boolean {
+        return state.any { (field, produced) ->
+            field.role == role && produced.value == IrVal.Undefined
+        }
     }
 
     private fun buildFromFrontier(frontier: FrontierMachine<ActionId>, state: State): GameTree {
@@ -51,14 +105,13 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
         val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { dag.owner(it) }
         val roles: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
 
+        // Create visibility cache for this frontier state
+        val visCache = VisibilityCache(dag, state)
+
         // Pre-compute available choices for each role using the same pre-move state so
         // incomparable actions remain simultaneous (no information leakage between them).
         val roleChoices: Map<RoleId, List<Map<ActionId, Map<VarId, IrVal>>>> = roles.associateWith { role ->
-            enumerateRoleChoices(actionsByRole.getValue(role), state)
-        }
-
-        if (roleChoices.values.any { it.isEmpty() }) {
-            return terminalFrom(state)
+            enumerateRoleChoices(role, actionsByRole.getValue(role), state, visCache)
         }
 
         fun advance(selections: Map<ActionId, Map<VarId, IrVal>>): GameTree {
@@ -77,16 +130,26 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
 
             val role = roles[idx]
             val actions = actionsByRole.getValue(role)
-            val infosetKey = infosetView(role, actions, state)
+            val infosetKey = infosetView(role, actions, visCache)
             val infosetId = infosets.getInfosetNumber(role, infosetKey)
             val isChance = role in chancePlayers
 
             val choicesForRole = roleChoices.getValue(role)
+
+            // Chance roles cannot bail; empty choice list is an error
+            if (isChance && choicesForRole.isEmpty()) {
+                throw StaticError("Chance role $role has no legal outcomes at this frontier")
+            }
+
             val probability = if (isChance) Rational(1, choicesForRole.size) else null
 
             val choices = choicesForRole.map { selection ->
                 val mergedSelections = selections + selection
-                val flattenedAction = selection.values.flatMap { it.entries }.associate { it.toPair() }
+                // Filter out Undefined values so bail branches appear as empty labels
+                val flattenedAction = selection.values
+                    .flatMap { it.entries }
+                    .filter { (_, v) -> v != IrVal.Undefined }
+                    .associate { it.toPair() }
                 GameTree.Choice(
                     action = flattenedAction,
                     probability = probability,
@@ -109,20 +172,53 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
         return buildRoleDecision(0, emptyMap())
     }
 
+    /**
+     * Enumerate all legal choice combinations for a role's actions in this frontier.
+     *
+     * Strategic roles always have a bail option. Once a role bails (writes Undefined),
+     * they are permanently locked out of all future explicit choices and can only
+     * bail again. This models griefing/abandonment.
+     *
+     * Chance roles cannot bail and must always have at least one legal packet.
+     */
     private fun enumerateRoleChoices(
+        role: RoleId,
         actions: List<ActionId>,
         state: State,
+        visCache: VisibilityCache,
     ): List<Map<ActionId, Map<VarId, IrVal>>> {
+        val isChance = role in chancePlayers
+
+        // Early return: if role has already bailed, they can only bail again
+        if (stateHasUndefined(role, state)) {
+            return listOf(createBailSelection(actions))
+        }
+
+        // Enumerate normal packets for each action
         val perAction: List<Pair<ActionId, List<Map<VarId, IrVal>>>> = actions.map { actionId ->
             val struct = dag.struct(actionId)
             val spec = dag.spec(actionId)
-            val packets = enumeratePackets(actionId, struct, spec, state)
-                .filter { pkt -> guardHolds(actionId, struct, spec, state, pkt) }
+            val packets = enumeratePackets(actionId, struct, spec, visCache)
+                .filter { pkt -> guardHolds(actionId, struct, spec, visCache, pkt) }
             actionId to packets
         }
 
-        return cartesian(perAction.map { it.second }).map { combination ->
+        val normalChoices = cartesian(perAction.map { it.second }).map { combination ->
             perAction.mapIndexed { idx, (actionId, _) -> actionId to combination[idx] }.toMap()
+        }
+
+        // Strategic roles always have a bail option; chance roles cannot bail
+        return if (isChance) {
+            normalChoices
+        } else {
+            normalChoices + createBailSelection(actions)
+        }
+    }
+
+    private fun createBailSelection(actions: List<ActionId>): Map<ActionId, Map<VarId, IrVal>> {
+        return actions.associateWith { actionId ->
+            val params = dag.params(actionId)
+            params.associate { param -> param.name to IrVal.Undefined }
         }
     }
 
@@ -133,11 +229,15 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
 
     private fun stateValues(state: State): Map<FieldRef, IrVal> = state.mapValues { (_, v) -> v.value }
 
-    private fun infosetView(role: RoleId, actions: List<ActionId>, state: State): Map<FieldRef, IrVal> {
+    private fun infosetView(
+        role: RoleId,
+        actions: List<ActionId>,
+        visCache: VisibilityCache,
+    ): Map<FieldRef, IrVal> {
         val merged = mutableMapOf<FieldRef, IrVal>()
         actions.sortedBy { it.second }.forEach { actionId ->
-            val view = stateView(actionId, role, state)
-            view.forEach { (field, value) ->
+            val view = visCache.view(actionId, role)
+            for ((field, value) in view) {
                 if (field !in merged || merged[field] == IrVal.Undefined) {
                     merged[field] = value
                 }
@@ -146,30 +246,17 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
         return merged
     }
 
-    private fun stateView(target: ActionId, observer: RoleId, state: State): Map<FieldRef, IrVal> {
-        val view = mutableMapOf<FieldRef, IrVal>()
-        for ((field, produced) in state) {
-            if (!dag.reaches(produced.source, target)) continue
-            val vis = dag.visibilityOf(produced.source)[field] ?: continue
-            val visibleValue = when (vis) {
-                Visibility.PUBLIC, Visibility.REVEAL -> produced.value.unwrap()
-                Visibility.COMMIT -> if (field.role == observer) produced.value.unwrap() else IrVal.Undefined
-            }
-            view[field] = visibleValue
-        }
-        return view
-    }
 
     private fun enumeratePackets(
         actionId: ActionId,
         struct: ActionStruct,
         spec: vegas.ir.ActionSpec,
-        state: State,
+        visCache: VisibilityCache,
     ): List<Map<VarId, IrVal>> {
         if (spec.params.isEmpty()) return listOf(emptyMap())
 
         val role = struct.role
-        val view = stateView(actionId, role, state)
+        val view = visCache.view(actionId, role)
 
         val choicesPerParam: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
             val field = FieldRef(role, param.name)
@@ -189,11 +276,11 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
         actionId: ActionId,
         struct: ActionStruct,
         spec: vegas.ir.ActionSpec,
-        state: State,
+        visCache: VisibilityCache,
         packet: Map<VarId, IrVal>,
     ): Boolean {
         val role = struct.role
-        val baseView = stateView(actionId, role, state).toMutableMap()
+        val baseView = visCache.view(actionId, role).toMutableMap()
         packet.forEach { (name, value) ->
             baseView[FieldRef(role, name)] = value
         }
@@ -211,9 +298,13 @@ private class DagGameTreeBuilder(private val ir: ActionGameIR) {
         packet.forEach { (name, value) ->
             val field = FieldRef(role, name)
             val vis = struct.visibility.getValue(field)
-            val stored = when (vis) {
-                Visibility.COMMIT -> IrVal.Hidden(value)
-                Visibility.REVEAL, Visibility.PUBLIC -> value
+            val stored = if (value == IrVal.Undefined) {
+                IrVal.Undefined
+            } else {
+                when (vis) {
+                    Visibility.COMMIT -> IrVal.Hidden(value)
+                    Visibility.REVEAL, Visibility.PUBLIC -> value
+                }
             }
             updated[field] = ProducedValue(actionId, stored)
         }
