@@ -95,7 +95,7 @@ contract Prisoners {
         _markActionDone(0);
     }
 
-    function move_B_1() public payable by(Role.None) notDone(1) {
+    function move_B_1() public payable by(Role.None) notDone(1) depends(0) {
         require((role[msg.sender] == Role.None), "already has a role");
         require((!done_B), "already joined");
         role[msg.sender] = Role.B;
@@ -106,26 +106,26 @@ contract Prisoners {
         _markActionDone(1);
     }
 
-    function move_A_2(bytes32 _hidden_c) public by(Role.A) notDone(2) {
+    function move_A_2(bytes32 _hidden_c) public by(Role.A) notDone(2) depends(1) {
         A_hidden_c = _hidden_c;
         done_A_hidden_c = true;
         _markActionDone(2);
     }
 
-    function move_B_4(bytes32 _hidden_c) public by(Role.B) notDone(4) {
+    function move_B_4(bytes32 _hidden_c) public by(Role.B) notDone(4) depends(1) {
         B_hidden_c = _hidden_c;
         done_B_hidden_c = true;
         _markActionDone(4);
     }
 
-    function move_A_3(bool _c, uint256 salt) public by(Role.A) notDone(3) depends(2) depends(4) {
+    function move_A_3(bool _c, uint256 salt) public by(Role.A) notDone(3) depends(1) depends(2) depends(4) {
         _checkReveal(A_hidden_c, abi.encodePacked(_c, salt));
         A_c = _c;
         done_A_c = true;
         _markActionDone(3);
     }
 
-    function move_B_5(bool _c, uint256 salt) public by(Role.B) notDone(5) depends(4) depends(2) {
+    function move_B_5(bool _c, uint256 salt) public by(Role.B) notDone(5) depends(1) depends(4) depends(2) {
         _checkReveal(B_hidden_c, abi.encodePacked(_c, salt));
         B_c = _c;
         done_B_c = true;

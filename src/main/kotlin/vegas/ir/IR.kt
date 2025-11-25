@@ -3,8 +3,6 @@ package vegas.ir
 import vegas.RoleId
 import vegas.VarId
 import vegas.FieldRef
-import vegas.frontend.Phase
-import vegas.frontend.actionDagFromPhases
 
 // Expression are mostly straightforward
 sealed class Expr {
@@ -91,55 +89,10 @@ data class Signature(
  * A GameIR describes a multi-party interaction where roles perform actions
  * that may depend on each other, leading to payoffs for each role.
  */
-data class GGameIR<T>(
+data class GameIR(
     val name: String,
     val roles: Set<RoleId>,
     val chanceRoles: Set<RoleId>,
-    val phases: T,        // index is phase order; straight-path
-    val payoffs: Map<RoleId, Expr>    // evaluated at terminal
+    val dag: ActionDag,
+    val payoffs: Map<RoleId, Expr>
 )
-
-typealias GameIR = GGameIR<List<Phase>>
-typealias ActionGameIR = GGameIR<ActionDag>
-
-val ActionGameIR.dag: ActionDag get() = phases
-
-fun GameIR.toActionGameIr(): ActionGameIR? {
-    val dag = actionDagFromPhases(phases) ?: return null
-    return ActionGameIR(
-        name = name,
-        roles = roles,
-        chanceRoles = chanceRoles,
-        phases = dag,
-        payoffs = payoffs,
-    )
-}
-
-fun expandCommitReveal(ir: GameIR): GameIR {
-    val expandedPhases = mutableListOf<Phase>()
-
-    ir.phases.forEach { phase ->
-        val needsCR = phase.actions.any { (role, sig) ->
-            // Check if simultaneous visible
-            sig.parameters.any { it.visible } && phase.actions.size > 1
-        }
-
-        if (needsCR) {
-            // Create commit phase
-            val commitPhase = Phase(phase.actions.mapValues { (role, sig) ->
-                sig.copy(parameters = sig.parameters.map { it.copy(visible = false) } )
-            })
-            expandedPhases.add(commitPhase)
-
-            // Create reveal phase
-            val revealPhase = Phase(phase.actions.mapValues { (role, sig) ->
-                sig.copy(parameters = sig.parameters.map { it.copy(visible = true) } )
-            })
-            expandedPhases.add(revealPhase)
-        } else {
-            expandedPhases.add(phase)
-        }
-    }
-
-    return ir.copy(phases = expandedPhases)
-}

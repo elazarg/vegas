@@ -67,7 +67,7 @@ internal class EfgWriter(
     }
 
     private fun formatActionName(action: Map<VarId, IrVal>): String {
-        if (action.isEmpty()) return "None"
+        if (action.isEmpty()) return "Quit"
         return action.values.joinToString("&") { formatValue(it) }
     }
 
@@ -75,7 +75,8 @@ internal class EfgWriter(
         is IrVal.BoolVal -> const.v.toString()
         is IrVal.IntVal -> const.v.toString()
         is IrVal.Hidden -> "Hidden(${formatValue(const.inner)})"
-        IrVal.Undefined -> "None"
+        IrVal.Opaque -> "Opaque"
+        IrVal.Quit -> "Quit"
     }
 
     private fun formatRational(r: Rational): String {

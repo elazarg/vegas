@@ -292,7 +292,8 @@ class ActionDag private constructor(
                 //  - original guard
                 //  - NO join (deposit already done)
                 val revealSpec = spec.copy(
-                    join = null
+                    join = null,
+                    guardExpr = spec.guardExpr
                 )
 
                 val commitMeta = ActionMeta(
@@ -413,10 +414,14 @@ private fun validateVisibilityOnReads(
 ): Boolean {
     // Points where each field becomes visible (PUBLIC or REVEAL)
     val visPoints = mutableMapOf<FieldRef, MutableList<ActionId>>()
+    val commitPoints = mutableMapOf<FieldRef, MutableList<ActionId>>()
     for ((id, meta) in payloads) {
         for ((field, vis) in meta.struct.visibility) {
             if (vis == Visibility.PUBLIC || vis == Visibility.REVEAL) {
                 visPoints.getOrPut(field) { mutableListOf() }.add(id)
+            }
+            if (vis == Visibility.COMMIT) {
+                commitPoints.getOrPut(field) { mutableListOf() }.add(id)
             }
         }
     }
@@ -426,7 +431,12 @@ private fun validateVisibilityOnReads(
             val points = visPoints[f].orEmpty()
 
             // Field must be visible at or before this action
-            val ok = points.any { v -> v == id || reach.reaches(v, id) }
+            val visibleOk = points.any { v -> v == id || reach.reaches(v, id) }
+            val selfCommitOk = if (f.role == meta.struct.role) {
+                commitPoints[f].orEmpty().any { c -> c == id || reach.reaches(c, id) }
+            } else false
+
+            val ok = visibleOk || selfCommitOk
             if (!ok) return false
         }
     }

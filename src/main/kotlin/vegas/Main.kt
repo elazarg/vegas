@@ -8,8 +8,7 @@ import vegas.backend.solidity.genSolidity
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
-import vegas.frontend.compileToOldIR
-import vegas.ir.toActionGameIr
+import vegas.frontend.compileToIR
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.Path
@@ -83,11 +82,11 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
 
     println("roles: " + findRoleIds(program.game))
     doTypecheck(program)
-    val ir = compileToOldIR(program)
-    if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(program) }
+    val ir = compileToIR(program)
+    if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
     if (outputs.efg) writeFile(outEfg.toString()) { generateExtensiveFormGame(ir) }
     if (outputs.scr) writeFile(outScr.toString()) { generateScribble(program).prettyPrintAll() }
-    if (outputs.sol) writeFile(outSol.toString()) { genSolidity(ir.toActionGameIr()!!) }
+    if (outputs.sol) writeFile(outSol.toString()) { genSolidity(ir) }
 
     println("Done")
     println()

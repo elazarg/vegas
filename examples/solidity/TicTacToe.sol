@@ -119,7 +119,7 @@ contract TicTacToe {
         _markActionDone(0);
     }
 
-    function move_O_1() public payable by(Role.None) notDone(1) {
+    function move_O_1() public payable by(Role.None) notDone(1) depends(0) {
         require((role[msg.sender] == Role.None), "already has a role");
         require((!done_O), "already joined");
         role[msg.sender] = Role.O;
@@ -130,7 +130,7 @@ contract TicTacToe {
         _markActionDone(1);
     }
 
-    function move_X_2(int256 _c1) public by(Role.X) notDone(2) {
+    function move_X_2(int256 _c1) public by(Role.X) notDone(2) depends(1) {
         require((((_c1 == 0) || (_c1 == 1)) || (_c1 == 4)), "domain");
         X_c1 = _c1;
         done_X_c1 = true;
@@ -145,7 +145,7 @@ contract TicTacToe {
         _markActionDone(3);
     }
 
-    function move_X_4(int256 _c2) public by(Role.X) notDone(4) depends(2) depends(3) {
+    function move_X_4(int256 _c2) public by(Role.X) notDone(4) depends(3) depends(2) {
         require((((((((((_c2 == 0) || (_c2 == 1)) || (_c2 == 2)) || (_c2 == 3)) || (_c2 == 4)) || (_c2 == 5)) || (_c2 == 6)) || (_c2 == 7)) || (_c2 == 8)), "domain");
         require((((X_c1 != O_c1) && (X_c1 != _c2)) && (O_c1 != _c2)), "where");
         X_c2 = _c2;
@@ -153,7 +153,7 @@ contract TicTacToe {
         _markActionDone(4);
     }
 
-    function move_O_5(int256 _c2) public by(Role.O) notDone(5) depends(2) depends(3) depends(4) {
+    function move_O_5(int256 _c2) public by(Role.O) notDone(5) depends(4) depends(2) depends(3) {
         require((((((((((_c2 == 0) || (_c2 == 1)) || (_c2 == 2)) || (_c2 == 3)) || (_c2 == 4)) || (_c2 == 5)) || (_c2 == 6)) || (_c2 == 7)) || (_c2 == 8)), "domain");
         require(((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != _c2)) && (O_c1 != X_c2)) && (O_c1 != _c2)) && (X_c2 != _c2)), "where");
         O_c2 = _c2;
@@ -161,7 +161,7 @@ contract TicTacToe {
         _markActionDone(5);
     }
 
-    function move_X_6(int256 _c3) public by(Role.X) notDone(6) depends(2) depends(3) depends(4) depends(5) {
+    function move_X_6(int256 _c3) public by(Role.X) notDone(6) depends(5) depends(2) depends(3) depends(4) {
         require((((((((((_c3 == 0) || (_c3 == 1)) || (_c3 == 2)) || (_c3 == 3)) || (_c3 == 4)) || (_c3 == 5)) || (_c3 == 6)) || (_c3 == 7)) || (_c3 == 8)), "domain");
         require(((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != _c3)) && (O_c2 != _c3)), "where");
         X_c3 = _c3;
@@ -169,7 +169,7 @@ contract TicTacToe {
         _markActionDone(6);
     }
 
-    function move_O_7(int256 _c3) public by(Role.O) notDone(7) depends(2) depends(3) depends(4) depends(5) depends(6) {
+    function move_O_7(int256 _c3) public by(Role.O) notDone(7) depends(6) depends(2) depends(3) depends(4) depends(5) {
         require((((((((((_c3 == 0) || (_c3 == 1)) || (_c3 == 2)) || (_c3 == 3)) || (_c3 == 4)) || (_c3 == 5)) || (_c3 == 6)) || (_c3 == 7)) || (_c3 == 8)), "domain");
         require((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != _c3)) && (O_c2 != X_c3)) && (O_c2 != _c3)) && (X_c3 != _c3)), "where");
         O_c3 = _c3;
@@ -177,7 +177,7 @@ contract TicTacToe {
         _markActionDone(7);
     }
 
-    function move_X_8(int256 _c4) public by(Role.X) notDone(8) depends(2) depends(3) depends(4) depends(5) depends(6) depends(7) {
+    function move_X_8(int256 _c4) public by(Role.X) notDone(8) depends(7) depends(2) depends(3) depends(4) depends(5) depends(6) {
         require((((((((((_c4 == 0) || (_c4 == 1)) || (_c4 == 2)) || (_c4 == 3)) || (_c4 == 4)) || (_c4 == 5)) || (_c4 == 6)) || (_c4 == 7)) || (_c4 == 8)), "domain");
         require((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != _c4)) && (O_c3 != _c4)), "where");
         X_c4 = _c4;
@@ -185,7 +185,7 @@ contract TicTacToe {
         _markActionDone(8);
     }
 
-    function move_O_9(int256 _c4) public by(Role.O) notDone(9) depends(2) depends(3) depends(4) depends(5) depends(6) depends(7) depends(8) {
+    function move_O_9(int256 _c4) public by(Role.O) notDone(9) depends(8) depends(2) depends(3) depends(4) depends(5) depends(6) depends(7) {
         require((((((((((_c4 == 0) || (_c4 == 1)) || (_c4 == 2)) || (_c4 == 3)) || (_c4 == 4)) || (_c4 == 5)) || (_c4 == 6)) || (_c4 == 7)) || (_c4 == 8)), "domain");
         require(((((((((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != X_c4)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != X_c4)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != X_c4)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != X_c4)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != X_c4)) && (X_c3 != _c4)) && (O_c3 != X_c4)) && (O_c3 != _c4)) && (X_c4 != _c4)), "where");
         O_c4 = _c4;

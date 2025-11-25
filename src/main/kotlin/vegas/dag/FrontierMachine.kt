@@ -22,6 +22,13 @@ class FrontierMachine<T : Any> private constructor(
             }
         }
     }
+
+    fun copy(): FrontierMachine<T> = FrontierMachine(
+        dependents = dependents,
+        unresolved = unresolved.toMutableSet(),
+        enabled = enabled.toMutableSet(),
+        remainingDeps = remainingDeps.toMutableMap(),
+    )
     companion object {
         fun <T : Any> from(dag: Dag<T>): FrontierMachine<T> {
             val depsCount = dag.nodes.associateWith { dag.prerequisitesOf(it).size }.toMutableMap()

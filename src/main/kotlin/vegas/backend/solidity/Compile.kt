@@ -4,7 +4,7 @@ import vegas.RoleId
 import vegas.FieldRef
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
-import vegas.ir.ActionGameIR
+import vegas.ir.GameIR
 import vegas.ir.ActionMeta
 import vegas.ir.ActionParam
 import vegas.ir.ActionKind
@@ -48,13 +48,13 @@ fun actionFuncName(role: RoleId, index: Int): String =
     "move_${role.name}_$index"
 
 /**
- * Main entry: Generate Solidity from ActionGameIR / ActionDag.
+ * Main entry: Generate Solidity from GameIR / ActionDag.
  *
  * Upstream is responsible for:
  *  - expanding commit–reveal in the IR, and
  *  - constructing the ActionDag from that normalized IR.
  */
-fun genSolidity(game: ActionGameIR): String {
+fun genSolidity(game: GameIR): String {
     val solAst = irToDagSolidity(game)
     return renderSolidityContract(solAst)
 }
@@ -126,11 +126,10 @@ private fun buildMarkActionDoneHelper(): FunctionDecl {
 }
 
 /**
- * Translate ActionGameIR (roles + ActionDag + payoffs) to SolidityContract AST.
+ * Translate GameIR (roles + ActionDag + payoffs) to SolidityContract AST.
  */
-fun irToDagSolidity(g: ActionGameIR): SolidityContract {
-    // Temporary name: g.phases currently holds the ActionDag.
-    val dag = g.phases
+fun irToDagSolidity(g: GameIR): SolidityContract {
+    val dag = g.dag
     val linearization = linearizeDag(dag)
 
     // Constructor: set lastTs = block.timestamp
@@ -194,7 +193,7 @@ fun irToDagSolidity(g: ActionGameIR): SolidityContract {
  * Build storage for DAG-based contract.
  */
 private fun buildDagGameStorage(
-    g: ActionGameIR,
+    g: GameIR,
     dag: ActionDag,
     linearization: Map<ActionId, Int>
 ): List<StorageDecl> = buildList {
@@ -682,7 +681,7 @@ private fun buildDagReveal(
  * (enforced by the at_final_phase modifier).
  */
 private fun buildDagPayoffFunction(
-    g: ActionGameIR
+    g: GameIR
 ): FunctionDecl {
     val body = buildList<Statement> {
         add(assign(v("payoffs_distributed"), bool(true)))
