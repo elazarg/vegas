@@ -190,7 +190,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         val isChance = role in chancePlayers
 
         // Early return: if role has already bailed, they can only bail again
-        if (stateHasUndefined(role, state)) {
+        if (!isChance && stateHasUndefined(role, state)) {
             return listOf(createBailSelection(actions))
         }
 
@@ -413,4 +413,3 @@ private class InfosetManager(roles: Set<RoleId>) {
         return map.getOrPut(key) { map.size }
     }
 }
-
