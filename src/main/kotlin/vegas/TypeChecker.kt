@@ -36,7 +36,7 @@ internal fun normalizeBuiltinType(t: TypeExp): TypeExp = when {
     else -> t
 }
 
-internal object Pretty {
+private object Pretty {
     fun type(t: TypeExp): String = when (t) {
         INT -> "int"
         BOOL -> "bool"
@@ -112,7 +112,7 @@ fun typeCheck(program: GameAst) {
 }
 
 
-private class Checker(
+internal class Checker(
     private val typeMap: Map<TypeId, TypeExp>,
     private val roles: Set<RoleId> = emptySet(),
     private val env: Env<TypeExp> = Env(),
@@ -246,6 +246,8 @@ private class Checker(
         }
     }
 
+    internal fun typeExp(exp: Exp): TypeExp = type(exp)
+
     private fun type(exp: Exp): TypeExp = when (exp) {
         is Exp.Call -> {
             val argTypes = exp.args.map { type(it) }
@@ -361,8 +363,8 @@ private class Checker(
         Exp.Const.UNDEFINED -> throw AssertionError()
     }
 
-    private fun checkOp(expected: TypeExp, args: Collection<TypeExp>) = checkOp(expected, *args.toTypedArray())
-    private fun checkOp(expected: TypeExp, vararg args: TypeExp) {
+    internal fun checkOp(expected: TypeExp, args: Collection<TypeExp>) = checkOp(expected, *args.toTypedArray())
+    internal fun checkOp(expected: TypeExp, vararg args: TypeExp) {
         for (arg in args) {
             requireStatic(
                 compatible(arg, expected),
@@ -373,7 +375,7 @@ private class Checker(
 
     // Assumes TypeId resolution (if any) already happened before this call.
     // Hidden wrappers are erased for the purpose of compatibility.
-    private fun compatible(t1Raw: TypeExp, t2Raw: TypeExp): Boolean {
+    internal fun compatible(t1Raw: TypeExp, t2Raw: TypeExp): Boolean {
         // 1) Normalize away 'hidden'
 
         val t1 = stripHidden(t1Raw)

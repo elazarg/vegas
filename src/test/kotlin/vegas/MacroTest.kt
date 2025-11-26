@@ -663,7 +663,7 @@ class MacroTest : FreeSpec({
 
             val ast = parseCode(code)
             val ex = shouldThrow<StaticError> { typeCheck(ast) }
-            ex.message shouldContain "Field"
+            ex.message shouldContain "not a role"
         }
 
         "macro can only use parameters and constants" {
