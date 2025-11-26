@@ -9,6 +9,7 @@ import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
 import vegas.frontend.compileToIR
+import vegas.frontend.inlineMacros
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.Path
@@ -81,8 +82,9 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val program = parseFile(inputPath.toString()).copy(name = baseName, desc = baseName)
 
     println("roles: " + findRoleIds(program.game))
-    doTypecheck(program)
-    val ir = compileToIR(program)
+    doTypecheck(program)  // Type check the surface syntax (with macros)
+    val inlined = inlineMacros(program)  // Inline macros (desugar)
+    val ir = compileToIR(inlined)  // Compile inlined program to IR
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
     if (outputs.efg) writeFile(outEfg.toString()) { generateExtensiveFormGame(ir) }
     if (outputs.scr) writeFile(outScr.toString()) { generateScribble(program).prettyPrintAll() }

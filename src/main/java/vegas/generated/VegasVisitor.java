@@ -23,6 +23,18 @@ public interface VegasVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitTypeDec(VegasParser.TypeDecContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link VegasParser#macroDec}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitMacroDec(VegasParser.MacroDecContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link VegasParser#paramDec}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitParamDec(VegasParser.ParamDecContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code SubsetTypeExp}
 	 * labeled alternative in {@link VegasParser#typeExp}.
 	 * @param ctx the parse tree

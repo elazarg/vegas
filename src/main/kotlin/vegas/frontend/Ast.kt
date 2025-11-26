@@ -15,7 +15,6 @@ data class Role(val id: RoleId) : Ast() {
     companion object {
         @JvmStatic
         fun of(name: String) = Role(RoleId(name))
-        val Chance = Role(RoleId("_Chance"))
     }
 }
 
@@ -71,6 +70,18 @@ sealed class Outcome : Ast() {
 
 data class VarDec(val v: Exp.Var, val type: TypeExp)
 
+data class MacroDec(
+    val name: VarId,
+    val params: List<MacroParam>,
+    val resultType: TypeExp,
+    val body: Exp
+) : Ast()
+
+data class MacroParam(
+    val name: VarId,
+    val type: TypeExp
+) : Ast()
+
 enum class Kind { JOIN, YIELD, REVEAL, JOIN_CHANCE }
 
 sealed class TypeExp : Ast() {
@@ -90,8 +101,13 @@ sealed class TypeExp : Ast() {
     data class Opt(val type: TypeExp) : TypeExp()
 }
 
-data class GameAst(val name: String, val desc: String, val types: Map<TypeExp.TypeId, TypeExp>, val game: Ext) :
-    Ast()
+data class GameAst(
+    val name: String,
+    val desc: String,
+    val types: Map<TypeExp.TypeId, TypeExp>,
+    val macros: List<MacroDec>,
+    val game: Ext
+) : Ast()
 
 internal fun findRoleIds(ext: Ext): Set<RoleId> = when (ext) {
     is Ext.Bind -> (if (ext.kind == Kind.JOIN) ext.qs.map { it.role.id }.toSet() else setOf()) + findRoleIds(ext.ext)
@@ -109,4 +125,66 @@ internal fun findChanceRoleIds(ext: Ext): Set<RoleId> = when (ext) {
     )
 
     is Ext.Value -> setOf()
+}
+
+// Free *names* in an Exp, given a set of bound variables.
+// Includes:
+//   - free variable names (Exp.Var not in `bound`)
+//   - call targets (Exp.Call.target.id) if not bound
+internal fun Exp.freeVars(bound: Set<VarId> = emptySet()): Set<VarId> {
+    val acc = mutableSetOf<VarId>()
+
+    fun go(e: Exp, b: MutableSet<VarId>) {
+        when (e) {
+            is Exp.Var -> {
+                if (e.id !in b) acc.add(e.id)
+            }
+
+            is Exp.Call -> {
+                // Call target (function/macro name) counts as a free name if not bound
+                if (e.target.id !in b) acc.add(e.target.id)
+                e.args.forEach { go(it, b) }
+            }
+
+            is Exp.Field -> {
+                // FieldRef contains a VarId for the field name, but that’s in field namespace;
+                // we don’t treat it as a free *variable* name for macros.
+                // Nothing to do.
+            }
+
+            is Exp.UnOp -> go(e.operand, b)
+
+            is Exp.BinOp -> {
+                go(e.left, b); go(e.right, b)
+            }
+
+            is Exp.Cond -> {
+                go(e.cond, b); go(e.ifTrue, b); go(e.ifFalse, b)
+            }
+
+            is Exp.Let -> {
+                // let! dec.v.id = init in exp
+                go(e.init, b)
+                // shadowing: introduce bound name for the body
+                val b2 = HashSet(b)
+                b2.add(e.dec.v.id)
+                go(e.exp, b2)
+            }
+
+            is Exp.Const.Hidden -> {
+                // hidden(payload) – just recurse into payload
+                go(e.value as Exp, b)
+            }
+
+            is Exp.Const.Num,
+            is Exp.Const.Bool,
+            is Exp.Const.Address,
+            Exp.Const.UNDEFINED -> {
+                // no names here
+            }
+        }
+    }
+
+    go(this, bound.toMutableSet())
+    return acc
 }

@@ -38,14 +38,71 @@ internal object Algo {
         return if (order.size == nodes.size) order else null
     }
 
-    /** True iff acyclic (i.e., Kahn succeeds). */
-    fun <T: Any> isAcyclic(nodes: Set<T>, p: Map<T, Set<T>>): Boolean =
-        kahnOrder(nodes, p) != null
+    /** Topological order. */
+    fun <T: Any> topo(nodes: Set<T>, prereq: Map<T, Set<T>>): List<T> =
+        kahnOrder(nodes, prereq) ?: error("Graph contains a cycle; no topo order.")
 
-    /** Stable topological order; throws if cyclic. */
-    fun <T: Any> topo(nodes: Set<T>, p: Map<T, Set<T>>): List<T> =
-        kahnOrder(nodes, p) ?: error("Graph contains a cycle; no topo order.")
+    /** True iff acyclic. */
+    fun <T: Any> isAcyclic(nodes: Set<T>, prereq: Map<T, Set<T>>): Boolean =
+        kahnOrder(nodes, prereq) != null
 
+    fun <T : Any> findCycle(nodes: Set<T>, prereq: Map<T, Set<T>>): List<T> {
+        var bestCycle: List<T>? = null
+        var bestLen: Int = Int.MAX_VALUE
+
+        for (start in nodes) {
+            // BFS over the reversed graph using prereq as adjacency:
+            // edge u -> v (original) becomes v -> u here.
+            val q = ArrayDeque<T>()
+            val dist = mutableMapOf<T, Int>()
+            val parent = mutableMapOf<T, T?>()
+
+            q.add(start)
+            dist[start] = 0
+            parent[start] = null
+
+            while (q.isNotEmpty()) {
+                val u = q.removeFirst()
+                val du = dist.getValue(u)
+
+                // Small pruning: no point exploring paths already as long
+                // as the best cycle we've found.
+                if (du + 1 >= bestLen) continue
+
+                for (p in prereq[u].orEmpty()) {
+                    // p is a predecessor of u in the original graph,
+                    // i.e., p -> u edge. Here we traverse u -> p.
+
+                    if (!dist.containsKey(p)) {
+                        dist[p] = du + 1
+                        parent[p] = u
+                        q.add(p)
+                    }
+
+                    // Found a cycle back to start (in reversed graph),
+                    // so in original graph we also have a cycle.
+                    if (p == start) {
+                        val len = du + 1
+                        if (len < bestLen) {
+                            bestLen = len
+                            // reconstruct path start -> ... -> u, then edge u -> start
+                            val path = mutableListOf<T>()
+                            var cur: T? = u
+                            while (cur != null) {
+                                path.add(cur)
+                                cur = parent[cur]
+                            }
+                            path.reverse()
+                            val cycle = path + start
+                            bestCycle = cycle
+                        }
+                    }
+                }
+            }
+        }
+
+        return bestCycle ?: emptyList()
+    }
 
     /** Build dependents map once, with stable iteration, read-only views. */
     fun <T: Any> buildDependents(nodes: Set<T>, prereq: Map<T, Set<T>>): Map<T, Set<T>> {
