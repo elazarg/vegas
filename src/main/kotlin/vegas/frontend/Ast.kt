@@ -71,6 +71,18 @@ sealed class Outcome : Ast() {
 
 data class VarDec(val v: Exp.Var, val type: TypeExp)
 
+data class MacroDec(
+    val name: VarId,
+    val params: List<MacroParam>,
+    val resultType: TypeExp,
+    val body: Exp
+) : Ast()
+
+data class MacroParam(
+    val name: VarId,
+    val type: TypeExp
+) : Ast()
+
 enum class Kind { JOIN, YIELD, REVEAL, JOIN_CHANCE }
 
 sealed class TypeExp : Ast() {
@@ -90,8 +102,13 @@ sealed class TypeExp : Ast() {
     data class Opt(val type: TypeExp) : TypeExp()
 }
 
-data class GameAst(val name: String, val desc: String, val types: Map<TypeExp.TypeId, TypeExp>, val game: Ext) :
-    Ast()
+data class GameAst(
+    val name: String,
+    val desc: String,
+    val types: Map<TypeExp.TypeId, TypeExp>,
+    val macros: List<MacroDec>,
+    val game: Ext
+) : Ast()
 
 internal fun findRoleIds(ext: Ext): Set<RoleId> = when (ext) {
     is Ext.Bind -> (if (ext.kind == Kind.JOIN) ext.qs.map { it.role.id }.toSet() else setOf()) + findRoleIds(ext.ext)

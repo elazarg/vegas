@@ -1,8 +1,20 @@
 grammar Vegas;
 
-program : typeDec* ext EOF ;
+program : (typeDec | macroDec)* ext EOF ;
 
 typeDec : 'type' name=typeId '=' typeExp ;
+
+macroDec
+    : 'macro' name=varId
+      '(' (params+=paramDec (',' params+=paramDec)*)? ')'
+      ':' resultType=typeExp
+      '=' body=exp
+      ';'?
+    ;
+
+paramDec
+    : name=varId ':' type=typeExp
+    ;
 
 typeExp
     : '{' vals+=INT (',' vals+=INT)* '}'  # SubsetTypeExp

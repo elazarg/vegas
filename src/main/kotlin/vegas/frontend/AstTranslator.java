@@ -52,7 +52,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public GameAst visitProgram(ProgramContext ctx) {
-        return new GameAst("", "", map(ctx.typeDec()), ext(ctx.ext()));
+        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), ext(ctx.ext()));
     }
 
     private Map<TypeExp.TypeId, TypeExp> map(List<TypeDecContext> ctxs) {
@@ -61,6 +61,27 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     private TypeExp makeType(TypeDecContext ctx) {
         return (TypeExp) withSpan(ctx.typeExp().accept(this), ctx);
+    }
+
+    private List<MacroDec> macros(List<MacroDecContext> ctxs) {
+        return ctxs.stream().map(this::visitMacroDec).collect(toList());
+    }
+
+    public MacroDec visitMacroDec(MacroDecContext ctx) {
+        return withSpan(MacroAstHelper.createMacroDec(
+            ctx.name.getText(),
+            list(ctx.params, this::visitParamDec),
+            (TypeExp) ctx.resultType.accept(this),
+            exp(ctx.body)
+        ), ctx);
+    }
+
+    public MacroParam visitParamDec(ParamDecContext ctx) {
+        TypeExp paramType = (TypeExp) ctx.type.accept(this);
+        return withSpan(MacroAstHelper.createMacroParam(
+            ctx.name.getText(),
+            paramType
+        ), ctx);
     }
 
     @Override

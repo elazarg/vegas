@@ -5,6 +5,7 @@ import vegas.frontend.Exp
 import vegas.frontend.GameAst
 import vegas.frontend.Ext
 import vegas.frontend.Kind
+import vegas.frontend.MacroDec
 import vegas.frontend.Outcome
 import vegas.frontend.Query
 import vegas.frontend.TypeExp.*
@@ -13,6 +14,7 @@ import vegas.frontend.Span
 import vegas.frontend.TypeExp
 import vegas.frontend.VarDec
 import vegas.frontend.compileToIR
+import vegas.frontend.inlineMacros
 
 internal class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
     fun span(): Span? = if (node != null)  SourceLoc.get(node) else null
@@ -21,6 +23,18 @@ internal class StaticError(reason: String, val node: Ast? = null) : RuntimeExcep
 // Short helpers to keep call sites terse
 internal fun pt(t: TypeExp): String = Pretty.type(t)
 internal fun pvd(vd: VarDec): String = "${vd.v.id.name}: ${pt(vd.type)}"
+
+/**
+ * Normalize built-in type names to their singleton instances.
+ * This ensures TypeId("int") is treated as INT, TypeId("bool") as BOOL, etc.
+ */
+internal fun normalizeBuiltinType(t: TypeExp): TypeExp = when {
+    t is TypeId && t.name == "int" -> INT
+    t is TypeId && t.name == "bool" -> BOOL
+    t is TypeId && t.name == "address" -> ADDRESS
+    t is Hidden -> Hidden(normalizeBuiltinType(t.type))
+    else -> t
+}
 
 internal object Pretty {
     fun type(t: TypeExp): String = when (t) {
@@ -64,19 +78,33 @@ fun requireStatic(b: Boolean, s: String, node: Ast) {
 }
 
 fun typeCheck(program: GameAst) {
-    // First run traditional type checking
-    Checker(
-        program.types + mapOf(
-            Pair(TypeId("bool"), BOOL),
-            Pair(TypeId("int"), INT)
-        ),
-    ).type(program.game)
+    // 1. Build macro environment
+    val macroEnv = buildMacroEnv(program.macros)
 
-    // Then validate ActionDag structure
+    // 2. Check for duplicate macro names
+    checkDuplicateMacros(program.macros)
+
+    // 3. Type check each macro declaration
+    val typeMap = program.types + mapOf(
+        Pair(TypeId("bool"), BOOL),
+        Pair(TypeId("int"), INT)
+    )
+    typecheckMacros(program.macros, macroEnv, typeMap)
+
+    // 4. Check macro call graph for cycles
+    checkMacroAcyclicity(program.macros, macroEnv)
+
+    // 5. Run traditional type checking (with macro environment)
+    Checker(typeMap, macroEnv = macroEnv).type(program.game)
+
+    // 6. Inline macros (desugar) - this must happen before IR compilation
+    val inlined = inlineMacros(program)
+
+    // 7. Then validate ActionDag structure
     // Note: compileToIR() may throw IllegalStateException for unsupported features (e.g., let expressions)
     // We only want to validate games that CAN be compiled to IR
     try {
-        compileToIR(program)
+        compileToIR(inlined)  // Use inlined program, not original
     } catch (_: IllegalStateException) {
         // IR lowering not supported for this construct (e.g., let expressions)
         // Skip ActionDag validation - the game may type check but can't be compiled yet
@@ -84,7 +112,12 @@ fun typeCheck(program: GameAst) {
 }
 
 
-private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val roles: Set<RoleId> = emptySet(), private val env: Env<TypeExp> = Env()) {
+private class Checker(
+    private val typeMap: Map<TypeId, TypeExp>,
+    private val roles: Set<RoleId> = emptySet(),
+    private val env: Env<TypeExp> = Env(),
+    private val macroEnv: Map<VarId, MacroDec> = emptyMap()
+) {
 
     private fun requireRole(role: RoleId, node: Ast) {
         requireStatic(role in roles, "$role is not a role", node)
@@ -150,7 +183,7 @@ private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val rol
                         }
                     }
                 }.unzip()
-                val checker = Checker(typeMap, roles + newRoles.union(), env withMap ms.union())
+                val checker = Checker(typeMap, roles + newRoles.union(), env withMap ms.union(), macroEnv)
                 checker.type(ext.ext)
             }
 
@@ -177,7 +210,7 @@ private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val rol
 
     private fun checkWhere(n: Set<RoleId>, m: Map<FieldRef, TypeExp>, q: Query) {
         val newEnv = env withMap m
-        requireStatic(Checker(typeMap, n, newEnv).type(q.where) == BOOL, "Where clause failed", q)
+        requireStatic(Checker(typeMap, n, newEnv, macroEnv).type(q.where) == BOOL, "Where clause failed", q)
 
         // Validate: same-role hidden fields are ok (deferred checking)
         // Other-role hidden fields are NOT ok (use-before-def)
@@ -208,7 +241,7 @@ private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val rol
 
             is Outcome.Let -> {
                 requireStatic(type(outcome.init) == outcome.dec.type, "Bad initialization of let ext", outcome.init)
-                Checker(typeMap, emptySet(), env + Pair(outcome.dec.v.id, outcome.dec.type)).type(outcome.outcome)
+                Checker(typeMap, emptySet(), env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv).type(outcome.outcome)
             }
         }
     }
@@ -228,7 +261,17 @@ private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val rol
                     BOOL
                 }
 
-                else -> throw IllegalArgumentException(exp.target.id.name)
+                else -> {
+                    // Check if it's a macro
+                    val macro = macroEnv[exp.target.id]
+                    if (macro != null) {
+                        checkMacroCall(macro, argTypes, exp, typeMap)
+                        // Normalize built-in type names to singletons
+                        normalizeBuiltinType(macro.resultType)
+                    } else {
+                        throw IllegalArgumentException("Unknown function or macro: ${exp.target.id.name}")
+                    }
+                }
             }
         }
 
@@ -312,7 +355,7 @@ private class Checker(private val typeMap: Map<TypeId, TypeExp>, private val rol
 
         is Exp.Let -> {
             requireStatic(type(exp.init) == exp.dec.type, "Bad initialization of let exp", exp)
-            Checker(typeMap, emptySet(), env + Pair(exp.dec.v.id, exp.dec.type)).type(exp.exp)
+            Checker(typeMap, emptySet(), env + Pair(exp.dec.v.id, exp.dec.type), macroEnv).type(exp.exp)
         }
 
         Exp.Const.UNDEFINED -> throw AssertionError()

@@ -92,7 +92,7 @@ private object B {
                 is Ext.Value -> error("Value belongs in 'value' param")
             }
         }
-        return GameAst(name, desc = "", types = types, game = game)
+        return GameAst(name, desc = "", types = types, macros = emptyList(), game = game)
     }
 
     fun program(
