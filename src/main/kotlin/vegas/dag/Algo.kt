@@ -46,6 +46,37 @@ internal object Algo {
     fun <T: Any> topo(nodes: Set<T>, p: Map<T, Set<T>>): List<T> =
         kahnOrder(nodes, p) ?: error("Graph contains a cycle; no topo order.")
 
+    fun <T: Any> findCycle(nodes: Set<T>, deps: Map<T, Set<T>>): List<T> {
+        val visited = mutableSetOf<T>()
+        val recStack = mutableListOf<T>()
+
+        fun dfs(node: T): List<T>? {
+            if (node in recStack) {
+                // Found cycle
+                val cycleStart = recStack.indexOf(node)
+                return recStack.subList(cycleStart, recStack.size) + node
+            }
+            if (node in visited) return null
+
+            visited.add(node)
+            recStack.add(node)
+
+            for (dep in deps[node].orEmpty()) {
+                val cycle = dfs(dep)
+                if (cycle != null) return cycle
+            }
+
+            recStack.removeLast()
+            return null
+        }
+
+        for (node in nodes) {
+            val cycle = dfs(node)
+            if (cycle != null) return cycle
+        }
+
+        return emptyList()
+    }
 
     /** Build dependents map once, with stable iteration, read-only views. */
     fun <T: Any> buildDependents(nodes: Set<T>, prereq: Map<T, Set<T>>): Map<T, Set<T>> {

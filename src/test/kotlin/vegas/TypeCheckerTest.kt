@@ -775,7 +775,7 @@ class TypeCheckerTest : FreeSpec({
                     P to Call(B.v("unknown_function"), listOf(B.n(5)))
                 )
             )
-            shouldThrow<IllegalArgumentException> { typeCheck(bad) }
+            shouldThrow<StaticError> { typeCheck(bad) }
         }
     }
 
