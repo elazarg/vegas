@@ -45,6 +45,31 @@ class FrontierMachine<T : Any> private constructor(
         )
     }
 
+    /**
+     * Resolve all enabled node and return a new FrontierMachine.
+     * Does not mutate the current instance.
+     */
+    fun resolveEnabled(): FrontierMachine<T> {
+        val newUnresolved = unresolved - enabled
+        val newEnabled: MutableSet<T> = mutableSetOf()
+        val newRemainingDeps = remainingDeps.toMutableMap()
+        for (node in enabled) {
+            dependents[node]?.forEach { d ->
+                if (d in newUnresolved) {
+                    val c = newRemainingDeps.getValue(d) - 1
+                    newRemainingDeps[d] = c
+                    if (c == 0) newEnabled.add(d)
+                }
+            }
+        }
+        return FrontierMachine(
+            dependents = dependents,
+            unresolved = newUnresolved,
+            enabled = newEnabled,
+            remainingDeps = newRemainingDeps
+        )
+    }
+
     companion object {
         fun <T : Any> from(dag: Dag<T>): FrontierMachine<T> {
             val depsCount = dag.nodes

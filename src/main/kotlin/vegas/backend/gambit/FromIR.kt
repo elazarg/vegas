@@ -6,7 +6,6 @@ import vegas.RoleId
 import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
-import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.ActionSpec
 import vegas.ir.ActionStruct
@@ -125,13 +124,10 @@ private class InfosetManager(roles: Set<RoleId>) {
 }
 
 private class DagGameTreeBuilder(private val ir: GameIR) {
-    private val dag: ActionDag = ir.dag
-    private val strategicPlayers: Set<RoleId> = ir.roles
-    private val chancePlayers: Set<RoleId> = ir.chanceRoles
-    private val infosets = InfosetManager(strategicPlayers)
+    private val infosets = InfosetManager(ir.roles)
 
     fun build(): GameTree {
-        val frontier = FrontierMachine.from(dag)
+        val frontier = FrontierMachine.from(ir.dag)
         val initialState = Infoset()
         val initialKnowledge: KnowledgeMap =
             (ir.roles + ir.chanceRoles).associateWith { Infoset() }
@@ -155,7 +151,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         }
 
         // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
-        val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { dag.owner(it) }
+        val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
         val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
 
         // Precompute legal explicit packets per role under the same snapshot state.
@@ -173,17 +169,14 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                         info with redacted(accFrontier, role)
                     }
 
-                var nextFrontier = frontier
-                enabled.forEach {
-                    nextFrontier = frontier.resolve(it)
-                }
+                val nextFrontier = frontier.resolveEnabled()
                 return buildFromFrontier(nextFrontier, newState, newKnowledge)
             }
 
             val role = roleOrder[idx]
-            val isChanceNode = role in chancePlayers
+            val isChanceNode = role in ir.chanceRoles
             val actionsForRole = actionsByRole.getValue(role)
-            val allParams = actionsForRole.flatMap { dag.params(it) }
+            val allParams = actionsForRole.flatMap { ir.dag.params(it) }
 
             val explicitFrontierChoices: List<FrontierSlice> =
                 explicitFrontierChoicesByRole.getValue(role)
@@ -233,7 +226,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                         } else {
                             actionsForRole
                                 .flatMap { actionId ->
-                                    dag.params(actionId).map { p ->
+                                    ir.dag.params(actionId).map { p ->
                                         FieldRef(role, p.name) to IrVal.Quit
                                     }
                                 }
@@ -299,7 +292,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         return combinations.map { pktList ->
             val frontierSlice = mutableMapOf<FieldRef, IrVal>()
             actions.zip(pktList).forEach { (actionId, pkt) ->
-                val struct: ActionStruct = dag.struct(actionId)
+                val struct: ActionStruct = ir.dag.struct(actionId)
                 pkt.forEach { (v, value) ->
                     val field = FieldRef(struct.role, v)
                     // If two actions write the same field, last-in-wins; IR should avoid that.
@@ -325,8 +318,8 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         state: State,
         playerKnowledge: Infoset,
     ): List<Map<VarId, IrVal>> {
-        val struct: ActionStruct = dag.struct(actionId)
-        val spec: ActionSpec = dag.spec(actionId)
+        val struct: ActionStruct = ir.dag.struct(actionId)
+        val spec: ActionSpec = ir.dag.spec(actionId)
         val role = struct.role
 
         if (spec.params.isEmpty()) return listOf(emptyMap())
@@ -382,11 +375,12 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         }
     }
 
-    private fun <T> cartesian(lists: List<List<T>>): List<List<T>> =
-        lists.fold(listOf(emptyList())) { acc, xs ->
-            acc.flatMap { a -> xs.map { x -> a + x } }
-        }
 }
+
+private fun <T> cartesian(lists: List<List<T>>): List<List<T>> =
+    lists.fold(listOf(emptyList())) { acc, xs ->
+        acc.flatMap { a -> xs.map { x -> a + x } }
+    }
 
 internal sealed class IrVal {
     data class IntVal(val v: Int) : IrVal()
