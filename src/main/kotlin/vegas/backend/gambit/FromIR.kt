@@ -139,7 +139,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         state: State,
         knowledgeMap: KnowledgeMap,
     ): GameTree {
-        // Terminal: no more actions
+        // ========== Check for Terminal Nodes ==========
         if (frontier.isComplete()) {
             val pay = ir.payoffs.mapValues { (_, e) -> eval(state, e).toOutcome() }
             return GameTree.Terminal(pay)
@@ -150,10 +150,12 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
             "Frontier has no enabled actions but is not complete"
         }
 
+        // ========== Group Actions by Role ==========
         // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
         val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
         val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
 
+        // ========== Precompute Legal Choices ==========
         // Precompute legal explicit packets per role under the same snapshot state.
         val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
             actionsByRole.mapValues { (role, actions) ->
@@ -161,6 +163,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
             }
 
         fun recurse(roleIndex: Int, jointChoices: FrontierSlice): GameTree {
+            // ========== Terminal: All Roles Have Chosen ==========
             if (roleIndex == roleOrder.size) {
                 // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
                 val newState = Infoset(jointChoices, state)
@@ -173,6 +176,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                 return buildFromFrontier(nextFrontier, newState, newKnowledge)
             }
 
+            // ========== Current Role Setup ==========
             val role = roleOrder[roleIndex]
             val isChanceNode = role in ir.chanceRoles
             val actionsForRole = actionsByRole.getValue(role)
@@ -184,6 +188,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
             // Infoset index is a pure function of what this role currently knows.
             val infosetId = infosets.getInfosetNumber(role, knowledgeMap.getValue(role))
 
+            // ========== Build Explicit Choices ==========
             // 1. Explicit choices (non-bail).
             val explicitChoices: List<GameTree.Choice> =
                 explicitFrontierChoices.map { frontierDelta ->
@@ -204,6 +209,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                     )
                 }
 
+            // ========== Apply Probabilities for Chance Nodes ==========
             val uniformProb: Rational? =
                 if (isChanceNode && explicitChoices.isNotEmpty())
                     Rational(1, explicitChoices.size)
@@ -215,6 +221,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                 else
                     explicitChoices
 
+            // ========== Add Bail Choice for Strategic Roles ==========
             // 2. Bail choice for strategic roles (None on all params).
             val allChoices: List<GameTree.Choice> =
                 if (isChanceNode) {
@@ -246,12 +253,14 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                 throw StaticError("No choices for role $role at frontier")
             }
 
+            // ========== Handle Structural Frontiers (No-Op) ==========
             // Structural frontier: this role has no parameters at all here.
             // No real decision -> no node; just pick the (unique) subtree.
             if (allParams.isEmpty()) {
                 return allChoices.first().subtree
             }
 
+            // ========== Create Decision Node ==========
             return GameTree.Decision(
                 owner = role,
                 infosetId = infosetId,
@@ -273,11 +282,13 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         state: State,
         playerKnowledge: Infoset,
     ): List<FrontierSlice> {
+        // ========== Check if Role Has Bailed ==========
         // Once a role has bailed (some field Quit), it has no explicit choices anymore.
         if (state.quit(role)) return emptyList()
 
         if (actions.isEmpty()) return listOf(emptyMap())
 
+        // ========== Enumerate Packets Per Action ==========
         // For each action, enumerate its local packets.
         val perActionPackets: List<List<Map<VarId, IrVal>>> =
             actions.map { actionId ->
@@ -286,6 +297,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
 
         if (perActionPackets.any { it.isEmpty() }) return emptyList()
 
+        // ========== Compute Cartesian Product ==========
         // Cross-product over actions; then flatten into a single FrontierSlice.
         val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
 
@@ -325,6 +337,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         if (spec.params.isEmpty()) return listOf(emptyMap())
         if (state.quit(role)) return emptyList()
 
+        // ========== Build Domain for Each Parameter ==========
         val lists: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
             val fieldRef = FieldRef(role, param.name)
             val prior = state.get(fieldRef)
@@ -362,6 +375,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         val rawPackets: List<Map<VarId, IrVal>> =
             cartesian(lists).map { it.toMap() }
 
+        // ========== Filter by Guard Condition ==========
         // Guard: evaluated on player's knowledge with this action's packet overlayed.
         return rawPackets.filter { pkt ->
             // Unwrap Hidden values for the actor's own guard evaluation.
