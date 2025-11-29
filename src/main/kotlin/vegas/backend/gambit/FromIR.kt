@@ -192,32 +192,19 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
             // 1. Explicit choices (non-bail).
             val explicitChoices: List<GameTree.Choice> =
                 explicitFrontierChoices.map { frontierDelta ->
-                    val subtree = recurse(roleIndex + 1, jointChoices + frontierDelta)
-
-                    // Label only this role's non-Quit fields.
-                    // Keep Hidden wrapper for commitments so Gambit GUI shows the flow.
-                    val actionLabel: Map<VarId, IrVal> =
-                        frontierDelta
-                            .filterKeys { fr -> fr.role == role }
-                            .filterValues { v -> v != IrVal.Quit }
-                            .mapKeys { (fr, _) -> fr.param }
-
                     GameTree.Choice(
-                        action = actionLabel,
-                        subtree = subtree,
+                        action = extractActionLabel(frontierDelta, role),
+                        subtree = recurse(roleIndex + 1, jointChoices + frontierDelta),
                         probability = null, // set below for chance
                     )
                 }
 
             // ========== Apply Probabilities for Chance Nodes ==========
-            val uniformProb: Rational? =
-                if (isChanceNode && explicitChoices.isNotEmpty())
-                    Rational(1, explicitChoices.size)
-                else null
-
             val explicitWithProb =
                 if (isChanceNode)
-                    explicitChoices.map { c -> c.copy(probability = uniformProb) }
+                    explicitChoices.map {
+                        it.copy(probability = Rational(1, explicitChoices.size))
+                    }
                 else
                     explicitChoices
 
@@ -390,6 +377,13 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
     }
 
 }
+
+// Label only this role's non-Quit fields.
+// Keep Hidden wrapper for commitments so Gambit GUI shows the flow.
+private fun extractActionLabel(frontierDelta: FrontierSlice, role: RoleId): Map<VarId, IrVal> = frontierDelta
+    .filterKeys { fr -> fr.role == role }
+    .filterValues { v -> v != IrVal.Quit }
+    .mapKeys { (fr, _) -> fr.param }
 
 private fun <T> cartesian(lists: List<List<T>>): List<List<T>> =
     lists.fold(listOf(emptyList())) { acc, xs ->
