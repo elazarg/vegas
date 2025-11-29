@@ -173,9 +173,10 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                         info with redacted(accFrontier, role)
                     }
 
-                val nextFrontier = frontier.copy()
-                enabled.forEach { nextFrontier.resolve(it) }
-
+                var nextFrontier = frontier
+                enabled.forEach {
+                    nextFrontier = frontier.resolve(it)
+                }
                 return buildFromFrontier(nextFrontier, newState, newKnowledge)
             }
 

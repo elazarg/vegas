@@ -26,7 +26,7 @@ class FrontierMachine<T : Any> private constructor(
         require(node in enabled) { "Node $node is not enabled." }
 
         val newUnresolved = unresolved - node
-        var newEnabled: MutableSet<T> = (enabled - node).toMutableSet()
+        val newEnabled: MutableSet<T> = (enabled - node).toMutableSet()
         val newRemainingDeps = remainingDeps.toMutableMap()
 
         dependents[node]?.forEach { d ->
