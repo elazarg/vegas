@@ -155,31 +155,31 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
 
         // Precompute legal explicit packets per role under the same snapshot state.
-        val explicitFrontierChoicesByRole: Map<RoleId, List<FrontierSlice>> =
+        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
             actionsByRole.mapValues { (role, actions) ->
                 enumerateRoleFrontierChoices(role, actions, state, knowledgeMap.getValue(role))
             }
 
-        fun recurse(idx: Int, accFrontier: FrontierSlice): GameTree {
-            if (idx == roleOrder.size) {
+        fun recurse(roleIndex: Int, jointChoices: FrontierSlice): GameTree {
+            if (roleIndex == roleOrder.size) {
                 // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
-                val newState = Infoset(accFrontier, state)
+                val newState = Infoset(jointChoices, state)
                 val newKnowledge: KnowledgeMap =
                     knowledgeMap.mapValues { (role, info) ->
-                        info with redacted(accFrontier, role)
+                        info with redacted(jointChoices, role)
                     }
 
                 val nextFrontier = frontier.resolveEnabled()
                 return buildFromFrontier(nextFrontier, newState, newKnowledge)
             }
 
-            val role = roleOrder[idx]
+            val role = roleOrder[roleIndex]
             val isChanceNode = role in ir.chanceRoles
             val actionsForRole = actionsByRole.getValue(role)
             val allParams = actionsForRole.flatMap { ir.dag.params(it) }
 
             val explicitFrontierChoices: List<FrontierSlice> =
-                explicitFrontierChoicesByRole.getValue(role)
+                legalChoicesByRole.getValue(role)
 
             // Infoset index is a pure function of what this role currently knows.
             val infosetId = infosets.getInfosetNumber(role, knowledgeMap.getValue(role))
@@ -187,7 +187,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
             // 1. Explicit choices (non-bail).
             val explicitChoices: List<GameTree.Choice> =
                 explicitFrontierChoices.map { frontierDelta ->
-                    val subtree = recurse(idx + 1, accFrontier + frontierDelta)
+                    val subtree = recurse(roleIndex + 1, jointChoices + frontierDelta)
 
                     // Label only this role's non-Quit fields.
                     // Keep Hidden wrapper for commitments so Gambit GUI shows the flow.
@@ -235,7 +235,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
 
                     val bailChoice = GameTree.Choice(
                         action = emptyMap(), // shows as "Quit" / unlabeled move
-                        subtree = recurse(idx + 1, accFrontier + bailFrontier),
+                        subtree = recurse(roleIndex + 1, jointChoices + bailFrontier),
                         probability = null,
                     )
 
