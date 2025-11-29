@@ -6,6 +6,7 @@ import vegas.RoleId
 import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
+import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.ActionSpec
 import vegas.ir.ActionStruct
@@ -48,14 +49,15 @@ import vegas.ir.Visibility
  * frontier exploration of the ActionDag and respects its causal partial order.
  */
 fun generateExtensiveFormGame(ir: GameIR): String {
-    val builder = DagGameTreeBuilder(ir)
-    val tree = builder.build()
-    return ExtensiveFormGame(
+    val efg = ExtensiveFormGame(
         name = ir.name.ifEmpty { "Game" },
         description = "Generated from ActionDag",
         strategicPlayers = ir.roles,
-        tree = tree
+        tree = buildTree(ir)
     ).toEfg()
+    // This function is not intended to be reentrant
+    InfosetManager.clear()
+    return efg
 }
 
 private typealias FrontierSlice = Map<FieldRef, IrVal>
@@ -107,281 +109,317 @@ private fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierSlice =
  * Manages information set identification and numbering.
  * Key: the full redacted history (Infoset stack) of that role.
  */
-private class InfosetManager(roles: Set<RoleId>) {
-    private val perRole: Map<RoleId, MutableMap<Infoset, Int>> =
-        roles.associateWith { mutableMapOf() }
+private object InfosetManager {
+    private val perRole: MutableMap<RoleId, MutableMap<Infoset, Int>> = HashMap()
 
     private var chanceCounter: Int = 0
 
-    fun getInfosetNumber(role: RoleId, key: Infoset): Int {
-        if (role !in perRole) {
+    fun clear() {
+        perRole.clear()
+    }
+
+    fun getInfosetNumber(role: RoleId, key: Infoset, isChance: Boolean): Int {
+        if (isChance) {
             chanceCounter += 1
             return chanceCounter
         }
-        val table = perRole.getValue(role)
+        val table = perRole.getOrPut(role) { HashMap() }
         return table.getOrPut(key) { table.size } // 0-based is fine; writer will shift if needed
     }
 }
 
-private class DagGameTreeBuilder(private val ir: GameIR) {
-    private val infosets = InfosetManager(ir.roles)
+/**
+ * Captures the frontier-level setup: what actions are enabled,
+ * grouped by role, and what choices each role has.
+ */
+private data class FrontierSetup(
+    val frontier: FrontierMachine<ActionId>,
+    val state: State,
+    val knowledgeMap: KnowledgeMap,
+    val actionsByRole: Map<RoleId, List<ActionId>>,
+    val roleOrder: List<RoleId>,
+    val legalChoicesByRole: Map<RoleId, List<FrontierSlice>>,
+)
 
-    fun build(): GameTree {
-        val frontier = FrontierMachine.from(ir.dag)
-        val initialState = Infoset()
-        val initialKnowledge: KnowledgeMap =
-            (ir.roles + ir.chanceRoles).associateWith { Infoset() }
-        return buildFromFrontier(frontier, initialState, initialKnowledge)
+
+private fun allParametersQuit(ir: GameIR, role: RoleId, actions: List<ActionId>): FrontierSlice =
+    actions
+        .flatMap { actionId ->
+            ir.dag.params(actionId).map { p ->
+                FieldRef(role, p.name) to IrVal.Quit
+            }
+        }
+        .toMap()
+
+/**
+ * Explore all joint choices by iterating through roles.
+ * This is the "role loop" that builds up joint action combinations.
+ */
+private fun exploreJointChoices(
+    ir: GameIR,
+    setup: FrontierSetup,
+    roleIndex: Int,
+    jointChoices: FrontierSlice
+): GameTree {
+    // ========== Terminal: All Roles Have Chosen ==========
+    if (roleIndex == setup.roleOrder.size) {
+        // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
+        val newState = Infoset(jointChoices, setup.state)
+        val newKnowledge: KnowledgeMap =
+            setup.knowledgeMap.mapValues { (role, info) ->
+                info with redacted(jointChoices, role)
+            }
+
+        val nextFrontier = setup.frontier.resolveEnabled()
+        return exploreFromFrontier(ir, nextFrontier, newState, newKnowledge)
     }
 
-    private fun buildFromFrontier(
-        frontier: FrontierMachine<ActionId>,
-        state: State,
-        knowledgeMap: KnowledgeMap,
-    ): GameTree {
-        // ========== Check for Terminal Nodes ==========
-        if (frontier.isComplete()) {
-            val pay = ir.payoffs.mapValues { (_, e) -> eval(state, e).toOutcome() }
-            return GameTree.Terminal(pay)
-        }
+    // ========== Current Role Setup ==========
+    val role = setup.roleOrder[roleIndex]
+    val isChanceNode = role in ir.chanceRoles
+    val actionsForRole = setup.actionsByRole.getValue(role)
+    val allParams = actionsForRole.flatMap { ir.dag.params(it) }
 
-        val enabled: Set<ActionId> = frontier.enabled()
-        require(enabled.isNotEmpty()) {
-            "Frontier has no enabled actions but is not complete"
-        }
+    val explicitFrontierChoices: List<FrontierSlice> =
+        setup.legalChoicesByRole.getValue(role)
 
-        // ========== Group Actions by Role ==========
-        // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
-        val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
-        val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
+    // Infoset index is a pure function of what this role currently knows.
+    val infoset = setup.knowledgeMap.getValue(role)
+    val infosetId = InfosetManager.getInfosetNumber(role, infoset, isChanceNode)
 
-        // ========== Precompute Legal Choices ==========
-        // Precompute legal explicit packets per role under the same snapshot state.
-        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
-            actionsByRole.mapValues { (role, actions) ->
-                enumerateRoleFrontierChoices(role, actions, state, knowledgeMap.getValue(role))
-            }
-
-        fun recurse(roleIndex: Int, jointChoices: FrontierSlice): GameTree {
-            // ========== Terminal: All Roles Have Chosen ==========
-            if (roleIndex == roleOrder.size) {
-                // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
-                val newState = Infoset(jointChoices, state)
-                val newKnowledge: KnowledgeMap =
-                    knowledgeMap.mapValues { (role, info) ->
-                        info with redacted(jointChoices, role)
-                    }
-
-                val nextFrontier = frontier.resolveEnabled()
-                return buildFromFrontier(nextFrontier, newState, newKnowledge)
-            }
-
-            // ========== Current Role Setup ==========
-            val role = roleOrder[roleIndex]
-            val isChanceNode = role in ir.chanceRoles
-            val actionsForRole = actionsByRole.getValue(role)
-            val allParams = actionsForRole.flatMap { ir.dag.params(it) }
-
-            val explicitFrontierChoices: List<FrontierSlice> =
-                legalChoicesByRole.getValue(role)
-
-            // Infoset index is a pure function of what this role currently knows.
-            val infosetId = infosets.getInfosetNumber(role, knowledgeMap.getValue(role))
-
-            // ========== Build Explicit Choices ==========
-            // 1. Explicit choices (non-bail).
-            val explicitChoices: List<GameTree.Choice> =
-                explicitFrontierChoices.map { frontierDelta ->
-                    GameTree.Choice(
-                        action = extractActionLabel(frontierDelta, role),
-                        subtree = recurse(roleIndex + 1, jointChoices + frontierDelta),
-                        probability = null, // set below for chance
-                    )
-                }
-
-            // ========== Apply Probabilities for Chance Nodes ==========
-            val explicitWithProb =
-                if (isChanceNode)
-                    explicitChoices.map {
-                        it.copy(probability = Rational(1, explicitChoices.size))
-                    }
-                else
-                    explicitChoices
-
-            // ========== Add Bail Choice for Strategic Roles ==========
-            // 2. Bail choice for strategic roles (None on all params).
-            val allChoices: List<GameTree.Choice> =
-                if (isChanceNode) {
-                    explicitWithProb
-                } else {
-                    val bailFrontier =
-                        if (allParams.isEmpty()) emptyMap()
-                        else allParametersQuit(role, actionsForRole)
-
-                    val bailChoice = GameTree.Choice(
-                        action = emptyMap(), // shows as "Quit" / unlabeled move
-                        subtree = recurse(roleIndex + 1, jointChoices + bailFrontier),
-                        probability = null,
-                    )
-
-                    explicitWithProb + bailChoice
-                }
-
-            if (allChoices.isEmpty()) {
-                throw StaticError("No choices for role $role at frontier")
-            }
-
-            // ========== Handle Structural Frontiers (No-Op) ==========
-            // Structural frontier: this role has no parameters at all here.
-            // No real decision -> no node; just pick the (unique) subtree.
-            if (allParams.isEmpty()) {
-                return allChoices.first().subtree
-            }
-
-            // ========== Create Decision Node ==========
-            return GameTree.Decision(
-                owner = role,
-                infosetId = infosetId,
-                choices = allChoices,
-                isChance = isChanceNode,
+    // ========== Build Explicit Choices ==========
+    // 1. Explicit choices (non-bail).
+    val explicitChoices: List<GameTree.Choice> =
+        explicitFrontierChoices.map { frontierDelta ->
+            GameTree.Choice(
+                action = extractActionLabel(frontierDelta, role),
+                subtree = exploreJointChoices(ir, setup, roleIndex + 1, jointChoices + frontierDelta),
+                probability = null, // set below for chance
             )
         }
 
-        return recurse(0, emptyMap())
+    // ========== Apply Probabilities for Chance Nodes ==========
+    val explicitWithProb =
+        if (isChanceNode)
+            explicitChoices.map {
+                it.copy(probability = Rational(1, explicitChoices.size))
+            }
+        else
+            explicitChoices
+
+    // ========== Add Bail Choice for Strategic Roles ==========
+    // 2. Bail choice for strategic roles (None on all params).
+    val allChoices: List<GameTree.Choice> =
+        if (isChanceNode) {
+            explicitWithProb
+        } else {
+            val bailFrontier =
+                if (allParams.isEmpty()) emptyMap()
+                else allParametersQuit(ir, role, actionsForRole)
+
+            val bailChoice = GameTree.Choice(
+                action = emptyMap(), // shows as "Quit" / unlabeled move
+                subtree = exploreJointChoices(ir, setup, roleIndex + 1, jointChoices + bailFrontier),
+                probability = null,
+            )
+
+            explicitWithProb + bailChoice
+        }
+
+    if (allChoices.isEmpty()) {
+        throw StaticError("No choices for role $role at frontier")
     }
 
-    private fun allParametersQuit(role: RoleId, actions: List<ActionId>): FrontierSlice =
-        actions
-            .flatMap { actionId ->
-                ir.dag.params(actionId).map { p ->
-                    FieldRef(role, p.name) to IrVal.Quit
+    // ========== Handle Structural Frontiers (No-Op) ==========
+    // Structural frontier: this role has no parameters at all here.
+    // No real decision -> no node; just pick the (unique) subtree.
+    if (allParams.isEmpty()) {
+        return allChoices.first().subtree
+    }
+
+    // ========== Create Decision Node ==========
+    return GameTree.Decision(
+        owner = role,
+        infosetId = infosetId,
+        choices = allChoices,
+        isChance = isChanceNode,
+    )
+}
+
+private fun combinePacketsIntoFrontier(
+    roleToActionId: (ActionId)-> RoleId,
+    actions: List<ActionId>,
+    packets: List<Map<VarId, IrVal>>
+): FrontierSlice {
+    val frontierSlice = mutableMapOf<FieldRef, IrVal>()
+    actions.zip(packets).forEach { (actionId, pkt) ->
+        val role = roleToActionId(actionId)
+        pkt.forEach { (varId, value) ->
+            // If two actions write the same field, last-in-wins; IR should avoid that.
+            frontierSlice[FieldRef(role, varId)] = value
+        }
+    }
+    return frontierSlice
+}
+
+/**
+ * Enumerate all explicit (non-bail) joint packets for a role across all
+ * its actions in the current frontier, as a list of FrontierSlice deltas.
+ */
+private fun enumerateRoleFrontierChoices(
+    dag: ActionDag,
+    role: RoleId,
+    actions: List<ActionId>,
+    state: State,
+    playerKnowledge: Infoset,
+): List<FrontierSlice> {
+    // ========== Check if Role Has Bailed ==========
+    // Once a role has bailed (some field Quit), it has no explicit choices anymore.
+    if (state.quit(role)) return emptyList()
+
+    if (actions.isEmpty()) return listOf(emptyMap())
+
+    // ========== Enumerate Packets Per Action ==========
+    // For each action, enumerate its local packets.
+    val perActionPackets: List<List<Map<VarId, IrVal>>> =
+        actions.map { actionId ->
+            enumeratePacketsForAction(dag, actionId, state, playerKnowledge)
+        }
+
+    if (perActionPackets.any { it.isEmpty() }) return emptyList()
+
+    // ========== Compute Cartesian Product ==========
+    // Cross-product over actions; then flatten into a single FrontierSlice.
+    val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
+
+    return combinations.map { pktList ->
+        combinePacketsIntoFrontier({ dag.struct(it).role },  actions,pktList)
+    }
+}
+
+/**
+ * Enumerate packets for a single action under the current global state.
+ * Commit/reveal semantics:
+ *  - COMMIT: pick from type domain, store as Hidden(base).
+ *  - REVEAL: if prior value is Hidden(x), then only choice is x (as visible value);
+ *            otherwise, no legal choice.
+ *  - PUBLIC: pick from type domain, store as visible value.
+ *
+ * Guards are evaluated with the packet layered on top of the player's knowledge.
+ */
+private fun enumeratePacketsForAction(
+    dag: ActionDag,
+    actionId: ActionId,
+    state: State,
+    playerKnowledge: Infoset,
+): List<Map<VarId, IrVal>> {
+    val struct: ActionStruct = dag.struct(actionId)
+    val spec: ActionSpec = dag.spec(actionId)
+    val role = struct.role
+
+    if (spec.params.isEmpty()) return listOf(emptyMap())
+    if (state.quit(role)) return emptyList()
+
+    // ========== Build Domain for Each Parameter ==========
+    val lists: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
+        val fieldRef = FieldRef(role, param.name)
+        val prior = state.get(fieldRef)
+        val vis = struct.visibility.getValue(fieldRef)
+
+        val baseDomain: List<IrVal> = when (vis) {
+            Visibility.REVEAL ->
+                when (prior) {
+                    is IrVal.Hidden -> listOf(prior.inner)
+                    else -> emptyList()
                 }
-            }
-            .toMap()
 
-    private fun combinePacketsIntoFrontier(
-        actions: List<ActionId>,
-        packets: List<Map<VarId, IrVal>>
-    ): FrontierSlice {
-        val frontierSlice = mutableMapOf<FieldRef, IrVal>()
-        actions.zip(packets).forEach { (actionId, pkt) ->
-            val role = ir.dag.struct(actionId).role
-            pkt.forEach { (varId, value) ->
-                // If two actions write the same field, last-in-wins; IR should avoid that.
-                frontierSlice[FieldRef(role, varId)] = value
-            }
+            Visibility.PUBLIC, Visibility.COMMIT ->
+                when (param.type) {
+                    is Type.BoolType ->
+                        listOf(IrVal.BoolVal(true), IrVal.BoolVal(false))
+
+                    is Type.SetType ->
+                        param.type.values.sorted().map { v -> IrVal.IntVal(v) }
+
+                    is Type.IntType ->
+                        throw StaticError("Cannot enumerate IntType; use SetType or BoolType")
+                }
         }
-        return frontierSlice
+
+        // The packet we STORE in the frontier must respect visibility (Hidden)
+        val domainWithVis: List<IrVal> = when (vis) {
+            Visibility.COMMIT -> baseDomain.map { v -> IrVal.Hidden(v) }
+            Visibility.PUBLIC, Visibility.REVEAL -> baseDomain
+        }
+
+        domainWithVis.map { v -> param.name to v }
     }
 
-    /**
-     * Enumerate all explicit (non-bail) joint packets for a role across all
-     * its actions in the current frontier, as a list of FrontierSlice deltas.
-     */
-    private fun enumerateRoleFrontierChoices(
-        role: RoleId,
-        actions: List<ActionId>,
-        state: State,
-        playerKnowledge: Infoset,
-    ): List<FrontierSlice> {
-        // ========== Check if Role Has Bailed ==========
-        // Once a role has bailed (some field Quit), it has no explicit choices anymore.
-        if (state.quit(role)) return emptyList()
+    val rawPackets: List<Map<VarId, IrVal>> =
+        cartesian(lists).map { it.toMap() }
 
-        if (actions.isEmpty()) return listOf(emptyMap())
-
-        // ========== Enumerate Packets Per Action ==========
-        // For each action, enumerate its local packets.
-        val perActionPackets: List<List<Map<VarId, IrVal>>> =
-            actions.map { actionId ->
-                enumeratePacketsForAction(actionId, state, playerKnowledge)
-            }
-
-        if (perActionPackets.any { it.isEmpty() }) return emptyList()
-
-        // ========== Compute Cartesian Product ==========
-        // Cross-product over actions; then flatten into a single FrontierSlice.
-        val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
-
-        return combinations.map { pktList ->
-            combinePacketsIntoFrontier(actions, pktList)
+    // ========== Filter by Guard Condition ==========
+    // Guard: evaluated on player's knowledge with this action's packet overlayed.
+    return rawPackets.filter { pkt ->
+        // Unwrap Hidden values for the actor's own guard evaluation.
+        // The player knows what they are choosing right now.
+        val unwrappedPkt = pkt.mapValues { (_, v) ->
+            if (v is IrVal.Hidden) v.inner else v
         }
+
+        val tempHeap = Infoset(toFrontierMap(role, unwrappedPkt), playerKnowledge)
+        eval(tempHeap, spec.guardExpr).asBool()
+    }
+}
+
+private fun exploreFromFrontier(
+    ir: GameIR,
+    frontier: FrontierMachine<ActionId>,
+    state: State,
+    knowledgeMap: KnowledgeMap,
+): GameTree {
+    // ========== Check for Terminal Nodes ==========
+    if (frontier.isComplete()) {
+        val pay = ir.payoffs.mapValues { (_, e) -> eval(state, e).toOutcome() }
+        return GameTree.Terminal(pay)
     }
 
-    /**
-     * Enumerate packets for a single action under the current global state.
-     * Commit/reveal semantics:
-     *  - COMMIT: pick from type domain, store as Hidden(base).
-     *  - REVEAL: if prior value is Hidden(x), then only choice is x (as visible value);
-     *            otherwise, no legal choice.
-     *  - PUBLIC: pick from type domain, store as visible value.
-     *
-     * Guards are evaluated with the packet layered on top of the player's knowledge.
-     */
-    private fun enumeratePacketsForAction(
-        actionId: ActionId,
-        state: State,
-        playerKnowledge: Infoset,
-    ): List<Map<VarId, IrVal>> {
-        val struct: ActionStruct = ir.dag.struct(actionId)
-        val spec: ActionSpec = ir.dag.spec(actionId)
-        val role = struct.role
-
-        if (spec.params.isEmpty()) return listOf(emptyMap())
-        if (state.quit(role)) return emptyList()
-
-        // ========== Build Domain for Each Parameter ==========
-        val lists: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
-            val fieldRef = FieldRef(role, param.name)
-            val prior = state.get(fieldRef)
-            val vis = struct.visibility.getValue(fieldRef)
-
-            val baseDomain: List<IrVal> = when (vis) {
-                Visibility.REVEAL ->
-                    when (prior) {
-                        is IrVal.Hidden -> listOf(prior.inner)
-                        else -> emptyList()
-                    }
-
-                Visibility.PUBLIC, Visibility.COMMIT ->
-                    when (param.type) {
-                        is Type.BoolType ->
-                            listOf(IrVal.BoolVal(true), IrVal.BoolVal(false))
-
-                        is Type.SetType ->
-                            param.type.values.sorted().map { v -> IrVal.IntVal(v) }
-
-                        is Type.IntType ->
-                            throw StaticError("Cannot enumerate IntType; use SetType or BoolType")
-                    }
-            }
-
-            // The packet we STORE in the frontier must respect visibility (Hidden)
-            val domainWithVis: List<IrVal> = when (vis) {
-                Visibility.COMMIT -> baseDomain.map { v -> IrVal.Hidden(v) }
-                Visibility.PUBLIC, Visibility.REVEAL -> baseDomain
-            }
-
-            domainWithVis.map { v -> param.name to v }
-        }
-
-        val rawPackets: List<Map<VarId, IrVal>> =
-            cartesian(lists).map { it.toMap() }
-
-        // ========== Filter by Guard Condition ==========
-        // Guard: evaluated on player's knowledge with this action's packet overlayed.
-        return rawPackets.filter { pkt ->
-            // Unwrap Hidden values for the actor's own guard evaluation.
-            // The player knows what they are choosing right now.
-            val unwrappedPkt = pkt.mapValues { (_, v) ->
-                if (v is IrVal.Hidden) v.inner else v
-            }
-
-            val tempHeap = Infoset(toFrontierMap(role, unwrappedPkt), playerKnowledge)
-            eval(tempHeap, spec.guardExpr).asBool()
-        }
+    val enabled: Set<ActionId> = frontier.enabled()
+    require(enabled.isNotEmpty()) {
+        "Frontier has no enabled actions but is not complete"
     }
 
+    // ========== Group Actions by Role ==========
+    // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
+    val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
+    val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
+
+    // ========== Precompute Legal Choices ==========
+    // Precompute legal explicit packets per role under the same snapshot state.
+    val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
+        actionsByRole.mapValues { (role, actions) ->
+            enumerateRoleFrontierChoices(ir.dag, role, actions, state, knowledgeMap.getValue(role))
+        }
+
+    // ========== Explore All Joint Choices ==========
+    val setup = FrontierSetup(
+        frontier = frontier,
+        state = state,
+        knowledgeMap = knowledgeMap,
+        actionsByRole = actionsByRole,
+        roleOrder = roleOrder,
+        legalChoicesByRole = legalChoicesByRole
+    )
+
+    return exploreJointChoices(ir, setup, roleIndex = 0, jointChoices = emptyMap())
+}
+
+private fun buildTree(ir: GameIR): GameTree {
+    val frontier = FrontierMachine.from(ir.dag)
+    val initialState = Infoset()
+    val initialKnowledge: KnowledgeMap =
+        (ir.roles + ir.chanceRoles).associateWith { Infoset() }
+    return exploreFromFrontier(ir, frontier, initialState, initialKnowledge)
 }
 
 // Label only this role's non-Quit fields.
