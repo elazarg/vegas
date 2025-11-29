@@ -475,7 +475,6 @@ private fun buildActionFunctions(
             ActionKind.YIELD  -> buildDagYield(meta, actionIdx, depModifiers)
             ActionKind.COMMIT -> buildDagCommit(meta, actionIdx, depModifiers)
             ActionKind.REVEAL -> buildDagReveal(meta, actionIdx, depModifiers)
-            ActionKind.JOIN   -> error("ActionKind.JOIN should not be used; join is handled in YIELD")
         }
 
         add(fn)
@@ -736,8 +735,8 @@ internal fun translateIrExpr(
     context: ExprContext
 ): SolExpr = when (expr) {
     // Literals
-    is Expr.IntVal  -> int(expr.v)
-    is Expr.BoolVal -> bool(expr.v)
+    is Expr.Const.IntVal  -> int(expr.v)
+    is Expr.Const.BoolVal -> bool(expr.v)
 
     // Field access
     is Expr.Field -> {
@@ -866,7 +865,7 @@ private fun translateWhere(
     currentParams: List<ActionParam>
 ): List<Statement.Require> {
     // Don't emit a trivial `require(true)`
-    if (expr == Expr.BoolVal(true)) return emptyList()
+    if (expr == Expr.Const.BoolVal(true)) return emptyList()
 
     val solCondition = translateIrExpr(
         expr          = expr,

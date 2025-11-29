@@ -424,8 +424,8 @@ private fun eval(heap: Infoset, e: Expr): IrVal {
     }
 
     fun eval0(x: Expr): IrVal = when (x) {
-        is Expr.IntVal -> IrVal.IntVal(x.v)
-        is Expr.BoolVal -> IrVal.BoolVal(x.v)
+        is Expr.Const.IntVal -> IrVal.IntVal(x.v)
+        is Expr.Const.BoolVal -> IrVal.BoolVal(x.v)
         is Expr.Field -> get(x.field)
         is Expr.IsDefined -> {
             val v = get(x.field)
