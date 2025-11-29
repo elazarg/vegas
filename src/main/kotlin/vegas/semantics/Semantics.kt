@@ -1,5 +1,6 @@
-package vegas
+package vegas.semantics
 
+import vegas.Env
 import vegas.frontend.Exp
 import vegas.frontend.Exp.*
 import vegas.frontend.Exp.Const.*

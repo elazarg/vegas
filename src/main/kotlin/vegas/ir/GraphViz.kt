@@ -55,7 +55,6 @@ fun ActionDag.toGraphviz(
             val fillColor = when(kind) {
                 ActionKind.COMMIT -> "#FFD1DC" // Pastel Pink
                 ActionKind.REVEAL -> "#C1E1C1" // Pastel Green
-                ActionKind.JOIN   -> "#FFFACD" // Lemon Chiffon
                 ActionKind.YIELD  -> "#F0F0F0" // Light Grey
             }
 
@@ -103,7 +102,6 @@ private fun ActionDag.nodeHtmlLabel(id: ActionId, index: Int): String {
         ActionKind.COMMIT -> "&#128274;" // 🔒 Lock
         ActionKind.REVEAL -> "&#128065;" // 👁 Eye
         ActionKind.YIELD  -> ""           // Clean, no icon for standard yield
-        ActionKind.JOIN   -> "&#11088;"   // ⭐ Star for join
     }
 
     // 2. Format the Parameter list
