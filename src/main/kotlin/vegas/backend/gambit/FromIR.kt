@@ -214,18 +214,9 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
                 if (isChanceNode) {
                     explicitWithProb
                 } else {
-                    val bailFrontier: FrontierSlice =
-                        if (allParams.isEmpty()) {
-                            emptyMap()
-                        } else {
-                            actionsForRole
-                                .flatMap { actionId ->
-                                    ir.dag.params(actionId).map { p ->
-                                        FieldRef(role, p.name) to IrVal.Quit
-                                    }
-                                }
-                                .toMap()
-                        }
+                    val bailFrontier =
+                        if (allParams.isEmpty()) emptyMap()
+                        else allParametersQuit(role, actionsForRole)
 
                     val bailChoice = GameTree.Choice(
                         action = emptyMap(), // shows as "Quit" / unlabeled move
@@ -259,6 +250,30 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         return recurse(0, emptyMap())
     }
 
+    private fun allParametersQuit(role: RoleId, actions: List<ActionId>): FrontierSlice =
+        actions
+            .flatMap { actionId ->
+                ir.dag.params(actionId).map { p ->
+                    FieldRef(role, p.name) to IrVal.Quit
+                }
+            }
+            .toMap()
+
+    private fun combinePacketsIntoFrontier(
+        actions: List<ActionId>,
+        packets: List<Map<VarId, IrVal>>
+    ): FrontierSlice {
+        val frontierSlice = mutableMapOf<FieldRef, IrVal>()
+        actions.zip(packets).forEach { (actionId, pkt) ->
+            val role = ir.dag.struct(actionId).role
+            pkt.forEach { (varId, value) ->
+                // If two actions write the same field, last-in-wins; IR should avoid that.
+                frontierSlice[FieldRef(role, varId)] = value
+            }
+        }
+        return frontierSlice
+    }
+
     /**
      * Enumerate all explicit (non-bail) joint packets for a role across all
      * its actions in the current frontier, as a list of FrontierSlice deltas.
@@ -289,16 +304,7 @@ private class DagGameTreeBuilder(private val ir: GameIR) {
         val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
 
         return combinations.map { pktList ->
-            val frontierSlice = mutableMapOf<FieldRef, IrVal>()
-            actions.zip(pktList).forEach { (actionId, pkt) ->
-                val struct: ActionStruct = ir.dag.struct(actionId)
-                pkt.forEach { (v, value) ->
-                    val field = FieldRef(struct.role, v)
-                    // If two actions write the same field, last-in-wins; IR should avoid that.
-                    frontierSlice[field] = value
-                }
-            }
-            frontierSlice.toMap()
+            combinePacketsIntoFrontier(actions, pktList)
         }
     }
 
