@@ -37,6 +37,12 @@ internal class EfgWriter(
         return when (tree) {
             is GameTree.Decision -> writeDecision(tree)
             is GameTree.Terminal -> listOf(writeTerminal(tree))
+            is GameTree.Continuation -> {
+                error(
+                    "Cannot serialize game tree with unexpanded Continuation nodes. " +
+                    "Call expand() to hydrate all branches before serializing to EFG format."
+                )
+            }
         }
     }
 

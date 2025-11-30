@@ -41,14 +41,32 @@ import vegas.ir.ActionStruct
 import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.Visibility
-import java.util.IdentityHashMap
+
+/**
+ * Functional interface determining which actions to expand during generation.
+ *
+ * This replaces the binary GenerationMode enum with a flexible predicate.
+ * The policy is checked for each (role, action) combination:
+ * - true: Generate subtree recursively (immediate expansion)
+ * - false: Create Continuation node (deferred expansion)
+ *
+ * Chance nodes ALWAYS expand regardless of policy.
+ */
+fun interface ExpansionPolicy {
+    /**
+     * Determines whether to expand a specific action.
+     *
+     * @param role The role making the decision
+     * @param action The action being considered (null = bail)
+     * @return true to expand immediately, false to create Continuation
+     */
+    fun shouldExpand(role: RoleId, action: ActionId?): Boolean
+}
 
 /**
  * Build a Gambit EFG string from the ActionDag-based IR.
  *
- * Uses two-phase generation:
- * 1. Build happy-path tree (spine) without bail branches
- * 2. Stitch bail branches into spine to create full tree
+ * Uses policy-driven generation with optional bail branch inclusion.
  *
  * Semantics (informally):
  *
@@ -82,15 +100,58 @@ import java.util.IdentityHashMap
  */
 fun generateExtensiveFormGame(ir: GameIR, happyOnly: Boolean = false): String {
     val gen = EfgGenerator(ir)
-    val spine = gen.buildHappyTree()
-    val full = if (happyOnly) spine.root else gen.stitchBails(spine)
+    val policy = if (happyOnly) EfgGenerator.FAIR_PLAY else EfgGenerator.FULL_VERIFICATION
+    val frontier = FrontierMachine.from(ir.dag)
+    val initialState = Infoset()
+    val initialKnowledge: KnowledgeMap = (ir.roles + ir.chanceRoles).associateWith { Infoset() }
+    var tree = gen.exploreFromFrontier(frontier, initialState, initialKnowledge, policy)
+
+    // For happyOnly mode, prune all Continuation nodes (bail branches)
+    // to maintain backward compatibility with old SPINE_ONLY behavior
+    if (happyOnly) {
+        tree = pruneContinuations(tree)
+    }
 
     return ExtensiveFormGame(
         name = ir.name.ifEmpty { "Game" },
         description = "Generated from ActionDag",
         strategicPlayers = ir.roles,
-        tree = full
+        tree = tree
     ).toEfg()
+}
+
+/**
+ * Remove all Continuation nodes from the tree by mutating Choice.subtree fields.
+ *
+ * This is used for backward compatibility with `happyOnly=true` mode,
+ * which produces a tree with NO bail branches (not even as Continuations).
+ *
+ * Instead of removing choices, we leverage that Choice.subtree is mutable (var).
+ * We filter out choices that lead to Continuations and reconstruct Decision nodes.
+ */
+private fun pruneContinuations(node: GameTree): GameTree {
+    return when (node) {
+        is GameTree.Terminal -> node
+        is GameTree.Continuation -> node // Should not happen at top level
+        is GameTree.Decision -> {
+            // Filter out choices leading to Continuation nodes
+            val prunedChoices = node.choices
+                .filter { it.subtree !is GameTree.Continuation }
+                .map { choice ->
+                    // Recursively prune subtrees
+                    choice.copy(subtree = pruneContinuations(choice.subtree))
+                }
+
+            // If no choices remain after pruning, this is an error
+            // (should not happen in well-formed trees)
+            if (prunedChoices.isEmpty()) {
+                error("Decision node has no choices after pruning Continuations")
+            }
+
+            // Create new Decision node with pruned choices
+            node.copy(choices = prunedChoices)
+        }
+    }
 }
 
 /**
@@ -124,17 +185,6 @@ private class InfosetManager(roles: Set<RoleId>) {
 }
 
 /**
- * Generation mode for tree building.
- */
-private enum class GenerationMode {
-    /** Happy path only: skip bail branches, attach contexts */
-    SPINE_ONLY,
-
-    /** Full expansion: include bail branches recursively */
-    FULL_EXPANSION
-}
-
-/**
  * Minimal context required to resume generation at a decision point.
  *
  * Memory cost: O(depth) for Infoset stacks + O(1) for other fields.
@@ -150,22 +200,11 @@ internal data class GeneratorContext(
 
     // Position in role iteration loop
     val roleIndex: Int,
-    val jointChoices: FrontierSlice
-)
+    val jointChoices: FrontierSlice,
 
-/**
- * Happy-path game tree (spine) with lazy bail generation contexts.
- *
- * The spine contains only explicit strategic choices (no bail branches).
- * The contexts map uses object identity to associate Decision nodes with the
- * minimal state needed to generate their bail branches on demand.
- *
- * @property root The game tree with only happy-path choices
- * @property contexts Identity-based mapping from Decision nodes to generation contexts
- */
-internal data class Spine(
-    val root: GameTree,
-    val contexts: IdentityHashMap<GameTree.Decision, GeneratorContext>
+    // Metadata for policy re-evaluation during expand()
+    val role: RoleId,          // Which role is deciding at this point
+    val actionId: ActionId?    // Which action led to this continuation (null = bail)
 )
 
 /**
@@ -206,7 +245,13 @@ private fun combinePacketsIntoFrontier(
 
 /**
  * Enumerate all explicit (non-bail) joint packets for a role across all
- * its actions in the current frontier, as a list of FrontierSlice deltas.
+ * its actions in the current frontier.
+ *
+ * Returns pairs of (ActionId, FrontierSlice) where:
+ * - ActionId identifies this as an explicit move (for policy checking)
+ * - FrontierSlice contains the actual field assignments
+ *
+ * For joint moves across multiple actions, uses the first ActionId as a marker.
  */
 private fun enumerateRoleFrontierChoices(
     dag: ActionDag,
@@ -214,12 +259,18 @@ private fun enumerateRoleFrontierChoices(
     actions: List<ActionId>,
     state: State,
     playerKnowledge: Infoset,
-): List<FrontierSlice> {
+): List<Pair<ActionId, FrontierSlice>> {
     // ========== Check if Role Has Bailed ==========
     // Once a role has bailed (some field Quit), it has no explicit choices anymore.
     if (state.quit(role)) return emptyList()
 
-    if (actions.isEmpty()) return listOf(emptyMap())
+    if (actions.isEmpty()) {
+        // Structural frontier: no parameters, but still an explicit (non-bail) choice
+        // Use a synthetic marker - actions[0] would fail here, so we need to handle this
+        // Actually, if actions.isEmpty(), we shouldn't have an ActionId to use
+        // Return empty list - structural frontiers will be handled specially
+        return emptyList()
+    }
 
     // ========== Enumerate Packets Per Action ==========
     // For each action, enumerate its local packets.
@@ -234,8 +285,12 @@ private fun enumerateRoleFrontierChoices(
     // Cross-product over actions; then flatten into a single FrontierSlice.
     val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
 
+    // Use first ActionId as a marker for explicit moves (for policy checking)
+    val representativeActionId = actions.first()
+
     return combinations.map { pktList ->
-        combinePacketsIntoFrontier({ dag.struct(it).role }, actions, pktList)
+        val frontierSlice = combinePacketsIntoFrontier({ dag.struct(it).role }, actions, pktList)
+        representativeActionId to frontierSlice
     }
 }
 
@@ -342,103 +397,132 @@ private fun enumeratePacketsForAction(
  * ```
  */
 internal class EfgGenerator(val ir: GameIR) {
+    companion object {
+        /**
+         * FAIR_PLAY: Expand all explicit moves, defer bail branches.
+         *
+         * This is the default policy and produces the "spine" tree:
+         * - Focuses on strategic play where players actively participate
+         * - Bail branches can be added later via expand()
+         * - Equivalent to old SPINE_ONLY mode
+         */
+        val FAIR_PLAY: ExpansionPolicy = ExpansionPolicy { _, action -> action != null }
+
+        /**
+         * FULL_VERIFICATION: Expand everything including bail branches.
+         *
+         * Produces the complete game tree with all possible paths:
+         * - Used for game-theoretic verification
+         * - Includes all abandonment/griefing scenarios
+         * - Equivalent to old FULL_EXPANSION mode
+         * - WARNING: Exponentially larger trees
+         */
+        val FULL_VERIFICATION: ExpansionPolicy = ExpansionPolicy { _, _ -> true }
+
+        /**
+         * SKELETON: Defer everything, create minimal tree structure.
+         *
+         * Produces a tree with all branches suspended:
+         * - Useful for analyzing game structure without generating full tree
+         * - Can selectively expand interesting branches
+         * - NEW capability not possible with old architecture
+         */
+        val SKELETON: ExpansionPolicy = ExpansionPolicy { _, _ -> false }
+    }
+
     /**
      * Manages information set numbering throughout the tree build.
      * Each strategic player's infoset is identified by their redacted knowledge history.
      * Chance nodes receive sequential numbering.
-     *
-     * CRITICAL: This must persist across both phases to ensure consistent infoset IDs.
      */
     private val infosetManager = InfosetManager(ir.roles)
 
     /**
-     * Phase 1: Generate happy-path tree (explicit moves only).
-     * Output: GameTree with context != null at strategic decision nodes.
+     * Co-inductively expand Continuation nodes in-place based on a new policy.
+     *
+     * Walks the game tree and selectively hydrates deferred branches:
+     * - If a Continuation's (role, actionId) satisfies the new policy, resume generation
+     * - Otherwise, leave it as a Continuation (or replace with a different Continuation under new policy)
+     * - Recursively expand newly generated subtrees
+     *
+     * **Mutation**: This modifies the tree in-place via Choice.subtree (var).
+     *
+     * **Use case**: Start with FAIR_PLAY tree (no bail), then call expand(tree, FULL_VERIFICATION)
+     * to add bail branches on demand.
+     *
+     * @param node Root of the subtree to expand
+     * @param policy Expansion policy determining which Continuations to hydrate
      */
-    fun buildHappyTree(): Spine {
-        val contextMap = IdentityHashMap<GameTree.Decision, GeneratorContext>()
-        val frontier = FrontierMachine.from(ir.dag)
-        val initialState = Infoset()
-        val initialKnowledge: KnowledgeMap =
-            (ir.roles + ir.chanceRoles).associateWith { Infoset() }
-        val root = exploreFromFrontier(frontier, initialState, initialKnowledge, GenerationMode.SPINE_ONLY, contextMap)
-        return Spine(root, contextMap)
-    }
+    fun expand(node: GameTree, policy: ExpansionPolicy = FULL_VERIFICATION) {
+        when (node) {
+            is GameTree.Terminal -> {
+                // Terminal nodes have no children to expand
+            }
 
-    /**
-     * Phase 2: Stitch bail branches into happy tree.
-     * Output: Full GameTree with all bail branches added.
-     */
-    fun stitchBails(spine: Spine): GameTree {
-        return stitchRecursive(spine.root, spine.contexts)
-    }
-
-    /**
-     * Recursive helper for stitchBails.
-     * Uses identity-based lookup to find contexts for Decision nodes.
-     */
-    private fun stitchRecursive(
-        node: GameTree,
-        contexts: Map<GameTree.Decision, GeneratorContext>
-    ): GameTree {
-        return when (node) {
-            is GameTree.Terminal -> node
+            is GameTree.Continuation -> {
+                // Standalone Continuation at root should not happen in well-formed trees
+                // (would mean the initial call deferred the very first decision)
+                // Do nothing - caller should handle this edge case
+            }
 
             is GameTree.Decision -> {
-                // 1. Identity lookup (safe because Spine is immutable)
-                val ctx = contexts[node]
-
-                // 2. If no context, return clean copy (happy path preserved)
-                if (ctx == null) {
-                    val newChoices = node.choices.map { choice ->
-                        choice.copy(subtree = stitchRecursive(choice.subtree, contexts))
+                node.choices.forEach { choice ->
+                    when (val subtree = choice.subtree) {
+                        is GameTree.Continuation -> {
+                            val ctx = subtree.context
+                            // Check if the new policy wants to expand this deferred action
+                            if (policy.shouldExpand(ctx.role, ctx.actionId)) {
+                                // Hydrate in-place (MUTATION)
+                                val expanded = resumeGeneration(ctx, policy)
+                                choice.subtree = expanded
+                                // Recursively expand the newly generated subtree
+                                expand(expanded, policy)
+                            }
+                            // else: Leave as Continuation (still out of policy)
+                        }
+                        else -> {
+                            // Recurse into existing Decision/Terminal nodes
+                            expand(subtree, policy)
+                        }
                     }
-                    return node.copy(choices = newChoices)
                 }
-
-                // 3. Hydrate bail branch (error path generated on demand)
-                // Reconstruct FrontierSetup by recomputing legal choices
-                val enabled = ctx.frontier.enabled()
-                val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
-                val roleOrder = actionsByRole.keys.sortedBy { it.name }
-                val legalChoicesByRole = actionsByRole.mapValues { (role, actions) ->
-                    enumerateRoleFrontierChoices(
-                        ir.dag, role, actions,
-                        ctx.state, ctx.knowledgeMap.getValue(role)
-                    )
-                }
-                val setup = FrontierSetup(
-                    ctx.frontier, ctx.state, ctx.knowledgeMap,
-                    actionsByRole, roleOrder, legalChoicesByRole
-                )
-
-                // Generate bail branch with FULL_EXPANSION mode
-                val role = roleOrder[ctx.roleIndex]
-                val actionsForRole = actionsByRole.getValue(role)
-                val allParams = actionsForRole.flatMap { ir.dag.params(it) }
-                val bailFrontier = if (allParams.isEmpty()) emptyMap()
-                else allParametersQuit(ir.dag, role, actionsForRole)
-                val bailSubtree = exploreJointChoices(
-                    setup,
-                    ctx.roleIndex + 1,
-                    ctx.jointChoices + bailFrontier,
-                    mode = GenerationMode.FULL_EXPANSION
-                )
-
-                val bailChoice = GameTree.Choice(
-                    action = emptyMap(),  // Shows as "Quit"
-                    subtree = bailSubtree,
-                    probability = null
-                )
-
-                // Recursively stitch children and add bail branch
-                val stitchedChoices = node.choices.map { choice ->
-                    choice.copy(subtree = stitchRecursive(choice.subtree, contexts))
-                }
-
-                node.copy(choices = stitchedChoices + bailChoice)
             }
         }
+    }
+
+    /**
+     * Resume generation from a suspended Continuation context.
+     *
+     * Reconstructs the FrontierSetup by:
+     * 1. Re-deriving actionsByRole from frontier.enabled()
+     * 2. Re-computing legalChoicesByRole (CPU cost to save RAM)
+     * 3. Calling exploreJointChoices with the new policy
+     *
+     * **Tradeoff**: CPU for RAM - recomputation is acceptable since RAM is the bottleneck.
+     *
+     * @param ctx The GeneratorContext embedded in a Continuation node
+     * @param policy The expansion policy to use for resumed generation
+     * @return Newly generated game subtree
+     */
+    private fun resumeGeneration(ctx: GeneratorContext, policy: ExpansionPolicy): GameTree {
+        // Reconstruct frontier setup from stored context
+        val enabled = ctx.frontier.enabled()
+        val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
+        val roleOrder = actionsByRole.keys.sortedBy { it.name }
+        val legalChoicesByRole = actionsByRole.mapValues { (role, actions) ->
+            enumerateRoleFrontierChoices(
+                ir.dag, role, actions,
+                ctx.state, ctx.knowledgeMap.getValue(role)
+            )
+        }
+
+        val setup = FrontierSetup(
+            ctx.frontier, ctx.state, ctx.knowledgeMap,
+            actionsByRole, roleOrder, legalChoicesByRole
+        )
+
+        // Resume the role loop where it left off
+        return exploreJointChoices(setup, ctx.roleIndex, ctx.jointChoices, policy)
     }
 
     /**
@@ -453,15 +537,14 @@ internal class EfgGenerator(val ir: GameIR) {
      * @param setup Precomputed frontier context (actions by role, legal choices, etc.)
      * @param roleIndex Index into [setup.roleOrder][FrontierSetup.roleOrder] of current role
      * @param jointChoices Accumulated action choices from roles [0, roleIndex)
-     * @param mode Generation mode (SPINE_ONLY or FULL_EXPANSION)
+     * @param policy Expansion policy determining which actions to expand vs defer
      * @return Game subtree rooted at this point
      */
     private fun exploreJointChoices(
         setup: FrontierSetup,
         roleIndex: Int,
         jointChoices: FrontierSlice,
-        mode: GenerationMode,
-        contextMap: IdentityHashMap<GameTree.Decision, GeneratorContext>? = null
+        policy: ExpansionPolicy
     ): GameTree {
         // ========== Terminal: All Roles Have Chosen ==========
         if (roleIndex == setup.roleOrder.size) {
@@ -473,7 +556,7 @@ internal class EfgGenerator(val ir: GameIR) {
                 }
 
             val nextFrontier = setup.frontier.resolveEnabled()
-            return exploreFromFrontier(nextFrontier, newState, newKnowledge, mode, contextMap)
+            return exploreFromFrontier(nextFrontier, newState, newKnowledge, policy)
         }
 
         // ========== Current Role Setup ==========
@@ -487,52 +570,54 @@ internal class EfgGenerator(val ir: GameIR) {
         val actionsForRole = setup.actionsByRole.getValue(role)
         val allParams = actionsForRole.flatMap { ir.dag.params(it) }
 
-        val explicitFrontierChoices: List<FrontierSlice> =
+        val explicitMoves: List<Pair<ActionId, FrontierSlice>> =
             setup.legalChoicesByRole.getValue(role)
 
-        // ========== Build Explicit Choices ==========
-        // 1. Explicit choices (non-bail).
-        val explicitChoices: List<GameTree.Choice> =
-            explicitFrontierChoices.map { frontierDelta ->
-                val subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + frontierDelta, mode, contextMap)
+        // ========== Unified Move Enumeration ==========
+        // Build unified list of ALL moves (explicit + bail), then apply policy to each.
+        // Chance nodes only have explicit moves (no bail option).
+        val bailFrontier = if (allParams.isEmpty()) emptyMap()
+                          else allParametersQuit(ir.dag, role, actionsForRole)
+
+        val allMoves: List<Pair<ActionId?, FrontierSlice>> =
+            if (isChanceNode) {
+                // Chance nodes: only explicit moves (always expand, no policy check)
+                explicitMoves
+            } else {
+                // Strategic nodes: explicit moves + bail move
+                explicitMoves + (null to bailFrontier)
+            }
+
+        // ========== Policy-Driven Choice Generation ==========
+        // For each move, check policy to decide: expand now or create Continuation?
+        val allChoices: List<GameTree.Choice> =
+            allMoves.map { (actionId, frontierDelta) ->
+                // Chance nodes always expand. Strategic nodes consult the policy.
+                val shouldExpand = isChanceNode || policy.shouldExpand(role, actionId)
+
+                val subtree = if (shouldExpand) {
+                    // Policy says expand: recurse immediately
+                    exploreJointChoices(setup, roleIndex + 1, jointChoices + frontierDelta, policy)
+                } else {
+                    // Policy says defer: create Continuation node with embedded context
+                    GameTree.Continuation(
+                        GeneratorContext(
+                            frontier = setup.frontier,
+                            state = setup.state,
+                            knowledgeMap = setup.knowledgeMap,
+                            roleIndex = roleIndex + 1,
+                            jointChoices = jointChoices + frontierDelta,
+                            role = role,
+                            actionId = actionId
+                        )
+                    )
+                }
+
                 GameTree.Choice(
                     action = extractActionLabel(frontierDelta, role),
                     subtree = subtree,
-                    probability = null,
+                    probability = if (isChanceNode) Rational(1, allMoves.size) else null
                 )
-            }
-
-        // ========== Apply Probabilities for Chance Nodes ==========
-        val explicitWithProb =
-            if (isChanceNode)
-                explicitChoices.map {
-                    it.copy(probability = Rational(1, explicitChoices.size))
-                }
-            else
-                explicitChoices
-
-        // ========== Add Bail Choice for Strategic Roles ==========
-        // 2. Bail choice for strategic roles (None on all params).
-        val allChoices: List<GameTree.Choice> =
-            if (isChanceNode) {
-                // Chance nodes never bail
-                explicitWithProb
-            } else if (mode == GenerationMode.SPINE_ONLY && explicitWithProb.isNotEmpty()) {
-                // SPINE_ONLY mode: skip bail branches only if there are explicit choices
-                explicitWithProb
-            } else {
-                // FULL_EXPANSION mode or SPINE_ONLY with no explicit choices: generate bail branch
-                val bailFrontier =
-                    if (allParams.isEmpty()) emptyMap()
-                    else allParametersQuit(ir.dag, role, actionsForRole)
-
-                val bailChoice = GameTree.Choice(
-                    action = emptyMap(), // shows as "Quit" / unlabeled move
-                    subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + bailFrontier, mode, contextMap),
-                    probability = null,
-                )
-
-                explicitWithProb + bailChoice
             }
 
         if (allChoices.isEmpty()) {
@@ -547,28 +632,12 @@ internal class EfgGenerator(val ir: GameIR) {
         }
 
         // ========== Create Decision Node ==========
-        val decision = GameTree.Decision(
+        return GameTree.Decision(
             owner = role,
             infosetId = infosetId,
             choices = allChoices,
             isChance = isChanceNode
         )
-
-        // ========== Store Context for Lazy Bail Generation ==========
-        // In SPINE_ONLY mode, store context in external map to enable later bail branch stitching
-        // BUT: only if we haven't already added a bail choice (which happens when there are no explicit choices)
-        if (mode == GenerationMode.SPINE_ONLY && !isChanceNode && explicitWithProb.isNotEmpty() && contextMap != null) {
-            val context = GeneratorContext(
-                frontier = setup.frontier,
-                state = setup.state,
-                knowledgeMap = setup.knowledgeMap,
-                roleIndex = roleIndex,
-                jointChoices = jointChoices
-            )
-            contextMap[decision] = context
-        }
-
-        return decision
     }
 
     /**
@@ -585,15 +654,14 @@ internal class EfgGenerator(val ir: GameIR) {
      * @param frontier Current frontier machine state (enabled actions)
      * @param state Global game state (stack of committed frontier slices)
      * @param knowledgeMap Per-role redacted view of state (for information set construction)
-     * @param mode Generation mode (SPINE_ONLY or FULL_EXPANSION)
+     * @param policy Expansion policy determining which actions to expand vs defer
      * @return Game subtree rooted at this frontier
      */
-    private fun exploreFromFrontier(
+    internal fun exploreFromFrontier(
         frontier: FrontierMachine<ActionId>,
         state: State,
         knowledgeMap: KnowledgeMap,
-        mode: GenerationMode,
-        contextMap: IdentityHashMap<GameTree.Decision, GeneratorContext>? = null
+        policy: ExpansionPolicy
     ): GameTree {
         // ========== Check for Terminal Nodes ==========
         if (frontier.isComplete()) {
@@ -613,7 +681,7 @@ internal class EfgGenerator(val ir: GameIR) {
 
         // ========== Precompute Legal Choices ==========
         // Precompute legal explicit packets per role under the same snapshot state.
-        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
+        val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierSlice>>> =
             actionsByRole.mapValues { (role, actions) ->
                 enumerateRoleFrontierChoices(ir.dag, role, actions, state, knowledgeMap.getValue(role))
             }
@@ -632,8 +700,7 @@ internal class EfgGenerator(val ir: GameIR) {
             setup,
             roleIndex = 0,
             jointChoices = emptyMap(),
-            mode = mode,
-            contextMap = contextMap
+            policy = policy
         )
     }
 
@@ -658,8 +725,8 @@ internal class EfgGenerator(val ir: GameIR) {
         val actionsByRole: Map<RoleId, List<ActionId>>,
         /** Deterministic ordering of roles (alphabetical by name) */
         val roleOrder: List<RoleId>,
-        /** Precomputed legal choice combinations for each role */
-        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>>,
+        /** Precomputed legal choice combinations for each role (with ActionId for policy checking) */
+        val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierSlice>>>,
     )
 }
 

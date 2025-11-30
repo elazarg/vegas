@@ -502,4 +502,78 @@ class GambitSemanticTest : FreeSpec({
             }
         }
     }
+
+    "Co-inductive expansion" - {
+        "FAIR_PLAY creates trees without bail branches" {
+            val code = """
+                join Alice() $ 100;
+                join Bob() $ 100;
+                yield Alice(x: bool);
+                withdraw { Alice -> 10; Bob -> 10 }
+            """.trimIndent()
+
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+            val efg = generateExtensiveFormGame(ir, happyOnly = true)
+
+            // Should have Alice's choice but NO Quit option
+            efg shouldNotContain "\"Quit\""
+        }
+
+        "expand() hydrates Continuation nodes in-place" {
+            val code = """
+                join Alice() $ 100;
+                join Bob() $ 100;
+                yield Alice(x: bool);
+                yield Bob(y: bool);
+                withdraw { Alice -> 10; Bob -> 10 }
+            """.trimIndent()
+
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+
+            // Generate FAIR_PLAY tree (defers bail)
+            val gen = vegas.backend.gambit.EfgGenerator(ir)
+            val frontier = vegas.dag.FrontierMachine.from(ir.dag)
+            val initialState = vegas.backend.gambit.Infoset()
+            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.Infoset() }
+            val tree = gen.exploreFromFrontier(
+                frontier,
+                initialState,
+                initialKnowledge,
+                vegas.backend.gambit.EfgGenerator.FAIR_PLAY
+            )
+
+            // Verify tree has Continuation nodes (cannot serialize)
+            var hasContinuations = false
+            fun checkForContinuations(node: vegas.backend.gambit.GameTree): Unit = when (node) {
+                is vegas.backend.gambit.GameTree.Terminal -> {}
+                is vegas.backend.gambit.GameTree.Continuation -> { hasContinuations = true }
+                is vegas.backend.gambit.GameTree.Decision -> {
+                    node.choices.forEach { checkForContinuations(it.subtree) }
+                }
+            }
+            checkForContinuations(tree)
+            hasContinuations shouldBe true
+
+            // Now expand with FULL_VERIFICATION to hydrate bail branches
+            gen.expand(tree, vegas.backend.gambit.EfgGenerator.FULL_VERIFICATION)
+
+            // After expansion, should have no Continuation nodes
+            hasContinuations = false
+            checkForContinuations(tree)
+            hasContinuations shouldBe false
+
+            // Should now be serializable with bail branches
+            val efg = vegas.backend.gambit.ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            // Should contain Quit options now
+            efg shouldContain "\"Quit\""
+        }
+    }
 })
