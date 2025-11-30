@@ -14,7 +14,7 @@
         <kotlin.version>2.1.21</kotlin.version>
         <antlr.version>4.13.2</antlr.version>
         <java.version>25</java.version>
-        <kotest.version>5.7.2</kotest.version>
+        <kotest.version>5.9.1</kotest.version>
         <junit.version>5.13.4</junit.version>
     </properties>
     <dependencies>
@@ -38,6 +38,11 @@
             <artifactId>kotest-runner-junit5-jvm</artifactId>
             <version>${kotest.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.classgraph</groupId>
+            <artifactId>classgraph</artifactId>
+            <version>4.8.184</version>
         </dependency>
         <dependency>
             <groupId>io.kotest</groupId>
@@ -137,6 +142,9 @@
                         <include>**/*Test.*</include>
                         <include>**/*Spec.*</include>
                     </includes>
+                    <systemPropertyVariables>
+                        <kotest.framework.classpath.scanning.autoscan.disable>true</kotest.framework.classpath.scanning.autoscan.disable>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
