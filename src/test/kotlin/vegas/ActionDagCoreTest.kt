@@ -35,7 +35,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -86,7 +86,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -131,7 +131,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -176,7 +176,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -223,7 +223,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -272,7 +272,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = emptyList(),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = id.first,
@@ -314,7 +314,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = listOf(ActionParam(VarId("x"), Type.IntType)),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = roleA,
@@ -350,7 +350,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = listOf(ActionParam(VarId("x"), Type.IntType)),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = roleA,
@@ -364,7 +364,7 @@ class ActionDagCoreTest : FreeSpec({
                     spec = ActionSpec(
                         params = listOf(ActionParam(VarId("x"), Type.IntType)),
                         join = null,
-                        guardExpr = Expr.BoolVal(true)
+                        guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
                         role = roleA,

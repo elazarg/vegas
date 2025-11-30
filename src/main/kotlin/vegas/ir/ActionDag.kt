@@ -19,7 +19,6 @@ typealias ActionId = Pair<RoleId, Int>
  *  - how each written field is classified (Visibility).
  */
 enum class ActionKind {
-    JOIN,
     COMMIT,
     REVEAL,
     YIELD,
@@ -278,7 +277,7 @@ class ActionDag private constructor(
                 //  - trivial guard (always allowed to commit)
                 val commitSpec = spec.copy(
                     join = spec.join,
-                    guardExpr = Expr.BoolVal(true)
+                    guardExpr = Expr.Const.BoolVal(true)
                 )
 
                 // Reveal spec:

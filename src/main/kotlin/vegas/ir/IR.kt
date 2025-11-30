@@ -7,9 +7,10 @@ import vegas.FieldRef
 // Expression are mostly straightforward
 sealed class Expr {
     // literals
-    data class IntVal(val v: Int) : Expr()
-    data class BoolVal(val v: Boolean) : Expr()
-
+    sealed class Const : Expr() {
+        data class IntVal(val v: Int) : Expr()
+        data class BoolVal(val v: Boolean) : Expr()
+    }
     data class Field(val field: FieldRef) : Expr()
 
     data class IsDefined(val field: FieldRef) : Expr()
@@ -56,7 +57,7 @@ data class Requirement(
 )
 
 data class Join(
-    val deposit: Expr.IntVal,
+    val deposit: Expr.Const.IntVal,
 )
 
 sealed class Type {

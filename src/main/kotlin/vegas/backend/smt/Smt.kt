@@ -69,8 +69,8 @@ private fun appendDomainConstraint(sb: StringBuilder, field: FieldRef, type: Typ
 }
 
 private fun exprToSmt(e: Expr): String = when (e) {
-    is Expr.IntVal -> "${e.v}"
-    is Expr.BoolVal -> "${e.v}"
+    is Expr.Const.IntVal -> "${e.v}"
+    is Expr.Const.BoolVal -> "${e.v}"
     is Expr.Field -> fieldName(e.field)
     is Expr.IsDefined -> doneFieldName(e.field)
     is Expr.Add -> "(+ ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
@@ -97,7 +97,7 @@ private fun smtType(type: Type): String = when (type) {
 }
 
 private fun collectFields(expr: Expr): Set<FieldRef> = when (expr) {
-    is Expr.IntVal, is Expr.BoolVal -> emptySet()
+    is Expr.Const.IntVal, is Expr.Const.BoolVal -> emptySet()
     is Expr.Field -> setOf(expr.field)
     is Expr.IsDefined -> setOf(expr.field)
     is Expr.Add -> collectFields(expr.l) + collectFields(expr.r)
