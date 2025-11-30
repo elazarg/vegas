@@ -32,14 +32,12 @@ internal sealed class GameTree {
      * @property infosetId Unique identifier for the information set
      * @property choices Available actions and their successor nodes
      * @property isChance Whether this is a chance node
-     * @property context Hydration context for lazy bail generation (null in full trees and chance nodes)
      */
     data class Decision(
         val owner: RoleId,
         val infosetId: Int,
         val choices: List<Choice>,
-        val isChance: Boolean = false,
-        val context: GeneratorContext? = null
+        val isChance: Boolean = false
     ) : GameTree() {
         init {
             require(choices.isNotEmpty()) {

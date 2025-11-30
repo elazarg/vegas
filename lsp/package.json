@@ -3,6 +3,7 @@
   "displayName": "vegas",
   "description": "Language support for the vegas game synthesis language",
   "version": "0.0.1",
+  "publisher": "elazar",
   "engines": {
     "vscode": "^1.105.0"
   },

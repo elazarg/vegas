@@ -41,6 +41,7 @@ import vegas.ir.ActionStruct
 import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.Visibility
+import java.util.IdentityHashMap
 
 /**
  * Build a Gambit EFG string from the ActionDag-based IR.
@@ -79,10 +80,10 @@ import vegas.ir.Visibility
  * This layering is epistemic, not part of the IR itself: it is induced by the
  * frontier exploration of the ActionDag and respects its causal partial order.
  */
-fun generateExtensiveFormGame(ir: GameIR): String {
+fun generateExtensiveFormGame(ir: GameIR, happyOnly: Boolean = false): String {
     val gen = EfgGenerator(ir)
     val spine = gen.buildHappyTree()
-    val full = gen.stitchBails(spine)
+    val full = if (happyOnly) spine.root else gen.stitchBails(spine)
 
     return ExtensiveFormGame(
         name = ir.name.ifEmpty { "Game" },
@@ -128,6 +129,7 @@ private class InfosetManager(roles: Set<RoleId>) {
 private enum class GenerationMode {
     /** Happy path only: skip bail branches, attach contexts */
     SPINE_ONLY,
+
     /** Full expansion: include bail branches recursively */
     FULL_EXPANSION
 }
@@ -152,9 +154,24 @@ internal data class GeneratorContext(
 )
 
 /**
-* Create a frontier slice where all parameters of the given actions are set to [IrVal.Quit].
-* This represents the "bail" choice where a strategic player opts out of all actions at a frontier.
-*/
+ * Happy-path game tree (spine) with lazy bail generation contexts.
+ *
+ * The spine contains only explicit strategic choices (no bail branches).
+ * The contexts map uses object identity to associate Decision nodes with the
+ * minimal state needed to generate their bail branches on demand.
+ *
+ * @property root The game tree with only happy-path choices
+ * @property contexts Identity-based mapping from Decision nodes to generation contexts
+ */
+internal data class Spine(
+    val root: GameTree,
+    val contexts: IdentityHashMap<GameTree.Decision, GeneratorContext>
+)
+
+/**
+ * Create a frontier slice where all parameters of the given actions are set to [IrVal.Quit].
+ * This represents the "bail" choice where a strategic player opts out of all actions at a frontier.
+ */
 private fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierSlice =
     actions.flatMap { actionId ->
         dag.params(actionId).map { FieldRef(role, it.name) to IrVal.Quit }
@@ -338,36 +355,48 @@ internal class EfgGenerator(val ir: GameIR) {
      * Phase 1: Generate happy-path tree (explicit moves only).
      * Output: GameTree with context != null at strategic decision nodes.
      */
-    fun buildHappyTree(): GameTree {
+    fun buildHappyTree(): Spine {
+        val contextMap = IdentityHashMap<GameTree.Decision, GeneratorContext>()
         val frontier = FrontierMachine.from(ir.dag)
         val initialState = Infoset()
         val initialKnowledge: KnowledgeMap =
             (ir.roles + ir.chanceRoles).associateWith { Infoset() }
-        return exploreFromFrontier(frontier, initialState, initialKnowledge, GenerationMode.SPINE_ONLY)
+        val root = exploreFromFrontier(frontier, initialState, initialKnowledge, GenerationMode.SPINE_ONLY, contextMap)
+        return Spine(root, contextMap)
     }
 
     /**
      * Phase 2: Stitch bail branches into happy tree.
-     * Output: Full GameTree with context == null (contexts released).
+     * Output: Full GameTree with all bail branches added.
      */
-    fun stitchBails(node: GameTree): GameTree {
+    fun stitchBails(spine: Spine): GameTree {
+        return stitchRecursive(spine.root, spine.contexts)
+    }
+
+    /**
+     * Recursive helper for stitchBails.
+     * Uses identity-based lookup to find contexts for Decision nodes.
+     */
+    private fun stitchRecursive(
+        node: GameTree,
+        contexts: Map<GameTree.Decision, GeneratorContext>
+    ): GameTree {
         return when (node) {
             is GameTree.Terminal -> node
 
             is GameTree.Decision -> {
-                // Recursively stitch children first
-                val stitchedChoices = node.choices.map { choice ->
-                    choice.copy(subtree = stitchBails(choice.subtree))
+                // 1. Identity lookup (safe because Spine is immutable)
+                val ctx = contexts[node]
+
+                // 2. If no context, return clean copy (happy path preserved)
+                if (ctx == null) {
+                    val newChoices = node.choices.map { choice ->
+                        choice.copy(subtree = stitchRecursive(choice.subtree, contexts))
+                    }
+                    return node.copy(choices = newChoices)
                 }
 
-                // Skip if no context (chance node or already stitched)
-                if (node.context == null || node.isChance) {
-                    return node.copy(choices = stitchedChoices)
-                }
-
-                // Hydrate bail branch from stored context
-                val ctx = node.context
-
+                // 3. Hydrate bail branch (error path generated on demand)
                 // Reconstruct FrontierSetup by recomputing legal choices
                 val enabled = ctx.frontier.enabled()
                 val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
@@ -388,7 +417,7 @@ internal class EfgGenerator(val ir: GameIR) {
                 val actionsForRole = actionsByRole.getValue(role)
                 val allParams = actionsForRole.flatMap { ir.dag.params(it) }
                 val bailFrontier = if (allParams.isEmpty()) emptyMap()
-                    else allParametersQuit(ir.dag, role, actionsForRole)
+                else allParametersQuit(ir.dag, role, actionsForRole)
                 val bailSubtree = exploreJointChoices(
                     setup,
                     ctx.roleIndex + 1,
@@ -402,11 +431,12 @@ internal class EfgGenerator(val ir: GameIR) {
                     probability = null
                 )
 
-                // Return stitched node with context removed (release memory)
-                node.copy(
-                    choices = stitchedChoices + bailChoice,
-                    context = null
-                )
+                // Recursively stitch children and add bail branch
+                val stitchedChoices = node.choices.map { choice ->
+                    choice.copy(subtree = stitchRecursive(choice.subtree, contexts))
+                }
+
+                node.copy(choices = stitchedChoices + bailChoice)
             }
         }
     }
@@ -430,7 +460,8 @@ internal class EfgGenerator(val ir: GameIR) {
         setup: FrontierSetup,
         roleIndex: Int,
         jointChoices: FrontierSlice,
-        mode: GenerationMode
+        mode: GenerationMode,
+        contextMap: IdentityHashMap<GameTree.Decision, GeneratorContext>? = null
     ): GameTree {
         // ========== Terminal: All Roles Have Chosen ==========
         if (roleIndex == setup.roleOrder.size) {
@@ -442,7 +473,7 @@ internal class EfgGenerator(val ir: GameIR) {
                 }
 
             val nextFrontier = setup.frontier.resolveEnabled()
-            return exploreFromFrontier(nextFrontier, newState, newKnowledge, mode)
+            return exploreFromFrontier(nextFrontier, newState, newKnowledge, mode, contextMap)
         }
 
         // ========== Current Role Setup ==========
@@ -463,7 +494,7 @@ internal class EfgGenerator(val ir: GameIR) {
         // 1. Explicit choices (non-bail).
         val explicitChoices: List<GameTree.Choice> =
             explicitFrontierChoices.map { frontierDelta ->
-                val subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + frontierDelta, mode)
+                val subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + frontierDelta, mode, contextMap)
                 GameTree.Choice(
                     action = extractActionLabel(frontierDelta, role),
                     subtree = subtree,
@@ -497,7 +528,7 @@ internal class EfgGenerator(val ir: GameIR) {
 
                 val bailChoice = GameTree.Choice(
                     action = emptyMap(), // shows as "Quit" / unlabeled move
-                    subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + bailFrontier, mode),
+                    subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + bailFrontier, mode, contextMap),
                     probability = null,
                 )
 
@@ -515,28 +546,29 @@ internal class EfgGenerator(val ir: GameIR) {
             return allChoices.first().subtree
         }
 
-        // ========== Attach Context for Lazy Bail Generation ==========
-        // In SPINE_ONLY mode, store context at strategic nodes to enable later bail branch stitching
+        // ========== Create Decision Node ==========
+        val decision = GameTree.Decision(
+            owner = role,
+            infosetId = infosetId,
+            choices = allChoices,
+            isChance = isChanceNode
+        )
+
+        // ========== Store Context for Lazy Bail Generation ==========
+        // In SPINE_ONLY mode, store context in external map to enable later bail branch stitching
         // BUT: only if we haven't already added a bail choice (which happens when there are no explicit choices)
-        val contextToStore = if (mode == GenerationMode.SPINE_ONLY && !isChanceNode && explicitWithProb.isNotEmpty()) {
-            GeneratorContext(
+        if (mode == GenerationMode.SPINE_ONLY && !isChanceNode && explicitWithProb.isNotEmpty() && contextMap != null) {
+            val context = GeneratorContext(
                 frontier = setup.frontier,
                 state = setup.state,
                 knowledgeMap = setup.knowledgeMap,
                 roleIndex = roleIndex,
                 jointChoices = jointChoices
             )
-        } else {
-            null
+            contextMap[decision] = context
         }
 
-        return GameTree.Decision(
-            owner = role,
-            infosetId = infosetId,
-            choices = allChoices,
-            isChance = isChanceNode,
-            context = contextToStore
-        )
+        return decision
     }
 
     /**
@@ -560,7 +592,8 @@ internal class EfgGenerator(val ir: GameIR) {
         frontier: FrontierMachine<ActionId>,
         state: State,
         knowledgeMap: KnowledgeMap,
-        mode: GenerationMode
+        mode: GenerationMode,
+        contextMap: IdentityHashMap<GameTree.Decision, GeneratorContext>? = null
     ): GameTree {
         // ========== Check for Terminal Nodes ==========
         if (frontier.isComplete()) {
@@ -595,7 +628,13 @@ internal class EfgGenerator(val ir: GameIR) {
             legalChoicesByRole = legalChoicesByRole
         )
 
-        return exploreJointChoices(setup, roleIndex = 0, jointChoices = emptyMap(), mode = mode)
+        return exploreJointChoices(
+            setup,
+            roleIndex = 0,
+            jointChoices = emptyMap(),
+            mode = mode,
+            contextMap = contextMap
+        )
     }
 
     /**
