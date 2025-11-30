@@ -49,15 +49,12 @@ import vegas.ir.Visibility
  * frontier exploration of the ActionDag and respects its causal partial order.
  */
 fun generateExtensiveFormGame(ir: GameIR): String {
-    val efg = ExtensiveFormGame(
+    return ExtensiveFormGame(
         name = ir.name.ifEmpty { "Game" },
         description = "Generated from ActionDag",
         strategicPlayers = ir.roles,
-        tree = buildTree(ir)
+        tree = GameTreeBuilder(ir)()
     ).toEfg()
-    // This function is not intended to be reentrant
-    InfosetManager.clear()
-    return efg
 }
 
 private typealias FrontierSlice = Map<FieldRef, IrVal>
@@ -109,21 +106,17 @@ private fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierSlice =
  * Manages information set identification and numbering.
  * Key: the full redacted history (Infoset stack) of that role.
  */
-private object InfosetManager {
-    private val perRole: MutableMap<RoleId, MutableMap<Infoset, Int>> = HashMap()
+private class InfosetManager(roles: Set<RoleId>) {
+    private val perRole: Map<RoleId, MutableMap<Infoset, Int>> = roles.associateWith { mutableMapOf() }
 
     private var chanceCounter: Int = 0
-
-    fun clear() {
-        perRole.clear()
-    }
 
     fun getInfosetNumber(role: RoleId, key: Infoset, isChance: Boolean): Int {
         if (isChance) {
             chanceCounter += 1
             return chanceCounter
         }
-        val table = perRole.getOrPut(role) { HashMap() }
+        val table = perRole[role]!!
         return table.getOrPut(key) { table.size } // 0-based is fine; writer will shift if needed
     }
 }
@@ -151,100 +144,6 @@ private fun allParametersQuit(ir: GameIR, role: RoleId, actions: List<ActionId>)
         }
         .toMap()
 
-/**
- * Explore all joint choices by iterating through roles.
- * This is the "role loop" that builds up joint action combinations.
- */
-private fun exploreJointChoices(
-    ir: GameIR,
-    setup: FrontierSetup,
-    roleIndex: Int,
-    jointChoices: FrontierSlice
-): GameTree {
-    // ========== Terminal: All Roles Have Chosen ==========
-    if (roleIndex == setup.roleOrder.size) {
-        // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
-        val newState = Infoset(jointChoices, setup.state)
-        val newKnowledge: KnowledgeMap =
-            setup.knowledgeMap.mapValues { (role, info) ->
-                info with redacted(jointChoices, role)
-            }
-
-        val nextFrontier = setup.frontier.resolveEnabled()
-        return exploreFromFrontier(ir, nextFrontier, newState, newKnowledge)
-    }
-
-    // ========== Current Role Setup ==========
-    val role = setup.roleOrder[roleIndex]
-    val isChanceNode = role in ir.chanceRoles
-    val actionsForRole = setup.actionsByRole.getValue(role)
-    val allParams = actionsForRole.flatMap { ir.dag.params(it) }
-
-    val explicitFrontierChoices: List<FrontierSlice> =
-        setup.legalChoicesByRole.getValue(role)
-
-    // Infoset index is a pure function of what this role currently knows.
-    val infoset = setup.knowledgeMap.getValue(role)
-    val infosetId = InfosetManager.getInfosetNumber(role, infoset, isChanceNode)
-
-    // ========== Build Explicit Choices ==========
-    // 1. Explicit choices (non-bail).
-    val explicitChoices: List<GameTree.Choice> =
-        explicitFrontierChoices.map { frontierDelta ->
-            GameTree.Choice(
-                action = extractActionLabel(frontierDelta, role),
-                subtree = exploreJointChoices(ir, setup, roleIndex + 1, jointChoices + frontierDelta),
-                probability = null, // set below for chance
-            )
-        }
-
-    // ========== Apply Probabilities for Chance Nodes ==========
-    val explicitWithProb =
-        if (isChanceNode)
-            explicitChoices.map {
-                it.copy(probability = Rational(1, explicitChoices.size))
-            }
-        else
-            explicitChoices
-
-    // ========== Add Bail Choice for Strategic Roles ==========
-    // 2. Bail choice for strategic roles (None on all params).
-    val allChoices: List<GameTree.Choice> =
-        if (isChanceNode) {
-            explicitWithProb
-        } else {
-            val bailFrontier =
-                if (allParams.isEmpty()) emptyMap()
-                else allParametersQuit(ir, role, actionsForRole)
-
-            val bailChoice = GameTree.Choice(
-                action = emptyMap(), // shows as "Quit" / unlabeled move
-                subtree = exploreJointChoices(ir, setup, roleIndex + 1, jointChoices + bailFrontier),
-                probability = null,
-            )
-
-            explicitWithProb + bailChoice
-        }
-
-    if (allChoices.isEmpty()) {
-        throw StaticError("No choices for role $role at frontier")
-    }
-
-    // ========== Handle Structural Frontiers (No-Op) ==========
-    // Structural frontier: this role has no parameters at all here.
-    // No real decision -> no node; just pick the (unique) subtree.
-    if (allParams.isEmpty()) {
-        return allChoices.first().subtree
-    }
-
-    // ========== Create Decision Node ==========
-    return GameTree.Decision(
-        owner = role,
-        infosetId = infosetId,
-        choices = allChoices,
-        isChance = isChanceNode,
-    )
-}
 
 private fun combinePacketsIntoFrontier(
     roleToActionId: (ActionId)-> RoleId,
@@ -372,54 +271,153 @@ private fun enumeratePacketsForAction(
     }
 }
 
-private fun exploreFromFrontier(
-    ir: GameIR,
-    frontier: FrontierMachine<ActionId>,
-    state: State,
-    knowledgeMap: KnowledgeMap,
-): GameTree {
-    // ========== Check for Terminal Nodes ==========
-    if (frontier.isComplete()) {
-        val pay = ir.payoffs.mapValues { (_, e) -> eval(state, e).toOutcome() }
-        return GameTree.Terminal(pay)
-    }
+private class GameTreeBuilder(val ir: GameIR) {
+    val infosetManager = InfosetManager(ir.roles)
 
-    val enabled: Set<ActionId> = frontier.enabled()
-    require(enabled.isNotEmpty()) {
-        "Frontier has no enabled actions but is not complete"
-    }
+    /**
+     * Explore all joint choices by iterating through roles.
+     * This is the "role loop" that builds up joint action combinations.
+     */
+    private fun exploreJointChoices(
+        setup: FrontierSetup,
+        roleIndex: Int,
+        jointChoices: FrontierSlice
+    ): GameTree {
+        // ========== Terminal: All Roles Have Chosen ==========
+        if (roleIndex == setup.roleOrder.size) {
+            // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
+            val newState = Infoset(jointChoices, setup.state)
+            val newKnowledge: KnowledgeMap =
+                setup.knowledgeMap.mapValues { (role, info) ->
+                    info with redacted(jointChoices, role)
+                }
 
-    // ========== Group Actions by Role ==========
-    // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
-    val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
-    val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
-
-    // ========== Precompute Legal Choices ==========
-    // Precompute legal explicit packets per role under the same snapshot state.
-    val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
-        actionsByRole.mapValues { (role, actions) ->
-            enumerateRoleFrontierChoices(ir.dag, role, actions, state, knowledgeMap.getValue(role))
+            val nextFrontier = setup.frontier.resolveEnabled()
+            return exploreFromFrontier(nextFrontier, newState, newKnowledge)
         }
 
-    // ========== Explore All Joint Choices ==========
-    val setup = FrontierSetup(
-        frontier = frontier,
-        state = state,
-        knowledgeMap = knowledgeMap,
-        actionsByRole = actionsByRole,
-        roleOrder = roleOrder,
-        legalChoicesByRole = legalChoicesByRole
-    )
+        // ========== Current Role Setup ==========
+        val role = setup.roleOrder[roleIndex]
+        val isChanceNode = role in ir.chanceRoles
 
-    return exploreJointChoices(ir, setup, roleIndex = 0, jointChoices = emptyMap())
-}
+        // Infoset index is a pure function of what this role currently knows.
+        val infoset = setup.knowledgeMap.getValue(role)
+        val infosetId = infosetManager.getInfosetNumber(role, infoset, isChanceNode)
 
-private fun buildTree(ir: GameIR): GameTree {
-    val frontier = FrontierMachine.from(ir.dag)
-    val initialState = Infoset()
-    val initialKnowledge: KnowledgeMap =
-        (ir.roles + ir.chanceRoles).associateWith { Infoset() }
-    return exploreFromFrontier(ir, frontier, initialState, initialKnowledge)
+        val actionsForRole = setup.actionsByRole.getValue(role)
+        val allParams = actionsForRole.flatMap { ir.dag.params(it) }
+
+        val explicitFrontierChoices: List<FrontierSlice> =
+            setup.legalChoicesByRole.getValue(role)
+
+        // ========== Build Explicit Choices ==========
+        // 1. Explicit choices (non-bail).
+        val explicitChoices: List<GameTree.Choice> =
+            explicitFrontierChoices.map { frontierDelta ->
+                val subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + frontierDelta)
+                GameTree.Choice(
+                    action = extractActionLabel(frontierDelta, role),
+                    subtree = subtree,
+                    probability = null,
+                )
+            }
+
+        // ========== Apply Probabilities for Chance Nodes ==========
+        val explicitWithProb =
+            if (isChanceNode)
+                explicitChoices.map {
+                    it.copy(probability = Rational(1, explicitChoices.size))
+                }
+            else
+                explicitChoices
+
+        // ========== Add Bail Choice for Strategic Roles ==========
+        // 2. Bail choice for strategic roles (None on all params).
+        val allChoices: List<GameTree.Choice> =
+            if (isChanceNode) {
+                explicitWithProb
+            } else {
+                val bailFrontier =
+                    if (allParams.isEmpty()) emptyMap()
+                    else allParametersQuit(ir, role, actionsForRole)
+
+                val bailChoice = GameTree.Choice(
+                    action = emptyMap(), // shows as "Quit" / unlabeled move
+                    subtree = exploreJointChoices(setup, roleIndex + 1, jointChoices + bailFrontier),
+                    probability = null,
+                )
+
+                explicitWithProb + bailChoice
+            }
+
+        if (allChoices.isEmpty()) {
+            throw StaticError("No choices for role $role at frontier")
+        }
+
+        // ========== Handle Structural Frontiers (No-Op) ==========
+        // Structural frontier: this role has no parameters at all here.
+        // No real decision -> no node; just pick the (unique) subtree.
+        if (allParams.isEmpty()) {
+            return allChoices.first().subtree
+        }
+
+        // ========== Create Decision Node ==========
+        return GameTree.Decision(
+            owner = role,
+            infosetId = infosetId,
+            choices = allChoices,
+            isChance = isChanceNode,
+        )
+    }
+
+    private fun exploreFromFrontier(
+        frontier: FrontierMachine<ActionId>,
+        state: State,
+        knowledgeMap: KnowledgeMap,
+    ): GameTree {
+        // ========== Check for Terminal Nodes ==========
+        if (frontier.isComplete()) {
+            val pay = ir.payoffs.mapValues { (_, e) -> eval(state, e).toOutcome() }
+            return GameTree.Terminal(pay)
+        }
+
+        val enabled: Set<ActionId> = frontier.enabled()
+        require(enabled.isNotEmpty()) {
+            "Frontier has no enabled actions but is not complete"
+        }
+
+        // ========== Group Actions by Role ==========
+        // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
+        val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
+        val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
+
+        // ========== Precompute Legal Choices ==========
+        // Precompute legal explicit packets per role under the same snapshot state.
+        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>> =
+            actionsByRole.mapValues { (role, actions) ->
+                enumerateRoleFrontierChoices(ir.dag, role, actions, state, knowledgeMap.getValue(role))
+            }
+
+        // ========== Explore All Joint Choices ==========
+        val setup = FrontierSetup(
+            frontier = frontier,
+            state = state,
+            knowledgeMap = knowledgeMap,
+            actionsByRole = actionsByRole,
+            roleOrder = roleOrder,
+            legalChoicesByRole = legalChoicesByRole
+        )
+
+        return exploreJointChoices(setup, roleIndex = 0, jointChoices = emptyMap())
+    }
+
+    operator fun invoke(): GameTree {
+        val frontier = FrontierMachine.from(ir.dag)
+        val initialState = Infoset()
+        val initialKnowledge: KnowledgeMap =
+            (ir.roles + ir.chanceRoles).associateWith { Infoset() }
+        return exploreFromFrontier( frontier, initialState, initialKnowledge)
+    }
 }
 
 // Label only this role's non-Quit fields.
