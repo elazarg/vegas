@@ -4,7 +4,6 @@ import vegas.Rational
 import vegas.RoleId
 import vegas.VarId
 
-
 /**
  * Main class for extensive form game generation.
  */

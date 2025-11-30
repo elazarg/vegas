@@ -556,8 +556,8 @@ class GambitSemanticTest : FreeSpec({
             checkForContinuations(tree)
             hasContinuations shouldBe true
 
-            // Now expand with FULL_VERIFICATION to hydrate bail branches
-            gen.expand(tree, vegas.backend.gambit.EfgGenerator.FULL_VERIFICATION)
+            // Now expand with FULL_EXPANSION to hydrate bail branches
+            gen.expand(tree, vegas.backend.gambit.EfgGenerator.FULL_EXPANSION)
 
             // After expansion, should have no Continuation nodes
             hasContinuations = false

@@ -100,7 +100,7 @@ fun interface ExpansionPolicy {
  */
 fun generateExtensiveFormGame(ir: GameIR, happyOnly: Boolean = false): String {
     val gen = EfgGenerator(ir)
-    val policy = if (happyOnly) EfgGenerator.FAIR_PLAY else EfgGenerator.FULL_VERIFICATION
+    val policy = if (happyOnly) EfgGenerator.FAIR_PLAY else EfgGenerator.FULL_EXPANSION
     val frontier = FrontierMachine.from(ir.dag)
     val initialState = Infoset()
     val initialKnowledge: KnowledgeMap = (ir.roles + ir.chanceRoles).associateWith { Infoset() }
@@ -409,7 +409,7 @@ internal class EfgGenerator(val ir: GameIR) {
         val FAIR_PLAY: ExpansionPolicy = ExpansionPolicy { _, action -> action != null }
 
         /**
-         * FULL_VERIFICATION: Expand everything including bail branches.
+         * FULL_EXPANSION: Expand everything including bail branches.
          *
          * Produces the complete game tree with all possible paths:
          * - Used for game-theoretic verification
@@ -417,7 +417,7 @@ internal class EfgGenerator(val ir: GameIR) {
          * - Equivalent to old FULL_EXPANSION mode
          * - WARNING: Exponentially larger trees
          */
-        val FULL_VERIFICATION: ExpansionPolicy = ExpansionPolicy { _, _ -> true }
+        val FULL_EXPANSION: ExpansionPolicy = ExpansionPolicy { _, _ -> true }
 
         /**
          * SKELETON: Defer everything, create minimal tree structure.
@@ -425,7 +425,6 @@ internal class EfgGenerator(val ir: GameIR) {
          * Produces a tree with all branches suspended:
          * - Useful for analyzing game structure without generating full tree
          * - Can selectively expand interesting branches
-         * - NEW capability not possible with old architecture
          */
         val SKELETON: ExpansionPolicy = ExpansionPolicy { _, _ -> false }
     }
@@ -447,13 +446,13 @@ internal class EfgGenerator(val ir: GameIR) {
      *
      * **Mutation**: This modifies the tree in-place via Choice.subtree (var).
      *
-     * **Use case**: Start with FAIR_PLAY tree (no bail), then call expand(tree, FULL_VERIFICATION)
+     * **Use case**: Start with FAIR_PLAY tree (no bail), then call expand(tree, FULL_EXPANSION)
      * to add bail branches on demand.
      *
      * @param node Root of the subtree to expand
      * @param policy Expansion policy determining which Continuations to hydrate
      */
-    fun expand(node: GameTree, policy: ExpansionPolicy = FULL_VERIFICATION) {
+    fun expand(node: GameTree, policy: ExpansionPolicy = FULL_EXPANSION) {
         when (node) {
             is GameTree.Terminal -> {
                 // Terminal nodes have no children to expand
