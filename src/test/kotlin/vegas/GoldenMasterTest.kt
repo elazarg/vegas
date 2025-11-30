@@ -15,8 +15,10 @@ import java.io.File
 
 data class Example(
     val name: String,
-    val disableBackend: Set<String> = emptySet(),
-)
+    val disableBackend: Set<String> = emptySet()
+) {
+    override fun toString() = name
+}
 
 data class TestCase(
     val example: Example,
@@ -64,7 +66,7 @@ class GoldenMasterTest : FreeSpec({
 
     "Golden Master Tests" - {
         "Test all examples against golden masters" - {
-            withData(testCases) { testCase ->
+            withData(nameFn = { it.toString() },testCases) { testCase ->
                 val goldenFile = getGoldenFile(testCase)
 
                 try {

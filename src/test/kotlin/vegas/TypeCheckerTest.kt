@@ -139,7 +139,7 @@ class TypeCheckerTest : FreeSpec({
         "should accept valid primitive types" - {
             data class ValidCase(val prog: GameAst, val description: String)
 
-            withData(
+            withData(nameFn = { it.toString() },
                 ValidCase(
                     B.program(B.join(P), B.yieldTo(P, listOf(B.i("x")))),
                     "integer parameter"
@@ -179,7 +179,7 @@ class TypeCheckerTest : FreeSpec({
         "should reject type mismatches in basic expressions" - {
             data class TypeMismatchCase(val prog: GameAst, val expectedError: String)
 
-            withData(
+            withData(nameFn = { it.toString() },
                 TypeMismatchCase(
                     B.program(
                         B.join(P),
@@ -230,7 +230,7 @@ class TypeCheckerTest : FreeSpec({
     "Type System - Custom Types" - {
 
         "should handle finite set types correctly" - {
-            withData(
+            withData(nameFn = { it.toString() },
                 // type door = {0,1,2}; join P(); yield P(d: door)
                 B.program(
                     types = mapOf(TypeId("door") to Subset(setOf(B.n(0), B.n(1), B.n(2)))),
@@ -260,7 +260,7 @@ class TypeCheckerTest : FreeSpec({
         }
 
         "should handle range types correctly" - {
-            withData(
+            withData(nameFn = { it.toString() },
                 B.program(
                     types = mapOf(TypeId("digit") to Range(B.n(0), B.n(9))),
                     B.join(P),
@@ -327,7 +327,7 @@ class TypeCheckerTest : FreeSpec({
     "Type System - Hidden Types" - {
 
         "should handle hidden type declarations" - {
-            withData(
+            withData(nameFn = { it.toString() },
                 // join H(); yield H(secret: hidden int)
                 B.program(
                     B.join(H),
@@ -480,7 +480,7 @@ class TypeCheckerTest : FreeSpec({
         "arithmetic operators require integers" - {
             data class ArithmeticCase(val expr: Exp, val valid: Boolean)
 
-            withData(
+            withData(nameFn = { it.toString() },
                 ArithmeticCase(B.n(5) plus B.n(3), true),
                 ArithmeticCase(B.n(10) minus B.n(7), true),
                 ArithmeticCase(B.n(4) times B.n(2), true),
@@ -977,7 +977,7 @@ class TypeCheckerTest : FreeSpec({
                 val expectedKeywords: List<String>
             )
 
-            withData(
+            withData(nameFn = { it.toString() },
                 ErrorMessageCase(
                     B.program(
                         B.join(P),
