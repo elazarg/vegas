@@ -64,11 +64,26 @@ internal sealed class GameTree {
     ) : GameTree()
 
     /**
+     * Represents a suspended subtree where generation was deferred by policy.
+     *
+     * The context captures the minimal state needed to resume generation:
+     * - Frontier machine state
+     * - Game state (Infoset stack)
+     * - Per-role knowledge (KnowledgeMap)
+     * - Position in role iteration
+     * - Accumulated joint choices
+     * - Role + ActionId that led here (for policy re-evaluation)
+     *
+     * @property context Hydration context for resuming generation
+     */
+    data class Continuation(val context: GeneratorContext) : GameTree()
+
+    /**
      * A single choice/action with its outcome.
      */
     data class Choice(
         val action: Map<VarId, IrVal>,
-        val subtree: GameTree,
+        var subtree: GameTree,  // Mutable for in-place expansion via expand()
         val probability: Rational? = null  // Only for chance nodes
     )
 }
