@@ -4,6 +4,9 @@ import vegas.Rational
 import vegas.RoleId
 import vegas.VarId
 
+private const val EFG_VERSION = "EFG 2 R"
+private const val EMPTY_NAME = "\"\""
+private const val QUIT_ACTION = "Quit"
 
 /**
  * Writes game trees in Gambit's EFG format with proper formatting.
@@ -11,8 +14,9 @@ import vegas.VarId
 internal class EfgWriter(
     private val gameName: String,
     private val gameDescription: String,
-    private val players: Set<RoleId>
+    players: Set<RoleId>
 ) {
+    private val playerList = players.toList()
     private var outcomeCounter = 1
     private val infosetIdNormalized: MutableMap<RoleId, MutableMap<Int, Int>> = mutableMapOf()
 
@@ -24,9 +28,9 @@ internal class EfgWriter(
     }
 
     private fun buildHeader(): String {
-        val playerList = players.joinToString(" ") { "\"${it.name}\"" }
-        return """EFG 2 R "$gameName" { $playerList }
-"$gameDescription""""
+        val playerNames = playerList.joinToString(" ") { "\"${it.name}\"" }
+        return """$EFG_VERSION "$gameName" { $playerNames }
+            |"$gameDescription"""".trimMargin()
     }
 
     private fun writeTree(tree: GameTree): List<String> {
@@ -38,11 +42,11 @@ internal class EfgWriter(
 
     private fun writeDecision(node: GameTree.Decision): List<String> {
         val nodeType = if (node.isChance) "c" else "p"
-        val nodeName = "\"\""
-        val owner = if (node.isChance) "" else players.indexOf(node.owner) + 1
+        val nodeName = EMPTY_NAME
+        val owner = if (node.isChance) "" else playerList.indexOf(node.owner) + 1
         val infosetMap = infosetIdNormalized.getOrPut(node.owner) { mutableMapOf() }
         val infosetNum = infosetMap.getOrPut(node.infosetId) { infosetMap.size + 1 }
-        val infosetName = "\"\""
+        val infosetName = EMPTY_NAME
 
         val actions = node.choices.joinToString(" ") { choice ->
             val actionName = formatActionName(choice.action)
@@ -57,17 +61,17 @@ internal class EfgWriter(
     }
 
     private fun writeTerminal(node: GameTree.Terminal): String {
-        val nodeName = "\"\""
+        val nodeName = EMPTY_NAME
         val outcomeNum = outcomeCounter++
-        val outcomeName = "\"\""
-        val payoffs = players.joinToString(" ") { role ->
+        val outcomeName = EMPTY_NAME
+        val payoffs = playerList.joinToString(" ") { role ->
             formatValue(node.payoffs[role] ?: IrVal.IntVal(0))
         }
         return "t $nodeName $outcomeNum $outcomeName { $payoffs }"
     }
 
     private fun formatActionName(action: Map<VarId, IrVal>): String {
-        if (action.isEmpty()) return "Quit"
+        if (action.isEmpty()) return QUIT_ACTION
         return action.values.joinToString("&") { formatValue(it) }
     }
 
@@ -76,7 +80,7 @@ internal class EfgWriter(
         is IrVal.IntVal -> const.v.toString()
         is IrVal.Hidden -> "Hidden(${formatValue(const.inner)})"
         IrVal.Opaque -> "Opaque"
-        IrVal.Quit -> "Quit"
+        IrVal.Quit -> QUIT_ACTION
     }
 
     private fun formatRational(r: Rational): String {

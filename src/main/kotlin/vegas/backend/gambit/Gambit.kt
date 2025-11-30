@@ -5,8 +5,6 @@ import vegas.RoleId
 import vegas.VarId
 
 
-internal typealias OutcomeType = IrVal
-
 /**
  * Main class for extensive form game generation.
  */
@@ -62,7 +60,7 @@ internal sealed class GameTree {
      * A terminal node with payoffs.
      */
     data class Terminal(
-        val payoffs: Map<RoleId, OutcomeType>
+        val payoffs: Map<RoleId, IrVal>
     ) : GameTree()
 
     /**

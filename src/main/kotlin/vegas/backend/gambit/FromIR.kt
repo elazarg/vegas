@@ -1,3 +1,31 @@
+/**
+ * # Gambit EFG Backend
+ *
+ * This package converts Vegas ActionDag IR into Gambit's Extensive Form Game (EFG) format.
+ *
+ * ## Architecture
+ *
+ * **Pipeline**: `GameIR -> GameTree -> EFG String`
+ *
+ * 1. **Eval.kt** - Expression evaluation with IrVal runtime values
+ * 2. **GameState.kt** - State representation (FrontierSlice, Infoset) for perfect recall
+ * 3. **FromIR.kt** - Main algorithm: IR -> GameTree conversion via frontier exploration
+ * 4. **Gambit.kt** - Game tree data structure (Decision/Terminal nodes)
+ * 5. **ToText.kt** - EFG text format serialization
+ *
+ * ## Key Concepts
+ *
+ * - **Frontier-based exploration**: Each frontier becomes a simultaneous-move round
+ * - **Perfect recall**: Information sets keyed by complete redacted history (Infoset stack)
+ * - **Commit/Reveal**: Information hiding via Hidden -> Opaque transformation
+ * - **Epistemic layering**: Each frontier slice represents one layer of observations
+ *
+ * ## Entry Point
+ *
+ * ```kotlin
+ * generateExtensiveFormGame(ir: GameIR): String
+ * ```
+ */
 package vegas.backend.gambit
 
 import vegas.FieldRef
@@ -56,51 +84,6 @@ fun generateExtensiveFormGame(ir: GameIR): String {
     ).toEfg()
 }
 
-private typealias FrontierSlice = Map<FieldRef, IrVal>
-
-/**
- * Visible snapshot to 'who' at a given frontier: others' Hidden appear as Opaque.
- * Bail/abandonment is represented by IrVal.Quit and is never hidden.
- */
-private fun redacted(messages: FrontierSlice, who: RoleId): FrontierSlice =
-    messages.mapValues { (fieldRef, v) ->
-        val (r, _) = fieldRef
-        if (r == who) {
-            if (v is IrVal.Hidden) v.inner else v
-        } else when (v) {
-            is IrVal.Hidden -> IrVal.Opaque  // Others see that commitment happened, not the value
-            else -> v  // Quit (bail) and other values pass through
-        }
-    }
-
-/**
- * A stack of frontier maps. This plays a dual role:
- *  - as the global heap of concrete writes (State),
- *  - as each player's redacted knowledge state.
- */
-internal data class Infoset(
-    val lastFrontier: FrontierSlice = emptyMap(),
-    val past: Infoset? = null,
-) {
-    fun get(f: FieldRef): IrVal =
-        lastFrontier[f] ?: (past?.get(f) ?: IrVal.Quit)
-
-    infix fun with(newFrontier: FrontierSlice): Infoset =
-        Infoset(newFrontier, this)
-}
-
-private typealias State = Infoset
-private typealias KnowledgeMap = Map<RoleId, Infoset>
-
-/** Has this role ever written Quit (i.e., bailed) along this history? */
-private fun Infoset.quit(role: RoleId): Boolean =
-    lastFrontier.any { (field, v) -> field.role == role && v == IrVal.Quit } ||
-            (past?.quit(role) ?: false)
-
-/** Helper to build a FrontierSlice from role + packet over variables. */
-private fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierSlice =
-    pkt.mapKeys { (v, _) -> FieldRef(role, v) }
-
 /**
  * Manages information set identification and numbering during game tree construction.
  *
@@ -149,7 +132,7 @@ private fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<Action
  * @param roleToActionId Function to look up which role owns an action
  * @param actions List of action IDs in the frontier
  * @param packets Corresponding parameter assignments for each action
- * @return Unified frontier slice mapping FieldRef → IrVal
+ * @return Unified frontier slice mapping FieldRef -> IrVal
  */
 private fun combinePacketsIntoFrontier(
     roleToActionId: (ActionId) -> RoleId,

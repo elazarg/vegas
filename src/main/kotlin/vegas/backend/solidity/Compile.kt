@@ -280,7 +280,7 @@ private fun buildDagGameStorage(
     /*  Game state storage (per-field), derived from ActionDag                */
     /* ---------------------------------------------------------------------- */
 
-    // 1) Which roles ever have a join step? → per-role "joined" flag.
+    // 1) Which roles ever have a join step? -> per-role "joined" flag.
     val rolesWithJoin = mutableSetOf<RoleId>()
     dag.metas.forEach { meta ->
         if (meta.spec.join != null) {
@@ -291,7 +291,7 @@ private fun buildDagGameStorage(
         add(StorageDecl(SolType.Bool, Visibility.PUBLIC, roleDone(role)))
     }
 
-    // 2) Compute field → type, based on action parameters.
+    // 2) Compute field -> type, based on action parameters.
     val fieldTypes = mutableMapOf<FieldRef, Type>()
     dag.metas.forEach { meta ->
         val role = meta.struct.role
@@ -760,7 +760,7 @@ internal fun translateIrExpr(
         }
     }
 
-    // isDefined(field) → use the clear done-flag
+    // isDefined(field) -> use the clear done-flag
     is Expr.IsDefined -> {
         val (role, param) = expr.field
         v(doneFlag(role, param, hidden = false))
