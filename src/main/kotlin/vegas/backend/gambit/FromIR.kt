@@ -53,7 +53,7 @@ fun generateExtensiveFormGame(ir: GameIR): String {
         name = ir.name.ifEmpty { "Game" },
         description = "Generated from ActionDag",
         strategicPlayers = ir.roles,
-        tree = GameTreeBuilder(ir)()
+        tree = GameTreeBuilder.build(ir)
     ).toEfg()
 }
 
@@ -103,8 +103,19 @@ private fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierSlice =
     pkt.mapKeys { (v, _) -> FieldRef(role, v) }
 
 /**
- * Manages information set identification and numbering.
- * Key: the full redacted history (Infoset stack) of that role.
+ * Manages information set identification and numbering during game tree construction.
+ *
+ * **Strategic players**: Information sets are identified by the player's complete redacted
+ * knowledge history (stack of frontier slices they observed). The first time a particular
+ * history is seen, it's assigned a new infoset number. Perfect recall is maintained because
+ * the history captures everything the player has observed.
+ *
+ * **Chance nodes**: Each chance decision receives a unique sequential number, as chance
+ * nodes don't have information sets in the game-theoretic sense.
+ *
+ * This is mutable state intended to be scoped to a single game tree build.
+ *
+ * @param roles Set of strategic player role IDs (chance roles excluded)
  */
 private class InfosetManager(roles: Set<RoleId>) {
     private val perRole: Map<RoleId, MutableMap<Infoset, Int>> = roles.associateWith { mutableMapOf() }
@@ -116,37 +127,33 @@ private class InfosetManager(roles: Set<RoleId>) {
             chanceCounter += 1
             return chanceCounter
         }
-        val table = perRole[role]!!
+        val table = perRole.getValue(role)
         return table.getOrPut(key) { table.size } // 0-based is fine; writer will shift if needed
     }
 }
 
 /**
- * Captures the frontier-level setup: what actions are enabled,
- * grouped by role, and what choices each role has.
+* Create a frontier slice where all parameters of the given actions are set to [IrVal.Quit].
+* This represents the "bail" choice where a strategic player opts out of all actions at a frontier.
+*/
+private fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierSlice =
+    actions.flatMap { actionId ->
+        dag.params(actionId).map { FieldRef(role, it.name) to IrVal.Quit }
+    }.toMap()
+
+/**
+ * Combine per-action parameter packets into a unified frontier slice.
+ *
+ * Takes a list of actions and corresponding packets (maps from parameter name to value),
+ * and combines them into a single frontier slice (map from FieldRef to value).
+ *
+ * @param roleToActionId Function to look up which role owns an action
+ * @param actions List of action IDs in the frontier
+ * @param packets Corresponding parameter assignments for each action
+ * @return Unified frontier slice mapping FieldRef → IrVal
  */
-private data class FrontierSetup(
-    val frontier: FrontierMachine<ActionId>,
-    val state: State,
-    val knowledgeMap: KnowledgeMap,
-    val actionsByRole: Map<RoleId, List<ActionId>>,
-    val roleOrder: List<RoleId>,
-    val legalChoicesByRole: Map<RoleId, List<FrontierSlice>>,
-)
-
-
-private fun allParametersQuit(ir: GameIR, role: RoleId, actions: List<ActionId>): FrontierSlice =
-    actions
-        .flatMap { actionId ->
-            ir.dag.params(actionId).map { p ->
-                FieldRef(role, p.name) to IrVal.Quit
-            }
-        }
-        .toMap()
-
-
 private fun combinePacketsIntoFrontier(
-    roleToActionId: (ActionId)-> RoleId,
+    roleToActionId: (ActionId) -> RoleId,
     actions: List<ActionId>,
     packets: List<Map<VarId, IrVal>>
 ): FrontierSlice {
@@ -192,7 +199,7 @@ private fun enumerateRoleFrontierChoices(
     val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionPackets)
 
     return combinations.map { pktList ->
-        combinePacketsIntoFrontier({ dag.struct(it).role },  actions,pktList)
+        combinePacketsIntoFrontier({ dag.struct(it).role }, actions, pktList)
     }
 }
 
@@ -271,12 +278,64 @@ private fun enumeratePacketsForAction(
     }
 }
 
-private class GameTreeBuilder(val ir: GameIR) {
+/**
+ * Builds an extensive-form game tree from ActionDag IR via frontier exploration.
+ *
+ * The construction proceeds in two nested loops:
+ * - **Frontier loop** ([exploreFromFrontier]): Advances through DAG frontiers sequentially.
+ *   Each frontier represents a simultaneous-move round in the game.
+ * - **Role loop** ([exploreJointChoices]): Within each frontier, enumerates all possible
+ *   joint action combinations by iterating through roles in deterministic order.
+ *
+ * These two methods are mutually recursive:
+ * - When all roles have chosen at a frontier, commit the joint choice and advance to the next frontier
+ * - When exploring a frontier, enumerate each role's choices and recurse on the next role
+ *
+ * The class structure (rather than nested functions) enables this mutual recursion while
+ * maintaining [infosetManager] as scoped mutable state local to the tree build.
+ *
+ * **Usage**: Call [build] to construct a game tree:
+ * ```
+ * val tree = GameTreeBuilder.build(ir)
+ * ```
+ */
+private class GameTreeBuilder private constructor(val ir: GameIR) {
+    /**
+     * Manages information set numbering throughout the tree build.
+     * Each strategic player's infoset is identified by their redacted knowledge history.
+     * Chance nodes receive sequential numbering.
+     */
     val infosetManager = InfosetManager(ir.roles)
 
+    companion object {
+        /**
+         * Build an extensive-form game tree from ActionDag IR.
+         *
+         * @param ir The game intermediate representation containing the action DAG and payoffs
+         * @return The root of the game tree
+         */
+        fun build(ir: GameIR): GameTree {
+            val frontier = FrontierMachine.from(ir.dag)
+            val initialState = Infoset()
+            val initialKnowledge: KnowledgeMap =
+                (ir.roles + ir.chanceRoles).associateWith { Infoset() }
+            return GameTreeBuilder(ir).exploreFromFrontier(frontier, initialState, initialKnowledge)
+        }
+    }
+
     /**
-     * Explore all joint choices by iterating through roles.
-     * This is the "role loop" that builds up joint action combinations.
+     * Enumerate all joint action combinations at the current frontier by iterating through roles.
+     *
+     * This is the **role loop**: for each role in [setup.roleOrder][FrontierSetup.roleOrder],
+     * enumerate their legal choices and recurse to the next role. When all roles have chosen
+     * (roleIndex == roleOrder.size), commit the joint choice and advance to the next frontier.
+     *
+     * **Mutual recursion**: This method calls [exploreFromFrontier] when all roles have chosen.
+     *
+     * @param setup Precomputed frontier context (actions by role, legal choices, etc.)
+     * @param roleIndex Index into [setup.roleOrder][FrontierSetup.roleOrder] of current role
+     * @param jointChoices Accumulated action choices from roles [0, roleIndex)
+     * @return Game subtree rooted at this point
      */
     private fun exploreJointChoices(
         setup: FrontierSetup,
@@ -339,7 +398,7 @@ private class GameTreeBuilder(val ir: GameIR) {
             } else {
                 val bailFrontier =
                     if (allParams.isEmpty()) emptyMap()
-                    else allParametersQuit(ir, role, actionsForRole)
+                    else allParametersQuit(ir.dag, role, actionsForRole)
 
                 val bailChoice = GameTree.Choice(
                     action = emptyMap(), // shows as "Quit" / unlabeled move
@@ -370,6 +429,22 @@ private class GameTreeBuilder(val ir: GameIR) {
         )
     }
 
+    /**
+     * Explore the game tree starting from a given frontier state.
+     *
+     * This is the **frontier loop**: Process one frontier (simultaneous-move round) by:
+     * 1. Checking if we've reached a terminal node (no more frontiers)
+     * 2. Grouping enabled actions by role
+     * 3. Precomputing legal choices for each role under the current state snapshot
+     * 4. Delegating to [exploreJointChoices] to enumerate all joint action combinations
+     *
+     * **Mutual recursion**: [exploreJointChoices] calls this method when a joint choice is committed.
+     *
+     * @param frontier Current frontier machine state (enabled actions)
+     * @param state Global game state (stack of committed frontier slices)
+     * @param knowledgeMap Per-role redacted view of state (for information set construction)
+     * @return Game subtree rooted at this frontier
+     */
     private fun exploreFromFrontier(
         frontier: FrontierMachine<ActionId>,
         state: State,
@@ -411,13 +486,31 @@ private class GameTreeBuilder(val ir: GameIR) {
         return exploreJointChoices(setup, roleIndex = 0, jointChoices = emptyMap())
     }
 
-    operator fun invoke(): GameTree {
-        val frontier = FrontierMachine.from(ir.dag)
-        val initialState = Infoset()
-        val initialKnowledge: KnowledgeMap =
-            (ir.roles + ir.chanceRoles).associateWith { Infoset() }
-        return exploreFromFrontier( frontier, initialState, initialKnowledge)
-    }
+    /**
+     * Frontier-level context computed once and shared across role iteration.
+     *
+     * Captures the setup for a single simultaneous-move round:
+     * - Which actions are enabled and grouped by which role
+     * - What legal choices each role has under the current state snapshot
+     * - The frontier machine state, global state, and per-role knowledge
+     *
+     * This is passed through the role loop ([GameTreeBuilder.exploreJointChoices]) to avoid
+     * recomputing this information for each role.
+     */
+    private data class FrontierSetup(
+        /** Frontier machine tracking which actions are enabled */
+        val frontier: FrontierMachine<ActionId>,
+        /** Global game state (stack of frontier slices) */
+        val state: State,
+        /** Per-role redacted knowledge for information set construction */
+        val knowledgeMap: KnowledgeMap,
+        /** Actions enabled at this frontier, grouped by acting role */
+        val actionsByRole: Map<RoleId, List<ActionId>>,
+        /** Deterministic ordering of roles (alphabetical by name) */
+        val roleOrder: List<RoleId>,
+        /** Precomputed legal choice combinations for each role */
+        val legalChoicesByRole: Map<RoleId, List<FrontierSlice>>,
+    )
 }
 
 // Label only this role's non-Quit fields.
