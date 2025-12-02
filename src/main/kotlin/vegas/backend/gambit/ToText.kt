@@ -40,7 +40,7 @@ internal class EfgWriter(
             is GameTree.Continuation -> {
                 error(
                     "Cannot serialize game tree with unexpanded Continuation nodes. " +
-                    "Call expand() to hydrate all branches before serializing to EFG format."
+                    "Call expand() to expand all branches before serializing to EFG format."
                 )
             }
         }

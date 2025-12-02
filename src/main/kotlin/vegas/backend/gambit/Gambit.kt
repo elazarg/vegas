@@ -67,8 +67,8 @@ internal sealed class GameTree {
      *
      * The context captures the minimal state needed to resume generation:
      * - Frontier machine state
-     * - Game state (Infoset stack)
-     * - Per-role knowledge (KnowledgeMap)
+     * - Game state (History stack)
+     * - Per-role knowledge (HistoryViews)
      * - Position in role iteration
      * - Accumulated joint choices
      * - Role + ActionId that led here (for policy re-evaluation)

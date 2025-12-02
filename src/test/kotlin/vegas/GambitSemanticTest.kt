@@ -9,9 +9,9 @@ import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
 
 const val BAIL_PERSISTENCE = """
-// Test 1.2: Bail persists - once bailed, player is locked out
+// Test 1.2: Abandonment persists - once a player quits, they are locked out
 // Alice has two sequential actions
-// If Alice bails on first, second and third should only offer "None"
+// If Alice quits on first action, second and third should only offer "Quit"
 
 join Alice() $ 100;
 join Bob() $ 100;
@@ -22,7 +22,7 @@ yield Alice(x: bool);
 // Bob acts
 yield Bob(y: bool);
 
-// Alice's second action - if Alice bailed on x, should only have None
+// Alice's second action - if Alice quits on x, should only have None
 yield Alice(z: bool);
 
 withdraw (Alice.x != null && Bob.y != null && Alice.z != null)
@@ -34,7 +34,7 @@ withdraw (Alice.x != null && Bob.y != null && Alice.z != null)
 """
 
 const val CHANCE_NO_BAIL = """
-// Test 1.3: Chance roles cannot bail
+// Test 1.3: Chance roles cannot quit
 // Nature (random role) should not have "None" option
 
 random Nature() $ 0;
@@ -43,7 +43,7 @@ join Alice() $ 100;
 // Nature chooses randomly - should only have {true, false}, no "None"
 yield Nature(coin: bool);
 
-// Alice can see coin and respond (or bail)
+// Alice can see coin and respond (or quit)
 yield Alice(bet: bool);
 
 withdraw (Nature.coin != null && Alice.bet != null)
@@ -66,7 +66,7 @@ join Bob() $ 100;
 yield Alice(secret: hidden bool);
 
 // Bob tries to respond, but cannot see Alice's secret
-// Bob should only be able to bail
+// Bob should only be able to quit
 yield Bob(response: bool);
 
 withdraw (Alice.secret != null && Bob.response != null)
@@ -124,8 +124,8 @@ withdraw (Alice.x != null && Bob.response != null)
 """
 
 const val SIMUL_MIXED = """
-// Test 5.1: Simultaneous actions with mixed bail/non-bail
-// Both players act simultaneously, can bail or not
+// Test 5.1: Simultaneous actions with mixed quit/non-quit
+// Both players act simultaneously, can quit or not
 // Should have all 4 outcome combinations
 
 join Alice() $ 100;
@@ -136,9 +136,9 @@ yield Alice(x: bool) Bob(y: bool);
 
 // Payoffs for all combinations:
 // Both commit: 10, 10
-// Alice commits, Bob bails: -5, 0
-// Alice bails, Bob commits: 0, -5
-// Both bail: 0, 0
+// Alice commits, Bob quits: -5, 0
+// Alice quits, Bob commits: 0, -5
+// Both quit: 0, 0
 
 withdraw (Alice.x != null && Bob.y != null)
     ? { Alice -> 10; Bob -> 10 }
@@ -164,7 +164,7 @@ yield Alice(x: hidden bool);
 
 // Bob tries to use Alice.x
 // Since Alice's ACTUAL write is hidden, Bob should not see it
-// Bob's only option should be to bail
+// Bob's only option should be to quit
 yield Bob(guess: bool);
 
 withdraw (Alice.x != null && Bob.guess != null && Alice.x == Bob.guess)
@@ -179,7 +179,7 @@ withdraw (Alice.x != null && Bob.guess != null && Alice.x == Bob.guess)
  *
  * Tests critical semantic properties that must hold:
  * - Visibility semantics (COMMIT, REVEAL, PUBLIC)
- * - Bail/abandonment mechanics
+ * - Abandonment mechanics
  * - Information set correctness
  * - Guard evaluation with visibility
  *
@@ -208,7 +208,7 @@ class GambitSemanticTest : FreeSpec({
             it.actions.toSet() == setOf("Hidden(true)", "Hidden(false)", "Quit")
         }
 
-    data class InfosetSig(
+    data class HistorySig(
         val player: Int,
         val infoset: Int,
         val actions: Set<String>
@@ -242,12 +242,12 @@ class GambitSemanticTest : FreeSpec({
     fun decisionNodesForPlayer(efg: String, player: Int): List<DecisionNode> =
         parseDecisionNodes(efg).filter { it.player == player }
 
-    fun infosetsForPlayer(efg: String, player: Int): List<InfosetSig> =
+    fun infosetsForPlayer(efg: String, player: Int): List<HistorySig> =
         parseDecisionNodes(efg)
             .filter { it.player == player }
             .groupBy { it.infoset }
             .map { (infoset, nodes) ->
-                InfosetSig(
+                HistorySig(
                     player = player,
                     infoset = infoset,
                     actions = nodes.flatMap { it.actions }.toSet()
@@ -263,13 +263,13 @@ class GambitSemanticTest : FreeSpec({
             //
             // This is primarily a regression test (game compiles without crash).
             // Bob can still make guesses, but he shouldn't have different nodes
-            // based on the hidden value of Alice.x (only based on whether Alice bailed).
+            // based on the hidden value of Alice.x (only based on whether Alice abandoned).
 
             val efg = compileGame(VISIBILITY_ACTUAL_WRITER)
             val bobNodes = decisionNodesForPlayer(efg, 2)
             bobNodes.isNotEmpty() shouldBe true
 
-            // Bob can make choices (he has a full bool menu with bail option)
+            // Bob can make choices (he has a full bool menu with abandonment option)
             bobNodes.hasFullBoolMenu() shouldBe true
 
             // Game should complete without errors
@@ -281,13 +281,13 @@ class GambitSemanticTest : FreeSpec({
 
             // Alice has at least 2 branches (True/False)
             // Bob acts after Alice.
-            val bobInfosets = infosetsForPlayer(efg, 2)
+            val bobHistorys = infosetsForPlayer(efg, 2)
 
             // Bob should have exactly 2 infosets:
             // 1. Alice committed (value hidden, but commitment visible)
-            // 2. Alice bailed (distinct from commitment)
-            // If he saw the committed VALUE, he would have 3+ (true, false, bail).
-            bobInfosets.map { it.infoset }.distinct().size shouldBe 2
+            // 2. Alice abandoned (distinct from commitment)
+            // If he saw the committed VALUE, he would have 3+ (true, false, quit).
+            bobHistorys.map { it.infoset }.distinct().size shouldBe 2
         }
 
         "COMMIT visibility - owner sees own commits" {
@@ -318,10 +318,10 @@ class GambitSemanticTest : FreeSpec({
             val bobNodes = decisionNodesForPlayer(efg, 2)
             bobNodes.isNotEmpty() shouldBe true
 
-            val bobInfosets = infosetsForPlayer(efg, 2)
+            val bobHistorys = infosetsForPlayer(efg, 2)
 
             // Bob should have at least 2 distinct infosets (different revealed values)
-            (bobInfosets.map { it.infoset }.distinct().size >= 2) shouldBe true
+            (bobHistorys.map { it.infoset }.distinct().size >= 2) shouldBe true
 
             // At least one infoset has full choice set {true, false, None}
             bobNodes.hasFullBoolMenu() shouldBe true
@@ -331,34 +331,34 @@ class GambitSemanticTest : FreeSpec({
         }
     }
 
-    "Bail/Griefing Mechanics" - {
+    "Abandonment Mechanics" - {
 
-        "bail persists - once bailed, player is locked out" {
+        "abandonment persists - once abandoned, player is locked out" {
             // Alice has multiple actions: x, then z.
-            // If Alice bails on x, Alice's second decision (z) should only offer "None".
+            // If Alice quits on x, Alice's second decision (z) should only offer "None".
             //
-            // Semantic property: Some nodes with multiple actions, some with only bail.
+            // Semantic property: Some nodes with multiple actions, some can only quit.
 
             val efg = compileGame(BAIL_PERSISTENCE)
             val aliceNodes = decisionNodesForPlayer(efg, 1)
 
             aliceNodes.isNotEmpty() shouldBe true
 
-            // Some node where Alice has multiple actions (before bail)
+            // Some node where Alice has multiple actions (before abandonment)
             aliceNodes.any { it.actions.toSet().size > 1 } shouldBe true
 
-            // Some node where Alice only has bail
+            // Some node where Alice can only quit
             aliceNodes.any { it.actions.toSet() == setOf("Quit") } shouldBe true
 
-            // Terminals with bail penalties
+            // Terminals with abandonment penalties
             efg shouldContain "{ -100"
 
             // Terminals where both players cooperate
             efg shouldContain "{ 10 10 }"
         }
 
-        "chance roles cannot bail" {
-            // Nature (random role) should NOT have "None" as a bail option.
+        "chance roles cannot quit" {
+            // Nature (random role) should NOT have abandonment option.
 
             val efg = compileGame(CHANCE_NO_BAIL)
 
@@ -366,44 +366,44 @@ class GambitSemanticTest : FreeSpec({
             val chanceLines = efg.lines().filter { it.startsWith("c ") }
             chanceLines.isNotEmpty() shouldBe true
             chanceLines.forEach { line ->
-                line shouldNotContain "\"None\""
+                line shouldNotContain "\"Quit\""
             }
 
             // Should have chance nodes with proper outcomes (true/false for boolean)
             chanceLines.any { it.contains("\"true\"") && it.contains("\"false\"") } shouldBe true
         }
 
-        "strategic roles always have bail option" {
+        "strategic roles always have abandonment option" {
             val efg = compileGame(SIMUL_MIXED)
 
-            // Alice (player 1) has bail
+            // Alice (player 1) can quit
             decisionNodesForPlayer(efg, 1).any { "Quit" in it.actions } shouldBe true
 
-            // Bob (player 2) has bail
+            // Bob (player 2) can quit
             decisionNodesForPlayer(efg, 2).any { "Quit" in it.actions } shouldBe true
 
-            // bail-related terminals exist
+            // abandonment-related terminals exist
             efg shouldContain "{ 0 0 }"
         }
 
-        "Public Abandonment - observers distinguish bail from hidden commit" {
+        "Public Abandonment - observers distinguish abandonment from hidden commit" {
             // Re-use COMMIT_NOT_VISIBLE or similar
             val efg = compileGame(COMMIT_NOT_VISIBLE)
 
             // Alice commits (Hidden) OR Bails.
             // Bob acts.
-            val bobInfosets = infosetsForPlayer(efg, 2).map { it.infoset }.distinct()
+            val bobHistorys = infosetsForPlayer(efg, 2).map { it.infoset }.distinct()
 
             // Bob should have exactly 2 infosets:
             // 1. Alice committed (value hidden, so merged into one state)
-            // 2. Alice bailed (publicly visible state)
-            bobInfosets.size shouldBe 2
+            // 2. Alice abandoned (publicly visible state)
+            bobHistorys.size shouldBe 2
         }
     }
 
     "Edge Cases and Robustness" - {
 
-        "simultaneous actions with mixed bail/non-bail" {
+        "simultaneous actions with mixed abandonment/non-abandonment" {
             // Both players act simultaneously.
             // Should have all 4 outcome combinations.
 
@@ -411,13 +411,13 @@ class GambitSemanticTest : FreeSpec({
 
             // Should have terminals for all combinations:
             efg shouldContain "{ 10 10 }"   // Both commit
-            efg shouldContain "{ -5 0 }"    // Alice commits, Bob bails
-            efg shouldContain "{ 0 -5 }"    // Alice bails, Bob commits
-            efg shouldContain "{ 0 0 }"     // Both bail
+            efg shouldContain "{ -5 0 }"    // Alice commits, Bob quits
+            efg shouldContain "{ 0 -5 }"    // Alice quits, Bob commits
+            efg shouldContain "{ 0 0 }"     // Both quit
         }
 
         "payoffs handle undefined values gracefully" {
-            // When players bail, payoff evaluation should not crash.
+            // When players quit, payoff evaluation should not crash.
 
             val efg = compileGame(SIMUL_MIXED)
 
@@ -438,10 +438,10 @@ class GambitSemanticTest : FreeSpec({
 
             val efg = compileGame(OWNER_SEES_COMMIT)
 
-            val aliceInfosets = infosetsForPlayer(efg, 1)
+            val aliceHistorys = infosetsForPlayer(efg, 1)
 
             // Should have at least one infoset
-            aliceInfosets.isNotEmpty() shouldBe true
+            aliceHistorys.isNotEmpty() shouldBe true
         }
 
         "different infosets when visible state differs" {
@@ -451,10 +451,10 @@ class GambitSemanticTest : FreeSpec({
 
             val efg = compileGame(REVEAL_VISIBLE)
 
-            val bobInfosets = infosetsForPlayer(efg, 2)
+            val bobHistorys = infosetsForPlayer(efg, 2)
 
             // Bob should have at least 2 distinct infosets (one per revealed value)
-            (bobInfosets.map { it.infoset }.distinct().size >= 2) shouldBe true
+            (bobHistorys.map { it.infoset }.distinct().size >= 2) shouldBe true
         }
     }
 
@@ -504,7 +504,7 @@ class GambitSemanticTest : FreeSpec({
     }
 
     "Co-inductive expansion" - {
-        "FAIR_PLAY creates trees without bail branches" {
+        "FAIR_PLAY creates trees without abandonment branches" {
             val code = """
                 join Alice() $ 100;
                 join Bob() $ 100;
@@ -514,13 +514,13 @@ class GambitSemanticTest : FreeSpec({
 
             val ast = parseCode(code)
             val ir = compileToIR(ast)
-            val efg = generateExtensiveFormGame(ir, happyOnly = true)
+            val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
 
             // Should have Alice's choice but NO Quit option
             efg shouldNotContain "\"Quit\""
         }
 
-        "expand() hydrates Continuation nodes in-place" {
+        "expand() expands Continuation nodes in-place" {
             val code = """
                 join Alice() $ 100;
                 join Bob() $ 100;
@@ -532,11 +532,11 @@ class GambitSemanticTest : FreeSpec({
             val ast = parseCode(code)
             val ir = compileToIR(ast)
 
-            // Generate FAIR_PLAY tree (defers bail)
+            // Generate FAIR_PLAY tree (defers abandonment)
             val gen = vegas.backend.gambit.EfgGenerator(ir)
             val frontier = vegas.dag.FrontierMachine.from(ir.dag)
-            val initialState = vegas.backend.gambit.Infoset()
-            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.Infoset() }
+            val initialState = vegas.backend.gambit.History()
+            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.History() }
             val tree = gen.exploreFromFrontier(
                 frontier,
                 initialState,
@@ -556,7 +556,7 @@ class GambitSemanticTest : FreeSpec({
             checkForContinuations(tree)
             hasContinuations shouldBe true
 
-            // Now expand with FULL_EXPANSION to hydrate bail branches
+            // Now expand with FULL_EXPANSION to expand abandonment branches
             gen.expand(tree, vegas.backend.gambit.EfgGenerator.FULL_EXPANSION)
 
             // After expansion, should have no Continuation nodes
@@ -564,7 +564,7 @@ class GambitSemanticTest : FreeSpec({
             checkForContinuations(tree)
             hasContinuations shouldBe false
 
-            // Should now be serializable with bail branches
+            // Should now be serializable with abandonment branches
             val efg = vegas.backend.gambit.ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
                 description = "Generated from ActionDag",

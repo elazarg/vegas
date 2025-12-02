@@ -8,11 +8,11 @@ import vegas.VarId
  * A map from field references to values representing one layer of action writes.
  * This is the atomic unit of state update in the frontier-based game tree construction.
  */
-internal typealias FrontierSlice = Map<FieldRef, IrVal>
+internal typealias FrontierAssignmentSlice = Map<FieldRef, IrVal>
 
 /**
  * Visible snapshot to 'who' at a given frontier: others' Hidden appear as Opaque.
- * Bail/abandonment is represented by IrVal.Quit and is never hidden.
+ * Abandonment is represented by IrVal.Quit and is never hidden.
  *
  * This implements the information-hiding semantics:
  * - Own fields: player sees actual values (unwraps Hidden)
@@ -23,14 +23,14 @@ internal typealias FrontierSlice = Map<FieldRef, IrVal>
  * @param who The role for whom this view is being constructed
  * @return Redacted frontier slice as seen by [who]
  */
-internal fun redacted(messages: FrontierSlice, who: RoleId): FrontierSlice =
+internal fun redacted(messages: FrontierAssignmentSlice, who: RoleId): FrontierAssignmentSlice =
     messages.mapValues { (fieldRef, v) ->
         val (r, _) = fieldRef
         if (r == who) {
             if (v is IrVal.Hidden) v.inner else v
         } else when (v) {
             is IrVal.Hidden -> IrVal.Opaque  // Others see that commitment happened, not the value
-            else -> v  // Quit (bail) and other values pass through
+            else -> v  // Quit and other values pass through
         }
     }
 
@@ -47,9 +47,9 @@ internal fun redacted(messages: FrontierSlice, who: RoleId): FrontierSlice =
  * @property lastFrontier The most recent frontier slice
  * @property past The previous state (null for initial empty state)
  */
-internal data class Infoset(
-    val lastFrontier: FrontierSlice = emptyMap(),
-    val past: Infoset? = null,
+internal data class History(
+    val lastFrontier: FrontierAssignmentSlice = emptyMap(),
+    val past: History? = null,
 ) {
     /**
      * Look up a field's value by searching backwards through the history.
@@ -60,31 +60,26 @@ internal data class Infoset(
 
     /**
      * Push a new frontier slice onto the history stack.
-     * Returns a new Infoset with this state as the past.
+     * Returns a new History with this state as the past.
      */
-    infix fun with(newFrontier: FrontierSlice): Infoset =
-        Infoset(newFrontier, this)
+    infix fun with(newFrontier: FrontierAssignmentSlice): History =
+        History(newFrontier, this)
 }
 
 /**
- * Global game state: concrete history of what actually happened.
- */
-internal typealias State = Infoset
-
-/**
  * Per-role knowledge: redacted views of history for information set construction.
- * Each role's knowledge is an Infoset where others' hidden values appear as Opaque.
+ * Each role's knowledge is an History where others' hidden values appear as Opaque.
  */
-internal typealias KnowledgeMap = Map<RoleId, Infoset>
+internal typealias HistoryViews = Map<RoleId, History>
 
 /**
- * Check if a role has ever bailed (written [IrVal.Quit]) anywhere in the history.
- * Once a role bails, they have no more legal choices (they're out of the game).
+ * Check if a role has ever abandoned (written [IrVal.Quit]) anywhere in the history.
+ * Once a role quits, they have no more legal choices (they're out of the game).
  *
  * @param role The role to check
  * @return true if this role has written Quit to any of their fields
  */
-internal fun Infoset.quit(role: RoleId): Boolean =
+internal fun History.quit(role: RoleId): Boolean =
     lastFrontier.any { (field, v) -> field.role == role && v == IrVal.Quit } ||
             (past?.quit(role) ?: false)
 
@@ -96,5 +91,5 @@ internal fun Infoset.quit(role: RoleId): Boolean =
  * @param pkt The packet of parameter assignments
  * @return A frontier slice mapping FieldRef to IrVal
  */
-internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierSlice =
+internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierAssignmentSlice =
     pkt.mapKeys { (v, _) -> FieldRef(role, v) }
