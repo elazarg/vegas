@@ -29,7 +29,7 @@ private object B {
 
     // variables / members
     fun v(name: String) = Var(VarId(name))
-    fun m(role: Role, field: String) = Field(FieldRef(role.id, VarId(field)))
+    fun m(owner: Role, field: String) = Field(FieldRef(owner.id, VarId(field)))
 
     fun not(e: Exp) = UnOp("!", e)
     fun isDef(e: Exp) = UnOp("isDefined", e)

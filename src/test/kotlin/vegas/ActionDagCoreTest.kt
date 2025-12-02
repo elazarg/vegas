@@ -38,7 +38,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -89,7 +89,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -134,7 +134,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -179,7 +179,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -226,7 +226,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -275,7 +275,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = id.first,
+                        owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
                         guardReads = emptySet()
@@ -317,7 +317,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = roleA,
+                        owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.REVEAL),  // Reveal without commit!
                         guardReads = emptySet()
@@ -353,7 +353,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = roleA,
+                        owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.COMMIT),
                         guardReads = emptySet()
@@ -367,7 +367,7 @@ class ActionDagCoreTest : FreeSpec({
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
                     struct = ActionStruct(
-                        role = roleA,
+                        owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.REVEAL),
                         guardReads = emptySet()

@@ -49,9 +49,9 @@ private fun findLatestWriter(
     phases: List<Phase>,
 ): ActionId? {
     for (p in beforePhase - 1 downTo 0) {
-        val sig = phases[p].actions[field.role] ?: continue
+        val sig = phases[p].actions[field.owner] ?: continue
         if (sig.parameters.any { it.name == field.param })
-            return field.role to p
+            return field.owner to p
     }
     return null
 }
@@ -62,10 +62,10 @@ private fun findPriorCommit(
     phases: List<Phase>,
 ): ActionId? {
     for (p in beforePhase - 1 downTo 0) {
-        val sig = phases[p].actions[field.role] ?: continue
+        val sig = phases[p].actions[field.owner] ?: continue
         val param = sig.parameters.find { it.name == field.param }
         if (param != null && !param.visible)
-            return field.role to p
+            return field.owner to p
     }
     return null
 }
@@ -135,7 +135,7 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
             val visibility = buildVisibilityMap(role, pIdx, sig, phases)
 
             val struct = ActionStruct(
-                role = role,
+                owner = role,
                 writes = writes,
                 visibility = visibility,
                 guardReads = guardReads,

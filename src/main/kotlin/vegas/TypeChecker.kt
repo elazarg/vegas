@@ -70,7 +70,7 @@ private object Pretty {
         is Exp.Const.Hidden -> "hidden(${exp(e.value)})"
         Exp.Const.UNDEFINED -> "undefined"
         is Exp.Var -> e.id.name
-        is Exp.Field -> "${e.fieldRef.role}.${e.fieldRef.param}"
+        is Exp.Field -> "${e.fieldRef.owner}.${e.fieldRef.param}"
         is Exp.UnOp -> "${e.op}${paren(exp(e.operand))}"
         is Exp.BinOp -> "(${exp(e.left)} ${e.op} ${exp(e.right)})"
         is Exp.Cond -> "${paren(exp(e.cond))} ? ${exp(e.ifTrue)} : ${exp(e.ifFalse)}"
@@ -126,12 +126,12 @@ private class Checker(
     private val macroEnv: Map<VarId, MacroDec> = emptyMap()
 ) {
 
-    private fun requireRole(role: RoleId, node: Ast) {
-        requireStatic(role in roles, "$role is not a role", node)
+    private fun requireRole(owner: RoleId, node: Ast) {
+        requireStatic(owner in roles, "$owner is not a role", node)
     }
 
     private fun Env<TypeExp>.safeGetValue(f: FieldRef, node: Ast): TypeExp {
-        requireRole(f.role, node)
+        requireRole(f.owner, node)
         try {
             return getValue(f)
         } catch (_: NoSuchElementException) {
@@ -231,7 +231,7 @@ private class Checker(
         // Validate: same-role hidden fields are ok (deferred checking)
         // Other-role hidden fields are NOT ok (use-before-def)
         getReferencedFields(q.where).forEach { fieldRef ->
-            if (newEnv.safeGetValue(fieldRef, q) is Hidden && fieldRef.role != q.role.id) {
+            if (newEnv.safeGetValue(fieldRef, q) is Hidden && fieldRef.owner != q.role.id) {
                 throw StaticError("Where clause uses $fieldRef before it is revealed", q)
             }
         }
