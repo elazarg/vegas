@@ -181,20 +181,13 @@ private class InfosetManager(roles: Set<RoleId>) {
 
 /**
  * Minimal context required to resume generation at a decision point.
- *
- * Memory cost: O(depth) for History stacks + O(1) for other fields.
- * Recomputation cost: Re-deriving legal choices is CPU-intensive but saves RAM.
- *
- * Tradeoff: CPU for RAM (acceptable since RAM is the bottleneck for large trees).
  */
 internal data class GeneratorContext(
     // Minimal history to reconstruct FrontierSetup
     val frontier: FrontierMachine<ActionId>,
-    val history: History,     // History stack (grows with depth)
-    val views: HistoryViews,  // Players' views of the history
+    val history: History,
 
     // Position in role iteration loop
-    val roleIndex: Int,
     val partialFrontierAssignment: FrontierAssignmentSlice,
 
     // Metadata for policy re-evaluation during expand()
@@ -424,6 +417,38 @@ internal class EfgGenerator(val ir: GameIR) {
     private val infosetManager = InfosetManager(ir.roles)
 
     /**
+     * Reconstructs all players' views by replaying the global history stack.
+     *
+     * This is an O(depth * roles) operation, but it allows us to drop 'views'
+     * from GeneratorContext, saving significant memory in large trees.
+     */
+    private fun reconstructViews(globalHistory: History, roles: Set<RoleId>): HistoryViews {
+        // 1. Unwind the stack to get slices in chronological order (Root -> Leaf)
+        val slices = ArrayDeque<FrontierAssignmentSlice>()
+        var curr: History? = globalHistory
+
+        // Assumes History has a 'parent' or 'prev' field and a 'slice' field
+        while (curr != null && curr.past != null) {
+            slices.addFirst(curr.lastFrontier)
+            curr = curr.past
+        }
+
+        // 2. Replay history to build views
+        // Start with empty history for everyone
+        val currentViews = roles.associateWith { History() }.toMutableMap()
+
+        for (slice in slices) {
+            for (role in roles) {
+                val view = currentViews.getValue(role)
+                // Reuse the existing 'redacted' logic used in exploreJointChoices
+                currentViews[role] = view with redacted(slice, role)
+            }
+        }
+
+        return currentViews
+    }
+
+    /**
      * Co-inductively expand Continuation nodes in-place based on a new policy.
      *
      * Walks the game tree and selectively expands deferred branches:
@@ -492,24 +517,49 @@ internal class EfgGenerator(val ir: GameIR) {
      * @return Newly generated game subtree
      */
     private fun resumeGeneration(ctx: GeneratorContext, policy: ExpansionPolicy): GameTree {
-        // Reconstruct frontier setup from stored context
+        // 1. Reconstruct setup (actions, views, etc.)
         val enabled = ctx.frontier.enabled()
         val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
         val roleOrder = actionsByRole.keys.sortedBy { it.name }
+
+        // 2. Reconstruct views from the global history truth
+        val reconstructedViews = reconstructViews(ctx.history, ir.roles + ir.chanceRoles)
+
         val legalChoicesByRole = actionsByRole.mapValues { (role, actions) ->
             enumerateRoleFrontierChoices(
                 ir.dag, role, actions,
-                ctx.history, ctx.views.getValue(role)
+                ctx.history,
+                reconstructedViews.getValue(role) // Use reconstructed view
             )
         }
 
         val setup = FrontierSetup(
-            ctx.frontier, ctx.history, ctx.views,
-            actionsByRole, roleOrder, legalChoicesByRole
+            ctx.frontier,
+            ctx.history,
+            reconstructedViews,
+            actionsByRole,
+            roleOrder,
+            legalChoicesByRole
         )
 
+        // 3. Derive next role index.
+        // Find the first role in the order that:
+        //  a) Has parameters (so it SHOULD be in the map if it acted)
+        //  b) Is NOT in the map (so it hasn't acted yet)
+        // If a role has no params, we skip it (it's "done" by definition).
+        val nextRoleIndex = roleOrder.indexOfFirst { role ->
+            val hasParams = actionsByRole[role]?.any { ir.dag.params(it).isNotEmpty() } == true
+            val hasActed = ctx.partialFrontierAssignment.keys.any { it.owner == role }
+
+            // We stop at the first role that has work to do
+            // but hasn't done it yet.
+            hasParams && !hasActed
+        }
+
+        // Edge Case: If everyone has acted (or no one has params), index is size (terminal state for loop)
+        val effectiveIndex = if (nextRoleIndex == -1) roleOrder.size else nextRoleIndex
         // Resume the role loop where it left off
-        return exploreJointChoices(setup, ctx.roleIndex, ctx.partialFrontierAssignment, policy)
+        return exploreJointChoices(setup, effectiveIndex, ctx.partialFrontierAssignment, policy)
     }
 
     /**
@@ -591,8 +641,6 @@ internal class EfgGenerator(val ir: GameIR) {
                         GeneratorContext(
                             frontier = setup.frontier,
                             history = setup.history,
-                            views = setup.views,
-                            roleIndex = roleIndex + 1,
                             partialFrontierAssignment = partialFrontierAssignment + frontierDelta,
                             role = role,
                             actionId = actionId
