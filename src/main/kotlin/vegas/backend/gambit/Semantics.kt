@@ -7,7 +7,7 @@ import vegas.ir.GameIR
  *
  * Provides the operational semantics independent of tree generation:
  * - [enabledMoves]: Enumerate all legal moves at a configuration
- * - [canCommitFrontier]: Check if τ (frontier commit) is enabled
+ * - [canFinalizeFrontier]: Check if τ (frontier finalization) is enabled
  *
  * Tree generation is a separate concern (unrolling this LTS via TreeUnroller).
  *
@@ -23,7 +23,7 @@ internal class GameSemantics(val ir: GameIR) {
      * Returns moves in deterministic order:
      * 1. Explicit moves for each role (in canonical role order)
      * 2. Quit moves for strategic roles (in canonical role order)
-     * 3. CommitFrontier (if enabled)
+     * 3. FinalizeFrontier (if enabled)
      *
      * **Canonical role order:** Roles sorted alphabetically by name.
      * This ensures deterministic tree generation.
@@ -88,29 +88,29 @@ internal class GameSemantics(val ir: GameIR) {
             }
         }
 
-        // 4. CommitFrontier step
-        if (canCommitFrontier(config)) {
-            moves.add(Label.CommitFrontier)
+        // 4. FinalizeFrontier step
+        if (canFinalizeFrontier(config)) {
+            moves.add(Label.FinalizeFrontier)
         }
 
         return moves
     }
 
     /**
-     * Check if the CommitFrontier (τ) step is enabled.
+     * Check if the FinalizeFrontier (τ) step is enabled.
      *
      * Enabled when:
      * - Frontier is not complete (more actions remain)
      * - Done_Γ = MustAct_Γ (all roles with parameters have acted)
      *
      * **Note:** This is the ONLY condition under which τ is allowed.
-     * TreeUnroller must not synthesize CommitFrontier unconditionally at "end of role loop"
+     * TreeUnroller must not synthesize FinalizeFrontier unconditionally at "end of role loop"
      * - it must check this function to see if τ is actually enabled.
      *
      * @param config The current configuration
-     * @return true if CommitFrontier is enabled, false otherwise
+     * @return true if FinalizeFrontier is enabled, false otherwise
      */
-    fun canCommitFrontier(config: Configuration): Boolean {
+    fun canFinalizeFrontier(config: Configuration): Boolean {
         if (config.isTerminal()) return false
 
         val rolesWithParams = config.rolesWithParams(ir.dag)
@@ -118,5 +118,45 @@ internal class GameSemantics(val ir: GameIR) {
         val done = mustAct.filter { config.hasActed(it) }
 
         return done.toSet() == mustAct.toSet()
+    }
+}
+
+/**
+ * Apply a move label to get the next configuration.
+ *
+ * Transition relation:
+ * - Play(r, δ, tag): Merge δ into partial frontier
+ * - FinalizeFrontier: Commit partial to history and advance frontier
+ *
+ * **IMPORTANT:**
+ * - Use the existing `history with slice` operation from GameState.kt (not custom stack logic)
+ * - Rely on the no-overlapping-writes invariant for `partial + delta`
+ * - The no-overlapping-writes invariant ensures partial.keys and delta.keys are disjoint
+ *
+ * @param config The current configuration
+ * @param label The move to apply
+ * @return The next configuration
+ */
+internal fun GameSemantics.applyMove(config: Configuration, label: Label): Configuration {
+    return when (label) {
+        is Label.Play -> {
+            // next configuration is (frontier, history, partial ⊎ delta)
+            // The no-overlapping-writes invariant ensures partial.keys and delta.keys are disjoint
+            Configuration(
+                frontier = config.frontier,
+                history = config.history,
+                partial = config.partial + label.delta  // disjoint union
+            )
+        }
+
+        is Label.FinalizeFrontier -> {
+            // next configuration is (frontier.resolveEnabled(), pushSlice(history, partial), ∅)
+            // Use existing `History.with` infix operator from GameState.kt
+            Configuration(
+                frontier = config.frontier.resolveEnabled(),
+                history = config.history with config.partial,
+                partial = emptyMap()
+            )
+        }
     }
 }

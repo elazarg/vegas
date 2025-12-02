@@ -8,7 +8,7 @@ import vegas.ir.ActionId
  *
  * Two kinds of transitions:
  * - [Play]: A role makes a choice (explicit action or quit)
- * - [CommitFrontier]: Internal step that commits accumulated partial frontier
+ * - [FinalizeFrontier]: Internal step that finalizes accumulated partial frontier
  */
 internal sealed class Label {
     /**
@@ -25,13 +25,13 @@ internal sealed class Label {
     ) : Label()
 
     /**
-     * Internal frontier commit step (τ).
+     * Internal frontier finalization step (τ).
      *
      * Enabled when all required roles have acted in the current frontier.
-     * Commits [Configuration.partial] to [Configuration.history] and advances
+     * Finalizes [Configuration.partial] to [Configuration.history] and advances
      * to the next frontier.
      */
-    object CommitFrontier : Label()
+    object FinalizeFrontier : Label()
 }
 
 /**
