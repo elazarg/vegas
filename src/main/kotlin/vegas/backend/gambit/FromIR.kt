@@ -183,16 +183,15 @@ private class InfosetManager(roles: Set<RoleId>) {
  * Minimal context required to resume generation at a decision point.
  */
 internal data class GeneratorContext(
-    // Minimal history to reconstruct FrontierSetup
+    // The "Board State" (Outer Loop State)
     val frontier: FrontierMachine<ActionId>,
     val history: History,
 
-    // Position in role iteration loop
+    // The "Transaction State" (Inner Loop State)
     val partialFrontierAssignment: FrontierAssignmentSlice,
 
-    // Metadata for policy re-evaluation during expand()
-    val role: RoleId,          // Which role is deciding at this point
-    val actionId: ActionId?    // Which action led to this continuation (null = quit)
+    // The "Edge Identity" (For Policy / Resume)
+    val actionId: ActionId?
 )
 
 /**
@@ -466,36 +465,26 @@ internal class EfgGenerator(val ir: GameIR) {
      */
     fun expand(node: GameTree, policy: ExpansionPolicy = FULL_EXPANSION) {
         when (node) {
-            is GameTree.Terminal -> {
-                // Terminal nodes have no children to expand
-            }
-
-            is GameTree.Continuation -> {
-                // Standalone Continuation at root should not happen in well-formed trees
-                // (would mean the initial call deferred the very first decision)
-                // Do nothing - caller should handle this edge case
-            }
-
+            is GameTree.Terminal -> {}
+            is GameTree.Continuation -> {} // Root continuation (edge case)
             is GameTree.Decision -> {
+                // 1. Capture the role from the PARENT Decision node
+                val currentRole = node.owner
+
                 node.choices.forEach { choice ->
                     when (val subtree = choice.subtree) {
                         is GameTree.Continuation -> {
                             val ctx = subtree.context
-                            // Check if the new policy wants to expand this deferred action
-                            if (policy.shouldExpand(ctx.role, ctx.actionId)) {
-                                // expand in place (MUTATION)
+
+                            // 2. Use parent's role + context's actionId
+                            if (policy.shouldExpand(currentRole, ctx.actionId)) {
+                                // Resume generation (requires re-deriving role for context, see below)
                                 val expanded = resumeGeneration(ctx, policy)
                                 choice.subtree = expanded
-                                // Recursively expand the newly generated subtree
                                 expand(expanded, policy)
                             }
-                            // else: Leave as Continuation (still out of policy)
                         }
-
-                        else -> {
-                            // Recurse into existing Decision/Terminal nodes
-                            expand(subtree, policy)
-                        }
+                        else -> expand(subtree, policy)
                     }
                 }
             }
@@ -642,7 +631,6 @@ internal class EfgGenerator(val ir: GameIR) {
                             frontier = setup.frontier,
                             history = setup.history,
                             partialFrontierAssignment = partialFrontierAssignment + frontierDelta,
-                            role = role,
                             actionId = actionId
                         )
                     )
