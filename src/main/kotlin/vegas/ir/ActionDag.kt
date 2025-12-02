@@ -12,19 +12,6 @@ import vegas.dag.computeReachability
 typealias ActionId = Pair<RoleId, Int>
 
 /**
- * High-level classification of an action’s kind.
- *
- * This is *derived* from:
- *  - whether this is a join step (join != null), and
- *  - how each written field is classified (Visibility).
- */
-enum class ActionKind {
-    COMMIT,
-    REVEAL,
-    YIELD,
-}
-
-/**
  * Visibility of a write to a field:
  *
  *  - COMMIT : hidden write (visible=false), with no prior commit
@@ -111,7 +98,7 @@ data class ActionMeta(
     val spec: ActionSpec,
     val struct: ActionStruct,
 ) {
-    val kind: ActionKind by lazy { inferKind(struct) }
+    val kind: Visibility by lazy { inferKind(struct) }
 }
 
 /**
@@ -144,7 +131,7 @@ class ActionDag private constructor(
 
     /** Semantic shortcuts. */
     fun spec(id: ActionId): ActionSpec = meta(id).spec
-    fun kind(id: ActionId): ActionKind = meta(id).kind
+    fun kind(id: ActionId): Visibility = meta(id).kind
     fun params(id: ActionId): List<ActionParam> = meta(id).spec.params
 
     /** Structural shortcuts. */
@@ -350,14 +337,14 @@ class ActionDag private constructor(
 
 private fun inferKind(
     struct: ActionStruct,
-): ActionKind {
+): Visibility {
     val hasCommit = struct.visibility.values.any { it == Visibility.COMMIT }
     val hasReveal = struct.visibility.values.any { it == Visibility.REVEAL }
 
     return when {
-        hasCommit && !hasReveal -> ActionKind.COMMIT
-        hasReveal && !hasCommit -> ActionKind.REVEAL
-        else -> ActionKind.YIELD   // includes pure join steps
+        hasCommit && !hasReveal -> Visibility.COMMIT
+        hasReveal && !hasCommit -> Visibility.REVEAL
+        else -> Visibility.PUBLIC   // includes pure join steps
     }
 }
 
