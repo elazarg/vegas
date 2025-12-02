@@ -274,4 +274,298 @@ class UnrollerTest : FreeSpec({
             }
         }
     }
+
+    "TreeUnroller vs Existing Implementation" - {
+
+        "produces identical EFG for simple games" {
+            val code = """
+                join Alice() $ 100;
+                yield Alice(x: bool);
+                withdraw { Alice -> (Alice.x ? 10 : 5) }
+            """.trimIndent()
+
+            val ir = compileGame(code)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = true)
+
+            // New implementation via TreeUnroller
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, _ -> true }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for two-player games" {
+            val code = """
+                join Alice() $ 100;
+                join Bob() $ 100;
+                yield Alice(bet: bool);
+                yield Bob(call: bool);
+                withdraw (Alice.bet && Bob.call)
+                    ? { Alice -> 20; Bob -> 0 }
+                    : { Alice -> 10; Bob -> 10 }
+            """.trimIndent()
+
+            val ir = compileGame(code)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = true)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, _ -> true }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG with FAIR_PLAY policy" {
+            val code = """
+                join Alice() $ 100;
+                yield Alice(x: bool);
+                withdraw { Alice -> (Alice.x ? 10 : 5) }
+            """.trimIndent()
+
+            val ir = compileGame(code)
+
+            // Old implementation with FAIR_PLAY
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation with FAIR_PLAY
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for chance games" {
+            val code = """
+                random Nature() $ 0;
+                join Alice() $ 100;
+                yield Nature(coin: bool);
+                yield Alice(bet: bool);
+                withdraw (Nature.coin == Alice.bet)
+                    ? { Nature -> 0; Alice -> 10 }
+                    : { Nature -> 0; Alice -> 0 }
+            """.trimIndent()
+
+            val ir = compileGame(code)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for commit-reveal games" {
+            val code = """
+                join Alice() $ 100;
+                join Bob() $ 100;
+                yield Alice(secret: hidden bool);
+                yield Bob(guess: bool);
+                withdraw (Alice.secret == Bob.guess)
+                    ? { Alice -> 0; Bob -> 20 }
+                    : { Alice -> 20; Bob -> 0 }
+            """.trimIndent()
+
+            val ir = compileGame(code)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+    }
+
+    "TreeUnroller on Example Files" - {
+
+        fun loadExample(name: String): String {
+            return java.io.File("examples/$name.vg").readText()
+        }
+
+        "produces identical EFG for Trivial1" {
+            val code = loadExample("Trivial1")
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for Simple" {
+            val code = loadExample("Simple")
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for OddsEvensShort" {
+            val code = loadExample("OddsEvensShort")
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+
+        "produces identical EFG for MontyHallChance" {
+            val code = loadExample("MontyHallChance")
+            val ast = parseCode(code)
+            val ir = compileToIR(ast)
+
+            // Old implementation
+            val oldEfg = generateExtensiveFormGame(ir, includeAbandonment = false)
+
+            // New implementation
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = FrontierMachine.from(ir.dag),
+                history = History(),
+                partial = emptyMap()
+            )
+            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            tree = pruneContinuations(tree)
+            val newEfg = ExtensiveFormGame(
+                name = ir.name.ifEmpty { "Game" },
+                description = "Generated from ActionDag",
+                strategicPlayers = ir.roles,
+                tree = tree
+            ).toEfg()
+
+            newEfg shouldBe oldEfg
+        }
+    }
 })

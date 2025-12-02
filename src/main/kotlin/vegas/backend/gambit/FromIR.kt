@@ -124,7 +124,7 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
  * Instead of removing choices, we leverage that Choice.subtree is mutable (var).
  * We filter out choices that lead to Continuations and reconstruct Decision nodes.
  */
-private fun pruneContinuations(node: GameTree): GameTree {
+internal fun pruneContinuations(node: GameTree): GameTree {
     return when (node) {
         is GameTree.Terminal -> node
         is GameTree.Continuation -> node // Should not happen at top level
