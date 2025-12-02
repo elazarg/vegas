@@ -149,7 +149,6 @@ withdraw (Alice.x != null && Bob.y != null)
 
 const val VISIBILITY_ACTUAL_WRITER = """
 // Test 2.4: Visibility from actual writer, not ancestors
-// Critical test - catches the code review bug
 // Alice writes x as visible, then overwrites as hidden
 // Bob should NOT see x (uses Alice's second write visibility = hidden)
 
@@ -461,9 +460,6 @@ class GambitSemanticTest : FreeSpec({
     "Regression Tests" - {
 
         "no crash on visibility mismatch bug scenario" {
-            // Direct regression test for the code review bug.
-            // Should compile and run without errors.
-
             try {
                 val efg = compileGame(VISIBILITY_ACTUAL_WRITER)
                 efg shouldContain "t \"\"" // Has terminals

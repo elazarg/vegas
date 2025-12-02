@@ -198,7 +198,7 @@ internal data class GeneratorContext(
  * Create a frontier slice where all parameters of the given actions are set to [IrVal.Quit].
  * This represents the "quit" choice where a strategic player opts out of all actions at a frontier.
  */
-private fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
+internal fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
     actions.flatMap { actionId ->
         dag.params(actionId).map { FieldRef(role, it.name) to IrVal.Quit }
     }.toMap()
@@ -240,7 +240,7 @@ private fun combineAssignmentsIntoFrontier(
  *
  * For joint moves across multiple actions, uses the first ActionId as a marker.
  */
-private fun enumerateRoleFrontierChoices(
+internal fun enumerateRoleFrontierChoices(
     dag: ActionDag,
     role: RoleId,
     actions: List<ActionId>,
