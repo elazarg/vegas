@@ -47,19 +47,19 @@ fun ActionDag.toGraphviz(
             // Pass the relative index (id.second) instead of full ID to save space
             val labelHtml = nodeHtmlLabel(id, id.second)
 
-            // Determine attributes based on ActionKind and Role
+            // Determine attributes based on Visibility and Role
             val kind = kind(id)
             val shape = if (isChance) "diamond" else "box"
 
             // Color Palette
             val fillColor = when(kind) {
-                ActionKind.COMMIT -> "#FFD1DC" // Pastel Pink
-                ActionKind.REVEAL -> "#C1E1C1" // Pastel Green
-                ActionKind.YIELD  -> "#F0F0F0" // Light Grey
+                Visibility.COMMIT -> "#FFD1DC" // Pastel Pink
+                Visibility.REVEAL -> "#C1E1C1" // Pastel Green
+                Visibility.PUBLIC  -> "#F0F0F0" // Light Grey
             }
 
             // Stylize the border slightly for Commits
-            val penWidth = if (kind == ActionKind.COMMIT) "1.5" else "0.5"
+            val penWidth = if (kind == Visibility.COMMIT) "1.5" else "0.5"
 
             sb.appendLine(
                 "    $nodeName [label=<$labelHtml>, shape=$shape, fillcolor=\"$fillColor\", penwidth=$penWidth];"
@@ -99,9 +99,9 @@ private fun ActionDag.nodeHtmlLabel(id: ActionId, index: Int): String {
 
     // 1. Choose a Symbol/Icon
     val symbol = when(kind) {
-        ActionKind.COMMIT -> "&#128274;" // 🔒 Lock
-        ActionKind.REVEAL -> "&#128065;" // 👁 Eye
-        ActionKind.YIELD  -> ""           // Clean, no icon for standard yield
+        Visibility.COMMIT -> "&#128274;" // 🔒 Lock
+        Visibility.REVEAL -> "&#128065;" // 👁 Eye
+        Visibility.PUBLIC  -> ""           // Clean, no icon for standard yield
     }
 
     // 2. Format the Parameter list
@@ -109,7 +109,7 @@ private fun ActionDag.nodeHtmlLabel(id: ActionId, index: Int): String {
         params.joinToString(", ") { "<b>${it.name.name}</b>" }
     } else {
         // If there are no params, and it's a yield, we might want a placeholder
-        if (kind == ActionKind.YIELD) "" else ""
+        if (kind == Visibility.PUBLIC) "" else ""
     }
 
     // 3. Build the Table-based Label

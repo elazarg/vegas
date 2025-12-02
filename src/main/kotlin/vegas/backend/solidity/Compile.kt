@@ -7,7 +7,6 @@ import vegas.ir.ActionId
 import vegas.ir.GameIR
 import vegas.ir.ActionMeta
 import vegas.ir.ActionParam
-import vegas.ir.ActionKind
 import vegas.ir.ActionSpec
 import vegas.ir.Expr
 import vegas.ir.Type
@@ -232,7 +231,7 @@ private fun buildDagGameStorage(
 
     // FINAL_ACTION constant (terminal action for payoff distribution)
     val revealIds = dag.metas
-        .filter { it.kind == ActionKind.REVEAL }
+        .filter { it.kind == vegas.ir.Visibility.REVEAL }
         .map { it.id }
     val finalActionIdx: Int = if (revealIds.isNotEmpty()) {
         revealIds.maxOf { id -> linearization.getValue(id) }
@@ -472,9 +471,9 @@ private fun buildActionFunctions(
         }
 
         val fn = when (meta.kind) {
-            ActionKind.YIELD  -> buildDagYield(meta, actionIdx, depModifiers)
-            ActionKind.COMMIT -> buildDagCommit(meta, actionIdx, depModifiers)
-            ActionKind.REVEAL -> buildDagReveal(meta, actionIdx, depModifiers)
+            vegas.ir.Visibility.PUBLIC  -> buildDagYield(meta, actionIdx, depModifiers)
+            vegas.ir.Visibility.COMMIT -> buildDagCommit(meta, actionIdx, depModifiers)
+            vegas.ir.Visibility.REVEAL -> buildDagReveal(meta, actionIdx, depModifiers)
         }
 
         add(fn)
