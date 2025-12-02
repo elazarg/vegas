@@ -1,11 +1,11 @@
-package vegas.backend.gambit
+package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
-import vegas.FieldRef
-import vegas.RoleId
-import vegas.VarId
+import vegas.backend.gambit.IrVal
+import vegas.backend.gambit.Label
+import vegas.backend.gambit.PlayTag
 import vegas.ir.ActionId
 
 /**
@@ -107,13 +107,13 @@ class LabelTest : FreeSpec({
         }
     }
 
-    "Label.CommitFrontier" - {
+    "Label.FinalizeFrontier" - {
 
         "is a singleton object" {
-            val commit1 = Label.CommitFrontier
-            val commit2 = Label.CommitFrontier
+            val finalize1 = Label.FinalizeFrontier
+            val finalize2 = Label.FinalizeFrontier
 
-            commit1 shouldBeSameInstanceAs commit2
+            finalize1 shouldBeSameInstanceAs finalize2
         }
 
         "is distinct from Play labels" {
@@ -123,30 +123,30 @@ class LabelTest : FreeSpec({
                 tag = PlayTag.Quit
             )
 
-            val commit = Label.CommitFrontier
+            val finalize = Label.FinalizeFrontier
 
-            (play == commit) shouldBe false
+            (play == finalize) shouldBe false
         }
     }
 
     "Label sealed class hierarchy" - {
 
-        "Play and CommitFrontier are distinct" {
+        "Play and FinalizeFrontier are distinct" {
             val play: Label = Label.Play(
                 role = alice,
                 delta = emptyMap(),
                 tag = PlayTag.Quit
             )
-            val commit: Label = Label.CommitFrontier
+            val finalize: Label = Label.FinalizeFrontier
 
             when (play) {
                 is Label.Play -> play.role shouldBe alice
-                is Label.CommitFrontier -> error("Should not be CommitFrontier")
+                is Label.FinalizeFrontier -> error("Should not be FinalizeFrontier")
             }
 
-            when (commit) {
+            when (finalize) {
                 is Label.Play -> error("Should not be Play")
-                is Label.CommitFrontier -> commit shouldBeSameInstanceAs Label.CommitFrontier
+                is Label.FinalizeFrontier -> finalize shouldBeSameInstanceAs Label.FinalizeFrontier
             }
         }
     }

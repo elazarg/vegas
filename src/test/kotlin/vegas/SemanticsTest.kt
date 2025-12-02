@@ -1,10 +1,15 @@
-package vegas.backend.gambit
+package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
-import vegas.RoleId
+import vegas.backend.gambit.Configuration
+import vegas.backend.gambit.GameSemantics
+import vegas.backend.gambit.History
+import vegas.backend.gambit.IrVal
+import vegas.backend.gambit.Label
+import vegas.backend.gambit.PlayTag
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
@@ -41,7 +46,7 @@ class SemanticsTest : FreeSpec({
                 val move = moves.first()
                 config = when (move) {
                     is Label.Play -> Configuration(config.frontier, config.history, config.partial + move.delta)
-                    is Label.CommitFrontier -> Configuration(
+                    is Label.FinalizeFrontier -> Configuration(
                         config.frontier.resolveEnabled(),
                         config.history with config.partial,
                         emptyMap()
@@ -141,7 +146,7 @@ class SemanticsTest : FreeSpec({
             config = Configuration(config.frontier.resolveEnabled(), config.history, emptyMap())
 
             // Alice quits by having Quit in history
-            val aliceField = vegas.FieldRef(alice, vegas.VarId("x"))
+            val aliceField = FieldRef(alice, VarId("x"))
             val quitSlice = mapOf(aliceField to IrVal.Quit)
             val history = config.history with quitSlice
             config = Configuration(config.frontier.resolveEnabled(), history, emptyMap())
@@ -192,16 +197,16 @@ class SemanticsTest : FreeSpec({
             val config = Configuration(FrontierMachine.from(ir.dag), History())
             val moves = semantics.enabledMoves(config)
 
-            // Should have only CommitFrontier, no Play moves
+            // Should have only FinalizeFrontier, no Play moves
             val playMoves = moves.filterIsInstance<Label.Play>()
             playMoves.shouldBeEmpty()
 
-            val commitMoves = moves.filterIsInstance<Label.CommitFrontier>()
+            val commitMoves = moves.filterIsInstance<Label.FinalizeFrontier>()
             commitMoves.shouldHaveSize(1)
         }
     }
 
-    "canCommitFrontier" - {
+    "canFinalizeFrontier" - {
 
         "enabled when all required roles acted" {
             val code = """
@@ -222,8 +227,8 @@ class SemanticsTest : FreeSpec({
             val firstMove = moves.filterIsInstance<Label.Play>().first()
             config = Configuration(config.frontier, config.history, config.partial + firstMove.delta)
 
-            // Alice acted, CommitFrontier should be enabled
-            semantics.canCommitFrontier(config) shouldBe true
+            // Alice acted, FinalizeFrontier should be enabled
+            semantics.canFinalizeFrontier(config) shouldBe true
         }
 
         "disabled when some roles haven't acted" {
@@ -241,7 +246,7 @@ class SemanticsTest : FreeSpec({
             config = Configuration(config.frontier.resolveEnabled(), config.history, emptyMap())
 
             // Alice hasn't acted yet
-            semantics.canCommitFrontier(config) shouldBe false
+            semantics.canFinalizeFrontier(config) shouldBe false
         }
 
         "disabled at terminal" {
@@ -257,7 +262,7 @@ class SemanticsTest : FreeSpec({
             var config = Configuration(FrontierMachine.from(ir.dag), History())
             config = Configuration(config.frontier.resolveEnabled(), config.history, emptyMap())
 
-            semantics.canCommitFrontier(config) shouldBe false
+            semantics.canFinalizeFrontier(config) shouldBe false
         }
 
         "enabled when quit roles are ignored" {
@@ -275,12 +280,12 @@ class SemanticsTest : FreeSpec({
             config = Configuration(config.frontier.resolveEnabled(), config.history, emptyMap())
 
             // Alice quits in history
-            val aliceField = vegas.FieldRef(alice, vegas.VarId("x"))
+            val aliceField = FieldRef(alice, VarId("x"))
             val quitSlice = mapOf(aliceField to IrVal.Quit)
             config = Configuration(config.frontier, config.history with quitSlice, emptyMap())
 
-            // No roles need to act (Alice quit), so CommitFrontier enabled
-            semantics.canCommitFrontier(config) shouldBe true
+            // No roles need to act (Alice quit), so FinalizeFrontier enabled
+            semantics.canFinalizeFrontier(config) shouldBe true
         }
 
         "enabled when no roles have params" {
@@ -295,8 +300,8 @@ class SemanticsTest : FreeSpec({
             // At join frontier (no params)
             val config = Configuration(FrontierMachine.from(ir.dag), History())
 
-            // No roles have params, so CommitFrontier enabled immediately
-            semantics.canCommitFrontier(config) shouldBe true
+            // No roles have params, so FinalizeFrontier enabled immediately
+            semantics.canFinalizeFrontier(config) shouldBe true
         }
     }
 })
