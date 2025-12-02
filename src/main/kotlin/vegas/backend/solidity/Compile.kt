@@ -37,14 +37,14 @@ fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
 /**
  * Generate action constant name (e.g., "ACTION_Alice_0").
  */
-fun actionConstName(role: RoleId, index: Int): String =
-    "ACTION_${role.name}_$index"
+fun actionConstName(owner: RoleId, index: Int): String =
+    "ACTION_${owner.name}_$index"
 
 /**
  * Generate action function name (e.g., "move_Alice_0").
  */
-fun actionFuncName(role: RoleId, index: Int): String =
-    "move_${role.name}_$index"
+fun actionFuncName(owner: RoleId, index: Int): String =
+    "move_${owner.name}_$index"
 
 /**
  * Main entry: Generate Solidity from GameIR / ActionDag.
@@ -217,12 +217,12 @@ private fun buildDagGameStorage(
 
     // Action constants
     linearization.forEach { (actionId, idx) ->
-        val role = dag.owner(actionId)
+        val owner = dag.owner(actionId)
         add(
             StorageDecl(
                 type = SolType.Uint256,
                 visibility = Visibility.PUBLIC,
-                name = actionConstName(role, idx),
+                name = actionConstName(owner, idx),
                 constant = true,
                 value = SolExpr.IntLit(idx)
             )
@@ -283,7 +283,7 @@ private fun buildDagGameStorage(
     val rolesWithJoin = mutableSetOf<RoleId>()
     dag.metas.forEach { meta ->
         if (meta.spec.join != null) {
-            rolesWithJoin += meta.struct.role
+            rolesWithJoin += meta.struct.owner
         }
     }
     rolesWithJoin.forEach { role ->
@@ -293,9 +293,9 @@ private fun buildDagGameStorage(
     // 2) Compute field -> type, based on action parameters.
     val fieldTypes = mutableMapOf<FieldRef, Type>()
     dag.metas.forEach { meta ->
-        val role = meta.struct.role
+        val owner = meta.struct.owner
         meta.spec.params.forEach { p ->
-            val field = FieldRef(role, p.name)
+            val field = FieldRef(owner, p.name)
             fieldTypes.putIfAbsent(field, p.type)
         }
     }
@@ -315,7 +315,7 @@ private fun buildDagGameStorage(
     // 4) Allocate storage per logical field, once.
     val definedFields = mutableSetOf<FieldRef>()
     dag.metas.forEach { meta ->
-        val role = meta.struct.role
+        val owner = meta.struct.owner
         meta.struct.writes.forEach { field ->
             if (!definedFields.add(field)) return@forEach
 
@@ -328,14 +328,14 @@ private fun buildDagGameStorage(
                     StorageDecl(
                         SolType.Bytes32,
                         Visibility.PUBLIC,
-                        storageParam(role, field.param, true)
+                        storageParam(owner, field.param, true)
                     )
                 )
                 add(
                     StorageDecl(
                         SolType.Bool,
                         Visibility.PUBLIC,
-                        doneFlag(role, field.param, true)
+                        doneFlag(owner, field.param, true)
                     )
                 )
 
@@ -344,14 +344,14 @@ private fun buildDagGameStorage(
                     StorageDecl(
                         translateType(ty),
                         Visibility.PUBLIC,
-                        storageParam(role, field.param, false)
+                        storageParam(owner, field.param, false)
                     )
                 )
                 add(
                     StorageDecl(
                         SolType.Bool,
                         Visibility.PUBLIC,
-                        doneFlag(role, field.param, false)
+                        doneFlag(owner, field.param, false)
                     )
                 )
             } else {
@@ -360,14 +360,14 @@ private fun buildDagGameStorage(
                     StorageDecl(
                         translateType(ty),
                         Visibility.PUBLIC,
-                        storageParam(role, field.param, false)
+                        storageParam(owner, field.param, false)
                     )
                 )
                 add(
                     StorageDecl(
                         SolType.Bool,
                         Visibility.PUBLIC,
-                        doneFlag(role, field.param, false)
+                        doneFlag(owner, field.param, false)
                     )
                 )
             }
@@ -518,7 +518,7 @@ private fun buildDagYield(
     actionIdx: Int,
     depModifiers: List<ModifierCall>
 ): FunctionDecl {
-    val role = meta.struct.role
+    val role = meta.struct.owner
     val spec = meta.spec
 
     val isJoin = spec.join != null
@@ -556,7 +556,7 @@ private fun buildDagCommit(
     actionIdx: Int,
     depModifiers: List<ModifierCall>
 ): FunctionDecl {
-    val role   = meta.struct.role
+    val role   = meta.struct.owner
     val spec   = meta.spec
     val struct = meta.struct
 
@@ -622,7 +622,7 @@ private fun buildDagReveal(
     actionIdx: Int,
     depModifiers: List<ModifierCall>
 ): FunctionDecl {
-    val role   = meta.struct.role
+    val role   = meta.struct.owner
     val spec   = meta.spec
     val struct = meta.struct
 

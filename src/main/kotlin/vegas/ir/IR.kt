@@ -83,7 +83,7 @@ data class Parameter(
 data class Signature(
     val join: Join?,              // non-null if this is the role's "join" step
     val parameters: List<Parameter>,
-    val requires: Requirement      // guard for this role's action (snapshot semantics)
+    val requires: Requirement      // guard for this action (snapshot semantics)
 )
 
 /**

@@ -55,11 +55,11 @@ fun interface ExpansionPolicy {
     /**
      * Determines whether to expand a specific action.
      *
-     * @param role The role making the decision
+     * @param owner The role making the decision
      * @param action The action being considered (null = quit)
      * @return true to expand immediately, false to create Continuation
      */
-    fun shouldExpand(role: RoleId, action: ActionId?): Boolean
+    fun shouldExpand(owner: RoleId, action: ActionId?): Boolean
 }
 
 /**
@@ -276,7 +276,7 @@ private fun enumerateRoleFrontierChoices(
     val representativeActionId = actions.first()
 
     return combinations.map { localAssigmentList ->
-        val frontierSlice = combineAssignmentsIntoFrontier({ dag.struct(it).role }, actions, localAssigmentList)
+        val frontierSlice = combineAssignmentsIntoFrontier({ dag.struct(it).owner }, actions, localAssigmentList)
         representativeActionId to frontierSlice
     }
 }
@@ -299,7 +299,7 @@ private fun enumerateAssignmentsForAction(
 ): List<Map<VarId, IrVal>> {
     val struct: ActionStruct = dag.struct(actionId)
     val spec: ActionSpec = dag.spec(actionId)
-    val role = struct.role
+    val role = struct.owner
 
     if (spec.params.isEmpty()) return listOf(emptyMap())
     if (history.quit(role)) return emptyList()
@@ -720,7 +720,7 @@ internal class EfgGenerator(val ir: GameIR) {
 // Label only this role's non-Quit fields.
 // Keep Hidden wrapper for commitments so Gambit GUI shows the flow.
 private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, IrVal> = frontierDelta
-    .filterKeys { fr -> fr.role == role }
+    .filterKeys { fr -> fr.owner == role }
     .filterValues { v -> v != IrVal.Quit }
     .mapKeys { (fr, _) -> fr.param }
 

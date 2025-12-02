@@ -80,7 +80,7 @@ internal typealias HistoryViews = Map<RoleId, History>
  * @return true if this role has written Quit to any of their fields
  */
 internal fun History.quit(role: RoleId): Boolean =
-    lastFrontier.any { (field, v) -> field.role == role && v == IrVal.Quit } ||
+    lastFrontier.any { (field, v) -> field.owner == role && v == IrVal.Quit } ||
             (past?.quit(role) ?: false)
 
 /**

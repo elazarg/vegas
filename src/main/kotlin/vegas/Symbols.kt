@@ -16,9 +16,9 @@ value class VarId(val name: String) {
     }
 }
 
-data class FieldRef(val role: RoleId, val param: VarId){
-    override fun toString(): String = "$role.$param"
+data class FieldRef(val owner: RoleId, val param: VarId){
+    override fun toString(): String = "$owner.$param"
     companion object {
-        @JvmStatic fun of(role: RoleId, param: VarId) = FieldRef(role, param)
+        @JvmStatic fun of(owner: RoleId, param: VarId) = FieldRef(owner, param)
     }
 }

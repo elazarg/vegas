@@ -54,16 +54,15 @@ data class ActionSpec(
 
 /**
  * Structural metadata extracted from [Signature] and dependency analysis:
- *
- *  - role        : who performs the action
- *  - writes      : which fields are written
- *  - visibility  : visibility classification for each write
- *  - guardReads  : which fields the guard depends on
+ * @param owner who performs the action
+ * @param writes which fields are written
+ * @param visibility visibility classification for each write
+ * @param guardReads which fields the guard depends on
  *
  * This is the canonical location of commit/reveal/public semantics.
  */
 data class ActionStruct(
-    val role: RoleId,
+    val owner: RoleId,
     val writes: Set<FieldRef>,
     val visibility: Map<FieldRef, Visibility>,
     val guardReads: Set<FieldRef>,
@@ -87,11 +86,10 @@ data class ActionStruct(
 /**
  * Full per-action payload that backends consume.
  *
- *  - id     : stable identifier within the DAG
- *  - spec   : semantic payload (params, join, guard)
- *  - struct : structural metadata (role, writes, visibility, guard reads)
- *
- * [kind] is derived from [spec] and [struct].
+ * @param id stable identifier within the DAG
+ * @param spec semantic payload (params, join, guard)
+ * @param struct structural metadata (owner, writes, visibility, guard reads)
+ * @property kind derived from [spec] and [struct].
  */
 data class ActionMeta(
     val id: ActionId,
@@ -136,7 +134,7 @@ class ActionDag private constructor(
 
     /** Structural shortcuts. */
     fun struct(id: ActionId): ActionStruct = meta(id).struct
-    fun owner(id: ActionId): RoleId = struct(id).role
+    fun owner(id: ActionId): RoleId = struct(id).owner
     fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = struct(id).visibility
 
     /** Reachability queries. */
@@ -411,7 +409,7 @@ private fun validateVisibilityOnReads(
 
             // Field must be visible at or before this action
             val visibleOk = points.any { v -> v == id || reach.reaches(v, id) }
-            val selfCommitOk = if (f.role == meta.struct.role) {
+            val selfCommitOk = if (f.owner == meta.struct.owner) {
                 commitPoints[f].orEmpty().any { c -> c == id || reach.reaches(c, id) }
             } else false
 

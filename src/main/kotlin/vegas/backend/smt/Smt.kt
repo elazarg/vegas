@@ -12,7 +12,7 @@ fun generateSMT(ir: GameIR): String {
     val dag = ir.dag
 
     val paramTypes: Map<FieldRef, Type> = dag.metas
-        .flatMap { meta -> meta.spec.params.map { param -> FieldRef(meta.struct.role, param.name) to param.type } }
+        .flatMap { meta -> meta.spec.params.map { param -> FieldRef(meta.struct.owner, param.name) to param.type } }
         .toMap()
 
     val referencedFields = mutableSetOf<FieldRef>()
@@ -117,7 +117,7 @@ private fun collectFields(expr: Expr): Set<FieldRef> = when (expr) {
     is Expr.Ite -> collectFields(expr.c) + collectFields(expr.t) + collectFields(expr.e)
 }
 
-private fun fieldName(field: FieldRef): String = "${field.role}_${field.param}"
+private fun fieldName(field: FieldRef): String = "${field.owner}_${field.param}"
 
 private fun doneFieldName(field: FieldRef): String = "${fieldName(field)}_done"
 
