@@ -8,7 +8,7 @@ internal sealed class IrVal {
     data class BoolVal(val v: Boolean) : IrVal()
     data class Hidden(val inner: IrVal) : IrVal()   // value chosen but not visible to others
     object Opaque : IrVal()  // commitment made but value hidden from observer
-    object Quit : IrVal()  // bail/abandonment
+    object Quit : IrVal()  // abandonment
 
     fun toOutcome(): IntVal = when (this) {
         is IntVal -> IntVal(v)
