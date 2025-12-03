@@ -240,7 +240,8 @@ private class Checker(
     private fun type(outcome: Outcome) {
         when (outcome) {
             is Outcome.Cond -> {
-                requireStatic(type(outcome.cond) == BOOL, "Outcome condition must be boolean", outcome)
+                val t = type(outcome.cond)
+                requireStatic(t == BOOL, "Outcome condition must be boolean; actual: ${pt(t)}", outcome)
                 type(outcome.ifTrue)
                 type(outcome.ifFalse)
             }
@@ -248,12 +249,18 @@ private class Checker(
             is Outcome.Value -> {
                 outcome.ts.forEach { (role, v) ->
                     requireRole(role.id, role)
-                    requireStatic(type(v) == INT, "Outcome value must be an int", v)
+                    val t = type(v)
+                    requireStatic(compatible(t, INT), "Outcome value must be an int; actual: ${pt(t)}", v)
                 }
             }
 
             is Outcome.Let -> {
-                requireStatic(type(outcome.init) == outcome.dec.type, "Bad initialization of let ext", outcome.init)
+                val initType = type(outcome.init)
+                requireStatic(
+                    compatible(initType, outcome.dec.type),
+                    "Bad initialization of let ext",
+                    outcome.init
+                )
                 Checker(typeMap, emptySet(), env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv)
                     .type(outcome.outcome)
             }
@@ -322,9 +329,15 @@ private class Checker(
                 }
 
                 "==", "!=" -> {
+                    // Check for common base type instead of mutual compatibility (subtyping)
+                    // This allows comparing disjoint ranges like {3} and {7}
+                    val validComparison = (isInteger(left) && isInteger(right)) ||
+                            (isBoolean(left) && isBoolean(right)) ||
+                            (left == ADDRESS && right == ADDRESS)
+
                     requireStatic(
-                        compatible(left, right) || compatible(right, left),
-                        "${pt(left)} <> ${pt(right)} (1)",
+                        validComparison,
+                        "Cannot compare incompatible types: ${Pretty.type(left)} and ${Pretty.type(right)}",
                         exp
                     )
                     BOOL
@@ -343,7 +356,7 @@ private class Checker(
             }
         }
 
-        is Exp.Const.Num -> INT
+        is Exp.Const.Num -> Subset(setOf(exp))
         is Exp.Const.Address -> ADDRESS
         is Exp.Const.Bool -> BOOL
         is Exp.Const.Hidden -> Hidden(type(exp.value as Exp))
@@ -351,23 +364,47 @@ private class Checker(
         is Exp.Var -> try {
             env.getValue(exp.id)
         } catch (_: NoSuchElementException) {
+            if (exp.id in macroEnv) {
+                throw StaticError("Macro '${exp}' should be called", exp)
+            }
             throw StaticError("Variable '${exp}' is undefined", exp)
         }
 
         is Exp.Field -> env.safeGetValue(exp.fieldRef, exp)
 
         is Exp.Cond -> {
-            checkOp(BOOL, type(exp.cond))
-            join(type(exp.ifTrue), type(exp.ifFalse))
+            val tCond = type(exp.cond)
+            // Use compatible() to allow for any potential future subtypes of BOOL
+            requireStatic(compatible(tCond, BOOL), "Condition must be bool, found '${pt(tCond)}'", exp.cond)
+
+            val tTrue = type(exp.ifTrue)
+            val tFalse = type(exp.ifFalse)
+            val joined = join(tTrue, tFalse)
+
+            requireStatic(
+                joined != EMPTY,
+                "Conditional branches are incompatible. Found '${pt(tTrue)}' and '${pt(tFalse)}'.",
+                exp
+            )
+
+            joined
         }
 
         is Exp.Let -> {
-            requireStatic(type(exp.init) == exp.dec.type, "Bad initialization of let exp", exp)
+            val initType = type(exp.init)
+            requireStatic(
+                compatible(initType, exp.dec.type),
+                "Bad initialization of let exp. Expected ${pt(exp.dec.type)}, got ${pt(initType)}",
+                exp
+            )
             Checker(typeMap, emptySet(), env + Pair(exp.dec.v.id, exp.dec.type), macroEnv).type(exp.exp)
         }
 
         Exp.Const.UNDEFINED -> throw AssertionError()
     }
+
+    private fun isInteger(t: TypeExp) = resolve(t) is IntClass || resolve(t) == INT
+    private fun isBoolean(t: TypeExp) = resolve(t) == BOOL
 
     private fun checkOp(expected: TypeExp, args: Collection<TypeExp>) =
         checkOp(expected, *args.toTypedArray())
@@ -392,49 +429,27 @@ private class Checker(
         val t1 = stripHidden(resolve(t1Raw))
         val t2 = stripHidden(resolve(t2Raw))
 
-        // 1) Trivial equality
         if (t1 == t2) return true
 
-        // 2) If their join collapses to one side, we consider them compatible
+        // Check if join results in the "expected" type (t2)
+        // i.e., is t1 a subtype of t2?
         val j = join(t1, t2)
-        if (j == t1 || j == t2) return true
-
-        // 3) Range <-> Subset: a subset is compatible with a range
-        //    if *all* its elements lie inside the inclusive range.
-        fun subsetWithinRange(sub: Subset, rng: Range): Boolean {
-            val lo = rng.min.n
-            val hi = rng.max.n
-            return sub.values.all { v -> v.n in lo..hi }
-        }
-
-        return when {
-            t1 is Range && t2 is Subset -> subsetWithinRange(t2, t1)
-            t2 is Range && t1 is Subset -> subsetWithinRange(t1, t2)
-            else -> false
-        }
+        return j == t2
     }
 
     private fun join(t1: TypeExp, t2: TypeExp): TypeExp = when {
         t1 is Opt && t2 is Opt -> Opt(join(t1.type, t2.type))
         t1 is Opt -> Opt(join(t1.type, t2))
         t2 is Opt -> Opt(join(t1, t2.type))
+
+        // Normalize aliases
+        t1 is TypeId -> join(resolve(t1), t2)
+        t2 is TypeId -> join(t1, resolve(t2))
+
         t1 == t2 -> t1
 
-        t1 is TypeId -> {
-            requireStatic(typeMap.containsKey(t1), "${pt(t1)} not in type map", t1)
-            join(typeMap.getValue(t1), t2)
-        }
-        t2 is TypeId -> {
-            requireStatic(typeMap.containsKey(t2), "${pt(t2)} not in type map", t2)
-            join(t1, typeMap.getValue(t2))
-        }
-
-        t1 === TypeId("role") && t2 == TypeId("role") -> TypeId("role")
-        t1 === ADDRESS && t2 === ADDRESS -> ADDRESS
-        t1 === BOOL && t2 === BOOL -> BOOL
         t1 === INT && t2 is IntClass -> INT
-        t1 === EMPTY || t2 === EMPTY -> EMPTY // TODO: is it not meet?
-        t1 is IntClass && t2 === INT -> INT
+        t2 === INT && t1 is IntClass -> INT
 
         t1 is Subset && t2 is Subset -> Subset(t1.values union t2.values)
 

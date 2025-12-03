@@ -659,22 +659,21 @@ class TypeCheckerTest : FreeSpec({
                     value = B.pay(P to B.ite(B.n(5), B.n(10), B.n(20)))
                 )
                 val ex = shouldThrow<StaticError> { typeCheck(bad) }
-                ex.message shouldContain "Expected bool, actual int"
+                ex.message shouldContain "Condition must be bool, found"
             }
 
             "reject non-numerical outcome" {
                 val types = mapOf(
-                    TypeId("small") to Subset(setOf(B.n(1), B.n(2), B.n(3))),
                     TypeId("big") to Subset(setOf(B.n(10), B.n(20), B.n(30)))
                 )
                 val bad = B.program(
                     types,
                     B.join(P),
-                    B.yieldTo(P, listOf(B.bl("b"), B.dec("s", TypeId("small")), B.dec("g", TypeId("big")))),
+                    B.yieldTo(P, listOf(B.bl("b"), B.dec("s", BOOL), B.dec("g", TypeId("big")))),
                     value = B.pay(P to B.ite(B.m(P, "b"), B.m(P, "s"), B.m(P, "g")))
                 )
                 val ex = shouldThrow<StaticError> { typeCheck(bad) }
-                ex.message shouldContain "Outcome value must be an int"
+                ex.message shouldContain "Conditional branches are incompatible. Found 'bool' and 'big'."
             }
         }
 

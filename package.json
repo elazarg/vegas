@@ -1,0 +1,8 @@
+{
+  "name": "vegas-root",
+  "private": true,
+  "scripts": {
+    "setup": "cd lsp && npm install",
+    "compile": "cd lsp && npm run compile"
+  }
+}
