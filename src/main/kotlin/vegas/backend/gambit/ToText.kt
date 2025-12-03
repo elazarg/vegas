@@ -3,7 +3,7 @@ package vegas.backend.gambit
 import vegas.Rational
 import vegas.RoleId
 import vegas.VarId
-import vegas.ir.Expr
+import vegas.ir.Expr.Const
 
 private const val EFG_VERSION = "EFG 2 R"
 private const val EMPTY_NAME = "\"\""
@@ -72,22 +72,22 @@ internal class EfgWriter(
         val outcomeNum = outcomeCounter++
         val outcomeName = EMPTY_NAME
         val payoffs = playerList.joinToString(" ") { role ->
-            formatValue(node.payoffs[role] ?: Expr.Const.IntVal(0))
+            formatValue(node.payoffs[role] ?: Const.IntVal(0))
         }
         return "t $nodeName $outcomeNum $outcomeName { $payoffs }"
     }
 
-    private fun formatActionName(action: Map<VarId, Expr.Const>): String {
+    private fun formatActionName(action: Map<VarId, Const>): String {
         if (action.isEmpty()) return QUIT_ACTION
         return action.values.joinToString("&") { formatValue(it) }
     }
 
-    private fun formatValue(const: Expr.Const): String = when (const) {
-        is Expr.Const.BoolVal -> const.v.toString()
-        is Expr.Const.IntVal -> const.v.toString()
-        is Expr.Const.Hidden -> "Hidden(${formatValue(const.inner)})"
-        Expr.Const.Opaque -> "Opaque"
-        Expr.Const.Quit -> QUIT_ACTION
+    private fun formatValue(const: Const): String = when (const) {
+        is Const.BoolVal -> const.v.toString()
+        is Const.IntVal -> const.v.toString()
+        is Const.Hidden -> "Hidden(${formatValue(const.inner)})"
+        Const.Opaque -> "Opaque"
+        Const.Quit -> QUIT_ACTION
     }
 
     private fun formatRational(r: Rational): String {

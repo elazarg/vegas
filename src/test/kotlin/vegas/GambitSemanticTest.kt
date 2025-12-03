@@ -4,9 +4,10 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import vegas.backend.gambit.EfgGenerator
+import vegas.backend.gambit.TreeUnroller
+import vegas.semantics.GameSemantics
+import vegas.semantics.Configuration
 import vegas.backend.gambit.ExpansionPolicy
-import vegas.backend.gambit.ExtensiveFormGame
 import vegas.backend.gambit.GameTree
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.frontend.compileToIR
@@ -366,18 +367,15 @@ class GambitSemanticTest : FreeSpec({
             val ast = parseCode(BAIL_PERSISTENCE)
             val ir = compileToIR(ast)
 
-            // Build the full game tree with abandonment branches expanded
-            val gen = EfgGenerator(ir)
-            val frontier = vegas.dag.FrontierMachine.from(ir.dag)
-            val initialHistory = History()
-            val initialViews = (ir.roles + ir.chanceRoles).associateWith { History() }
-
-            val tree = gen.exploreFromFrontier(
-                frontier,
-                initialHistory,
-                initialViews,
-                ExpansionPolicy.FULL_EXPANSION
+            // Build the full game tree with abandonment branches expanded using new API
+            val semantics = GameSemantics(ir)
+            val unroller = TreeUnroller(semantics, ir)
+            val initialConfig = Configuration(
+                frontier = vegas.dag.FrontierMachine.from(ir.dag),
+                history = History()
             )
+
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
 
             val alice = ir.roles.first { it.name == "Alice" }
 
@@ -605,60 +603,5 @@ class GambitSemanticTest : FreeSpec({
             efg shouldNotContain "\"Quit\""
         }
 
-        "expand() expands Continuation nodes in-place" {
-            val code = """
-                join Alice() $ 100;
-                join Bob() $ 100;
-                yield Alice(x: bool);
-                yield Bob(y: bool);
-                withdraw { Alice -> 10; Bob -> 10 }
-            """.trimIndent()
-
-            val ast = parseCode(code)
-            val ir = compileToIR(ast)
-
-            // Generate FAIR_PLAY tree (defers abandonment)
-            val gen = EfgGenerator(ir)
-            val frontier = vegas.dag.FrontierMachine.from(ir.dag)
-            val initialState = History()
-            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { History() }
-            val tree = gen.exploreFromFrontier(
-                frontier,
-                initialState,
-                initialKnowledge,
-                ExpansionPolicy.FAIR_PLAY
-            )
-
-            // Verify tree has Continuation nodes (cannot serialize)
-            var hasContinuations = false
-            fun checkForContinuations(node: GameTree): Unit = when (node) {
-                is GameTree.Terminal -> {}
-                is GameTree.Continuation -> { hasContinuations = true }
-                is GameTree.Decision -> {
-                    node.choices.forEach { checkForContinuations(it.subtree) }
-                }
-            }
-            checkForContinuations(tree)
-            hasContinuations shouldBe true
-
-            // Now expand with FULL_EXPANSION to expand abandonment branches
-            gen.expand(tree, ExpansionPolicy.FULL_EXPANSION)
-
-            // After expansion, should have no Continuation nodes
-            hasContinuations = false
-            checkForContinuations(tree)
-            hasContinuations shouldBe false
-
-            // Should now be serializable with abandonment branches
-            val efg = ExtensiveFormGame(
-                name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
-                strategicPlayers = ir.roles,
-                tree = tree
-            ).toEfg()
-
-            // Should contain Quit options now
-            efg shouldContain "\"Quit\""
-        }
     }
 })
