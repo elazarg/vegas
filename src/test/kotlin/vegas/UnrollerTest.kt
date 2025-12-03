@@ -8,6 +8,10 @@ import vegas.backend.gambit.*
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
+import vegas.ir.Expr
+import vegas.semantics.Configuration
+import vegas.semantics.GameSemantics
+import vegas.semantics.History
 
 /**
  * Test suite for TreeUnroller.
@@ -42,7 +46,7 @@ class UnrollerTest : FreeSpec({
 
             // Should be terminal since join has no parameters
             tree.shouldBeInstanceOf<GameTree.Terminal>()
-            tree.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(100)
+            tree.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(100)
         }
 
         "handles single-role simple game with choice" {
@@ -75,11 +79,11 @@ class UnrollerTest : FreeSpec({
             // All subtrees should be terminal with correct payoffs
             val trueChoice = tree.choices[0]
             trueChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
-            (trueChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(10)
+            (trueChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(10)
 
             val falseChoice = tree.choices[1]
             falseChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
-            (falseChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(5)
+            (falseChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(5)
 
             val quitChoice = tree.choices[2]
             quitChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
@@ -150,24 +154,24 @@ class UnrollerTest : FreeSpec({
             val aliceBetsTrue = tree.choices[0].subtree as GameTree.Decision
             val bobCallsTrue = aliceBetsTrue.choices[0].subtree as GameTree.Terminal
 
-            bobCallsTrue.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(20)
-            bobCallsTrue.payoffs[RoleId("Bob")] shouldBe IrVal.IntVal(0)
+            bobCallsTrue.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(20)
+            bobCallsTrue.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(0)
 
             // Navigate to Alice bets true, Bob calls false
             val bobCallsFalse = aliceBetsTrue.choices[1].subtree as GameTree.Terminal
-            bobCallsFalse.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(5)
-            bobCallsFalse.payoffs[RoleId("Bob")] shouldBe IrVal.IntVal(15)
+            bobCallsFalse.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(5)
+            bobCallsFalse.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(15)
 
             // Navigate to Alice bets false, Bob calls true
             val aliceBetsFalse = tree.choices[1].subtree as GameTree.Decision
             val bobCallsTrue2 = aliceBetsFalse.choices[0].subtree as GameTree.Terminal
-            bobCallsTrue2.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(15)
-            bobCallsTrue2.payoffs[RoleId("Bob")] shouldBe IrVal.IntVal(5)
+            bobCallsTrue2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(15)
+            bobCallsTrue2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(5)
 
             // Navigate to Alice bets false, Bob calls false
             val bobCallsFalse2 = aliceBetsFalse.choices[1].subtree as GameTree.Terminal
-            bobCallsFalse2.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(10)
-            bobCallsFalse2.payoffs[RoleId("Bob")] shouldBe IrVal.IntVal(10)
+            bobCallsFalse2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(10)
+            bobCallsFalse2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(10)
         }
 
         "handles chance nodes correctly" {
@@ -241,7 +245,7 @@ class UnrollerTest : FreeSpec({
 
             // Both x and y true should give payoff 20
             val terminal = afterX.choices[0].subtree as GameTree.Terminal
-            terminal.payoffs[RoleId("Alice")] shouldBe IrVal.IntVal(20)
+            terminal.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(20)
         }
 
         "skeleton policy creates all continuations" {

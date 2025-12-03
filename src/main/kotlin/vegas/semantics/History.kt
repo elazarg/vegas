@@ -1,18 +1,19 @@
-package vegas.backend.gambit
+package vegas.semantics
 
 import vegas.FieldRef
 import vegas.RoleId
 import vegas.VarId
+import vegas.ir.Expr
 
 /**
  * A map from field references to values representing one layer of action writes.
  * This is the atomic unit of state update in the frontier-based game tree construction.
  */
-internal typealias FrontierAssignmentSlice = Map<FieldRef, IrVal>
+internal typealias FrontierAssignmentSlice = Map<FieldRef, Expr.Const>
 
 /**
  * Visible snapshot to 'who' at a given frontier: others' Hidden appear as Opaque.
- * Abandonment is represented by IrVal.Quit and is never hidden.
+ * Abandonment is represented by Expr.Const.Quit and is never hidden.
  *
  * This implements the information-hiding semantics:
  * - Own fields: player sees actual values (unwraps Hidden)
@@ -27,9 +28,9 @@ internal fun redacted(messages: FrontierAssignmentSlice, who: RoleId): FrontierA
     messages.mapValues { (fieldRef, v) ->
         val (r, _) = fieldRef
         if (r == who) {
-            if (v is IrVal.Hidden) v.inner else v
+            if (v is Expr.Const.Hidden) v.inner else v
         } else when (v) {
-            is IrVal.Hidden -> IrVal.Opaque  // Others see that commitment happened, not the value
+            is Expr.Const.Hidden -> Expr.Const.Opaque  // Others see that commitment happened, not the value
             else -> v  // Quit and other values pass through
         }
     }
@@ -53,10 +54,10 @@ internal data class History(
 ) {
     /**
      * Look up a field's value by searching backwards through the history.
-     * Returns the most recent write to this field, or [IrVal.Quit] if never written.
+     * Returns the most recent write to this field, or [Expr.Const.Quit] if never written.
      */
-    fun get(f: FieldRef): IrVal =
-        lastFrontier[f] ?: (past?.get(f) ?: IrVal.Quit)
+    fun get(f: FieldRef): Expr.Const =
+        lastFrontier[f] ?: (past?.get(f) ?: Expr.Const.Quit)
 
     /**
      * Push a new frontier slice onto the history stack.
@@ -73,14 +74,14 @@ internal data class History(
 internal typealias HistoryViews = Map<RoleId, History>
 
 /**
- * Check if a role has ever abandoned (written [IrVal.Quit]) anywhere in the history.
+ * Check if a role has ever abandoned (written [Expr.Const.Quit]) anywhere in the history.
  * Once a role quits, they have no more legal choices (they're out of the game).
  *
  * @param role The role to check
  * @return true if this role has written Quit to any of their fields
  */
 internal fun History.quit(role: RoleId): Boolean =
-    lastFrontier.any { (field, v) -> field.owner == role && v == IrVal.Quit } ||
+    lastFrontier.any { (field, v) -> field.owner == role && v == Expr.Const.Quit } ||
             (past?.quit(role) ?: false)
 
 /**
@@ -89,9 +90,9 @@ internal fun History.quit(role: RoleId): Boolean =
  *
  * @param role The role performing these actions
  * @param pkt The packet of parameter assignments
- * @return A frontier slice mapping FieldRef to IrVal
+ * @return A frontier slice mapping FieldRef to Expr.Const
  */
-internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierAssignmentSlice =
+internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, Expr.Const>): FrontierAssignmentSlice =
     pkt.mapKeys { (v, _) -> FieldRef(role, v) }
 
 /**

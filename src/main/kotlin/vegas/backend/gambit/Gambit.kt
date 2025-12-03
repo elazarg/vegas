@@ -3,6 +3,7 @@ package vegas.backend.gambit
 import vegas.Rational
 import vegas.RoleId
 import vegas.VarId
+import vegas.ir.Expr
 
 /**
  * Main class for extensive form game generation.
@@ -59,7 +60,7 @@ internal sealed class GameTree {
      * A terminal node with payoffs.
      */
     data class Terminal(
-        val payoffs: Map<RoleId, IrVal>
+        val payoffs: Map<RoleId, Expr.Const>
     ) : GameTree()
 
     /**
@@ -81,7 +82,7 @@ internal sealed class GameTree {
      * A single choice/action with its outcome.
      */
     data class Choice(
-        val action: Map<VarId, IrVal>,
+        val action: Map<VarId, Expr.Const>,
         var subtree: GameTree,  // Mutable for in-place expansion via expand()
         val probability: Rational? = null  // Only for chance nodes
     )

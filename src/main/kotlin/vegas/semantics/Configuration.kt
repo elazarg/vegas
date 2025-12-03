@@ -1,4 +1,4 @@
-package vegas.backend.gambit
+package vegas.semantics
 
 import vegas.RoleId
 import vegas.dag.FrontierMachine

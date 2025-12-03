@@ -8,9 +8,15 @@ import vegas.FieldRef
 sealed class Expr {
     // literals
     sealed class Const : Expr() {
-        data class IntVal(val v: Int) : Expr()
-        data class BoolVal(val v: Boolean) : Expr()
+        data class IntVal(val v: Int) : Const()
+        data class BoolVal(val v: Boolean) : Const()
+
+        // Information and game-specific decisions
+        data class Hidden(val inner: Const) : Const()   // value chosen but not visible to others
+        object Opaque : Const()  // commitment made but value hidden from observer
+        object Quit : Const()  // abandonment
     }
+
     data class Field(val field: FieldRef) : Expr()
 
     data class IsDefined(val field: FieldRef) : Expr()
@@ -35,6 +41,25 @@ sealed class Expr {
     data class Or (val l: Expr, val r: Expr) : Expr()
     data class Not(val x: Expr) : Expr()
     data class Ite(val c: Expr, val t: Expr, val e: Expr) : Expr()
+}
+
+
+fun Expr.Const.toOutcome(): Expr.Const.IntVal  = when (this) {
+    is Expr.Const.IntVal -> Expr.Const.IntVal(v)
+    is Expr.Const.BoolVal -> Expr.Const.IntVal(if (v) 1 else 0)
+    else -> error("Terminal payoff references undefined/hidden value")
+}
+
+fun Expr.Const.asBool(): Boolean = when (this) {
+    is Expr.Const.BoolVal -> v
+    is Expr.Const.IntVal -> v != 0
+    else -> false
+}
+
+fun Expr.Const.asInt(): Int = when (this) {
+    is Expr.Const.IntVal -> v
+    is Expr.Const.BoolVal -> if (v) 1 else 0
+    else-> error("Expected int, got $this")
 }
 
 /**

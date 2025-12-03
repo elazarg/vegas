@@ -1,4 +1,4 @@
-package vegas.backend.gambit
+package vegas.semantics
 
 import vegas.FieldRef
 import vegas.RoleId
@@ -7,9 +7,11 @@ import vegas.VarId
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.ActionSpec
+import vegas.ir.Expr
 import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.Visibility
+import vegas.ir.asBool
 
 /**
  * Game semantics as a labelled transition system.
@@ -177,7 +179,7 @@ private fun enumerateAssignmentsForAction(
     actionId: ActionId,
     history: History,
     playerKnowledge: History,
-): List<Map<VarId, IrVal>> {
+): List<Map<VarId, Expr.Const>> {
     val spec: ActionSpec = dag.spec(actionId)
     val role = dag.owner(actionId)
 
@@ -185,25 +187,25 @@ private fun enumerateAssignmentsForAction(
     if (history.quit(role)) return emptyList()
 
     // ========== Build Domain for Each Parameter ==========
-    val lists: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
+    val lists: List<List<Pair<VarId, Expr.Const>>> = spec.params.map { param ->
         val fieldRef = FieldRef(role, param.name)
         val prior = history.get(fieldRef)
         val vis = dag.visibilityOf(actionId).getValue(fieldRef)
 
-        val baseDomain: List<IrVal> = when (vis) {
+        val baseDomain: List<Expr.Const> = when (vis) {
             Visibility.REVEAL ->
                 when (prior) {
-                    is IrVal.Hidden -> listOf(prior.inner)
+                    is Expr.Const.Hidden -> listOf(prior.inner)
                     else -> emptyList()
                 }
 
             Visibility.PUBLIC, Visibility.COMMIT ->
                 when (param.type) {
                     is Type.BoolType ->
-                        listOf(IrVal.BoolVal(true), IrVal.BoolVal(false))
+                        listOf(Expr.Const.BoolVal(true), Expr.Const.BoolVal(false))
 
                     is Type.SetType ->
-                        param.type.values.sorted().map { v -> IrVal.IntVal(v) }
+                        param.type.values.sorted().map { v -> Expr.Const.IntVal(v) }
 
                     is Type.IntType ->
                         throw StaticError("Cannot enumerate IntType; use SetType or BoolType")
@@ -211,15 +213,15 @@ private fun enumerateAssignmentsForAction(
         }
 
         // The packet we STORE in the frontier must respect visibility (Hidden)
-        val domainWithVis: List<IrVal> = when (vis) {
-            Visibility.COMMIT -> baseDomain.map { v -> IrVal.Hidden(v) }
+        val domainWithVis: List<Expr.Const> = when (vis) {
+            Visibility.COMMIT -> baseDomain.map { v -> Expr.Const.Hidden(v) }
             Visibility.PUBLIC, Visibility.REVEAL -> baseDomain
         }
 
         domainWithVis.map { v -> param.name to v }
     }
 
-    val rawAssignments: List<Map<VarId, IrVal>> =
+    val rawAssignments: List<Map<VarId, Expr.Const>> =
         cartesian(lists).map { it.toMap() }
 
     // ========== Filter by Guard Condition ==========
@@ -228,7 +230,7 @@ private fun enumerateAssignmentsForAction(
         // Unwrap Hidden values for the actor's own guard evaluation.
         // The player knows what they are choosing right now.
         val unwrappedPkt = localAssigment.mapValues { (_, v) ->
-            if (v is IrVal.Hidden) v.inner else v
+            if (v is Expr.Const.Hidden) v.inner else v
         }
 
         val tempHeap = History(toFrontierMap(role, unwrappedPkt), playerKnowledge)
@@ -245,14 +247,14 @@ private fun enumerateAssignmentsForAction(
  * @param roleToActionId Function to look up which role owns an action
  * @param actions List of action IDs in the frontier
  * @param assignments Corresponding parameter assignments for each action
- * @return Unified frontier slice mapping FieldRef -> IrVal
+ * @return Unified frontier slice mapping FieldRef -> Expr.Const
  */
 private fun combineAssignmentsIntoFrontier(
     roleToActionId: (ActionId) -> RoleId,
     actions: List<ActionId>,
-    assignments: List<Map<VarId, IrVal>>
+    assignments: List<Map<VarId, Expr.Const>>
 ): FrontierAssignmentSlice {
-    val frontierSlice = mutableMapOf<FieldRef, IrVal>()
+    val frontierSlice = mutableMapOf<FieldRef, Expr.Const>()
     actions.zip(assignments).forEach { (actionId, localAssigment) ->
         val role = roleToActionId(actionId)
         localAssigment.forEach { (varId, value) ->
@@ -286,7 +288,7 @@ internal fun enumerateRoleFrontierChoices(
 
     // ========== Enumerate Assignments Per Action ==========
     // For each action, enumerate its local assignments.
-    val perActionAssignments: List<List<Map<VarId, IrVal>>> =
+    val perActionAssignments: List<List<Map<VarId, Expr.Const>>> =
         actions.map { actionId ->
             enumerateAssignmentsForAction(dag, actionId, history, playerKnowledge)
         }
@@ -295,7 +297,7 @@ internal fun enumerateRoleFrontierChoices(
 
     // ========== Compute Cartesian Product ==========
     // Cross-product over actions; then flatten into a single FrontierAssignmentSlice.
-    val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionAssignments)
+    val combinations: List<List<Map<VarId, Expr.Const>>> = cartesian(perActionAssignments)
 
     // Use first ActionId as a marker for explicit moves (for policy checking)
     val representativeActionId = actions.first()

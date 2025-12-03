@@ -2,6 +2,7 @@ package vegas.backend.solidity
 
 import vegas.RoleId
 import vegas.FieldRef
+import vegas.backend.solidity.SolExpr.*
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.GameIR
@@ -736,6 +737,9 @@ internal fun translateIrExpr(
     // Literals
     is Expr.Const.IntVal  -> int(expr.v)
     is Expr.Const.BoolVal -> bool(expr.v)
+    is Expr.Const.Hidden -> TODO()
+    Expr.Const.Opaque -> TODO()
+    Expr.Const.Quit -> TODO()
 
     // Field access
     is Expr.Field -> {
@@ -823,7 +827,7 @@ internal fun translateIrExpr(
         not(translateIrExpr(expr.x, currentRole, currentParams, context))
 
     // --- Ternary ---
-    is Expr.Ite -> SolExpr.Ternary(
+    is Expr.Ite -> Ternary(
         condition = translateIrExpr(expr.c, currentRole, currentParams, context),
         ifTrue   = translateIrExpr(expr.t, currentRole, currentParams, context),
         ifFalse  = translateIrExpr(expr.e, currentRole, currentParams, context)
