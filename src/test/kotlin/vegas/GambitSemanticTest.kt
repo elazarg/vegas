@@ -22,7 +22,7 @@ yield Alice(x: bool);
 // Bob acts
 yield Bob(y: bool);
 
-// Alice's second action - if Alice quits on x, should only have None
+// Alice's second action - if Alice quits on x, should only have Quit
 yield Alice(z: bool);
 
 withdraw (Alice.x != null && Bob.y != null && Alice.z != null)
@@ -35,12 +35,12 @@ withdraw (Alice.x != null && Bob.y != null && Alice.z != null)
 
 const val CHANCE_NO_BAIL = """
 // Test 1.3: Chance roles cannot quit
-// Nature (random role) should not have "None" option
+// Nature (random role) should not have "Quit" option
 
 random Nature() $ 0;
 join Alice() $ 100;
 
-// Nature chooses randomly - should only have {true, false}, no "None"
+// Nature chooses randomly - should only have {true, false}, no "Quit"
 yield Nature(coin: bool);
 
 // Alice can see coin and respond (or quit)
@@ -301,7 +301,7 @@ class GambitSemanticTest : FreeSpec({
             // Owner acts multiple times (x then y)
             (aliceNodes.size >= 2) shouldBe true
 
-            // At least one Alice node has proper choices {true, false, None}
+            // At least one Alice node has proper choices {true, false, Quit}
             aliceNodes.hasFullBoolMenu() shouldBe true
 
             // Game completes
@@ -322,7 +322,7 @@ class GambitSemanticTest : FreeSpec({
             // Bob should have at least 2 distinct infosets (different revealed values)
             (bobHistorys.map { it.infoset }.distinct().size >= 2) shouldBe true
 
-            // At least one infoset has full choice set {true, false, None}
+            // At least one infoset has full choice set {true, false, Quit}
             bobNodes.hasFullBoolMenu() shouldBe true
 
             // Game completes
@@ -334,7 +334,7 @@ class GambitSemanticTest : FreeSpec({
 
         "abandonment persists - once abandoned, player is locked out" {
             // Alice has multiple actions: x, then z.
-            // If Alice quits on x, Alice's second decision (z) should only offer "None".
+            // If Alice quits on x, Alice's second decision (z) should only offer "Quit".
             //
             // Semantic property: Some nodes with multiple actions, some can only quit.
 
