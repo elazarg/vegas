@@ -140,7 +140,7 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
     val initialConfig = Configuration(
         frontier = FrontierMachine.from(ir.dag),
         history = History(),
-        partial = emptyMap()
+        partialFrontierAssignment = emptyMap()
     )
 
     var tree = unroller.unroll(initialConfig, policy)
@@ -265,7 +265,7 @@ internal class TreeUnroller(
         }
 
         // Compute infoset ID
-        val views = config.views(ir.roles + ir.chanceRoles)
+        val views = reconstructViews(config.history, ir.roles + ir.chanceRoles)
         val infoset = views.getValue(role)
         val infosetId = infosetManager.getHistoryNumber(role, infoset, isChance)
 
@@ -290,9 +290,7 @@ internal class TreeUnroller(
                 val nextConfig = applyMove(config, playMove)
                 GameTree.Continuation(
                     GeneratorContext(
-                        frontier = nextConfig.frontier,
-                        history = nextConfig.history,
-                        partialFrontierAssignment = nextConfig.partial,
+                        configuration = nextConfig,
                         actionId = (playMove.tag as? PlayTag.Action)?.actionId
                     )
                 )
@@ -386,12 +384,7 @@ internal class InfosetManager(roles: Set<RoleId>) {
  */
 internal data class GeneratorContext(
     // The "Board State" (Outer Loop State)
-    val frontier: FrontierMachine<ActionId>,
-    val history: History,
-
-    // The "Transaction State" (Inner Loop State)
-    val partialFrontierAssignment: FrontierAssignmentSlice,
-
+    val configuration: Configuration,
     // The "Edge Identity" (For Policy / Resume)
     val actionId: ActionId?
 )
@@ -439,38 +432,6 @@ internal class EfgGenerator(val ir: GameIR) {
      * Chance nodes receive sequential numbering.
      */
     private val infosetManager = InfosetManager(ir.roles)
-
-    /**
-     * Reconstructs all players' views by replaying the global history stack.
-     *
-     * This is an O(depth * roles) operation, but it allows us to drop 'views'
-     * from GeneratorContext, saving significant memory in large trees.
-     */
-    private fun reconstructViews(globalHistory: History, roles: Set<RoleId>): HistoryViews {
-        // 1. Unwind the stack to get slices in chronological order (Root -> Leaf)
-        val slices = ArrayDeque<FrontierAssignmentSlice>()
-        var curr: History? = globalHistory
-
-        // Assumes History has a 'parent' or 'prev' field and a 'slice' field
-        while (curr != null && curr.past != null) {
-            slices.addFirst(curr.lastFrontier)
-            curr = curr.past
-        }
-
-        // 2. Replay history to build views
-        // Start with empty history for everyone
-        val currentViews = roles.associateWith { History() }.toMutableMap()
-
-        for (slice in slices) {
-            for (role in roles) {
-                val view = currentViews.getValue(role)
-                // Reuse the existing 'redacted' logic used in exploreJointChoices
-                currentViews[role] = view with redacted(slice, role)
-            }
-        }
-
-        return currentViews
-    }
 
     /**
      * Co-inductively expand Continuation nodes in-place based on a new policy.
@@ -531,25 +492,26 @@ internal class EfgGenerator(val ir: GameIR) {
      * @return Newly generated game subtree
      */
     private fun resumeGeneration(ctx: GeneratorContext, policy: ExpansionPolicy): GameTree {
+        val config = ctx.configuration
         // 1. Reconstruct setup (actions, views, etc.)
-        val enabled = ctx.frontier.enabled()
+        val enabled = config.frontier.enabled()
         val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
         val roleOrder = actionsByRole.keys.sortedBy { it.name }
 
         // 2. Reconstruct views from the global history truth
-        val reconstructedViews = reconstructViews(ctx.history, ir.roles + ir.chanceRoles)
+        val reconstructedViews = reconstructViews(config.history, ir.roles + ir.chanceRoles)
 
         val legalChoicesByRole = actionsByRole.mapValues { (role, actions) ->
             enumerateRoleFrontierChoices(
                 ir.dag, role, actions,
-                ctx.history,
+                config.history,
                 reconstructedViews.getValue(role) // Use reconstructed view
             )
         }
 
         val setup = FrontierSetup(
-            ctx.frontier,
-            ctx.history,
+            config.frontier,
+            config.history,
             reconstructedViews,
             actionsByRole,
             roleOrder,
@@ -563,7 +525,7 @@ internal class EfgGenerator(val ir: GameIR) {
         // If a role has no params, we skip it (it's "done" by definition).
         val nextRoleIndex = roleOrder.indexOfFirst { role ->
             val hasParams = actionsByRole[role]?.any { ir.dag.params(it).isNotEmpty() } == true
-            val hasActed = ctx.partialFrontierAssignment.keys.any { it.owner == role }
+            val hasActed = config.partialFrontierAssignment.keys.any { it.owner == role }
 
             // We stop at the first role that has work to do
             // but hasn't done it yet.
@@ -573,7 +535,7 @@ internal class EfgGenerator(val ir: GameIR) {
         // Edge Case: If everyone has acted (or no one has params), index is size (terminal state for loop)
         val effectiveIndex = if (nextRoleIndex == -1) roleOrder.size else nextRoleIndex
         // Resume the role loop where it left off
-        return exploreJointChoices(setup, effectiveIndex, ctx.partialFrontierAssignment, policy)
+        return exploreJointChoices(setup, effectiveIndex, config.partialFrontierAssignment, policy)
     }
 
     /**
@@ -653,9 +615,11 @@ internal class EfgGenerator(val ir: GameIR) {
                     // Policy says defer: create Continuation node with embedded context
                     GameTree.Continuation(
                         GeneratorContext(
-                            frontier = setup.frontier,
-                            history = setup.history,
-                            partialFrontierAssignment = partialFrontierAssignment + frontierDelta,
+                            configuration = Configuration(
+                                frontier = setup.frontier,
+                                history = setup.history,
+                                partialFrontierAssignment = partialFrontierAssignment + frontierDelta,
+                            ),
                             actionId = actionId
                         )
                     )
@@ -777,6 +741,7 @@ internal class EfgGenerator(val ir: GameIR) {
         val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierAssignmentSlice>>>,
     )
 }
+
 /**
  * Extract action label for this role from frontier delta.
  *

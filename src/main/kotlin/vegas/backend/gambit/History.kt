@@ -93,3 +93,42 @@ internal fun History.quit(role: RoleId): Boolean =
  */
 internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, IrVal>): FrontierAssignmentSlice =
     pkt.mapKeys { (v, _) -> FieldRef(role, v) }
+
+/**
+ * Construct per-role views from a configuration.
+ *
+ * Each role sees a redacted version of the history where:
+ * - Their own Hidden values are unwrapped to actual values
+ * - Others' Hidden values appear as Opaque
+ *
+ * This implements perfect recall: each role's view contains the full
+ * observable past, built by replaying the history stack with per-slice
+ * redaction.
+ *
+ * Note: This is computed on-demand rather than stored in Configuration
+ * to save memory in large trees (partial is frequently updated).
+ */
+internal fun reconstructViews(globalHistory: History, roles: Set<RoleId>): HistoryViews {
+    // 1. Unwind the stack to get slices in chronological order (Root -> Leaf)
+    val slices = ArrayDeque<FrontierAssignmentSlice>()
+    var curr: History? = globalHistory
+
+    // Assumes History has a 'parent' or 'prev' field and a 'slice' field
+    while (curr != null && curr.past != null) {
+        slices.addFirst(curr.lastFrontier)
+        curr = curr.past
+    }
+
+    // 2. Replay history to build views
+    // Start with empty history for everyone
+    val currentViews = roles.associateWith { History() }.toMutableMap()
+
+    for (slice in slices) {
+        for (role in roles) {
+            val view = currentViews.getValue(role)
+            // Reuse the existing 'redacted' logic used in exploreJointChoices
+            currentViews[role] = view with redacted(slice, role)
+        }
+    }
+    return currentViews
+}

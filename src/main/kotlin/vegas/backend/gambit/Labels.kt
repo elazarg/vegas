@@ -28,7 +28,7 @@ internal sealed class Label {
      * Internal frontier finalization step (τ).
      *
      * Enabled when all required roles have acted in the current frontier.
-     * Finalizes [Configuration.partial] to [Configuration.history] and advances
+     * Finalizes [Configuration.partialFrontierAssignment] to [Configuration.history] and advances
      * to the next frontier.
      */
     object FinalizeFrontier : Label()

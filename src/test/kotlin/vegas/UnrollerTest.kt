@@ -35,7 +35,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
@@ -59,7 +59,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
@@ -99,7 +99,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             // FAIR_PLAY policy should expand explicit actions but defer quit
@@ -140,7 +140,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
@@ -188,7 +188,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             val tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
@@ -225,7 +225,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
@@ -260,7 +260,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
 
             // SKELETON policy should defer all expansions
@@ -295,7 +295,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
             tree = pruneContinuations(tree)
@@ -331,7 +331,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
             tree = pruneContinuations(tree)
@@ -363,7 +363,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -399,7 +399,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -435,7 +435,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -470,7 +470,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -498,7 +498,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -526,7 +526,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
@@ -554,7 +554,7 @@ class UnrollerTest : FreeSpec({
             val initialConfig = Configuration(
                 frontier = FrontierMachine.from(ir.dag),
                 history = History(),
-                partial = emptyMap()
+                partialFrontierAssignment = emptyMap()
             )
             var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)

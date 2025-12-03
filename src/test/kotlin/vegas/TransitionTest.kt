@@ -50,7 +50,7 @@ class TransitionTest : FreeSpec({
             val nextConfig = applyMove(config, playMove)
 
             // Partial should contain the delta
-            nextConfig.partial shouldBe playMove.delta
+            nextConfig.partialFrontierAssignment shouldBe playMove.delta
             // Frontier and history should be unchanged
             nextConfig.frontier shouldBe config.frontier
             nextConfig.history shouldBe config.history
@@ -89,7 +89,7 @@ class TransitionTest : FreeSpec({
             config = applyMove(config, bobMove)
 
             // Partial should contain Bob's delta
-            config.partial shouldBe bobMove.delta
+            config.partialFrontierAssignment shouldBe bobMove.delta
         }
 
         "preserves frontier and history" {
@@ -138,7 +138,7 @@ class TransitionTest : FreeSpec({
             val playMove = moves.filterIsInstance<Label.Play>().first()
             config = applyMove(config, playMove)
 
-            val partialBeforeFinalization = config.partial
+            val partialBeforeFinalization = config.partialFrontierAssignment
 
             // Finalize frontier
             val nextConfig = applyMove(config, Label.FinalizeFrontier)
@@ -170,13 +170,13 @@ class TransitionTest : FreeSpec({
             config = applyMove(config, playMove)
 
             // Partial should be non-empty
-            config.partial.isEmpty() shouldBe false
+            config.partialFrontierAssignment.isEmpty() shouldBe false
 
             // Finalize frontier
             val nextConfig = applyMove(config, Label.FinalizeFrontier)
 
             // Partial should be cleared
-            nextConfig.partial.isEmpty() shouldBe true
+            nextConfig.partialFrontierAssignment.isEmpty() shouldBe true
         }
 
         "advances frontier" {
@@ -304,7 +304,7 @@ class TransitionTest : FreeSpec({
 
             // Partial should contain Quit value
             val xField = FieldRef(alice, VarId("x"))
-            config.partial[xField] shouldBe IrVal.Quit
+            config.partialFrontierAssignment[xField] shouldBe IrVal.Quit
 
             // Finalize the quit
             config = applyMove(config, Label.FinalizeFrontier)
