@@ -2,17 +2,18 @@ package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import vegas.backend.gambit.Configuration
-import vegas.backend.gambit.GameSemantics
-import vegas.backend.gambit.History
-import vegas.backend.gambit.IrVal
-import vegas.backend.gambit.Label
-import vegas.backend.gambit.PlayTag
-import vegas.backend.gambit.applyMove
-import vegas.backend.gambit.quit
+import vegas.semantics.Configuration
+import vegas.semantics.GameSemantics
+import vegas.semantics.History
+import vegas.semantics.Label
+import vegas.semantics.PlayTag
+import vegas.semantics.quit
+import vegas.semantics.applyMove
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
+import vegas.ir.Expr
+import kotlin.collections.first
 
 /**
  * Test suite for transition application.
@@ -266,7 +267,7 @@ class TransitionTest : FreeSpec({
             // History should contain x
             val xField = FieldRef(alice, VarId("x"))
             val xValue = config.history.get(xField)
-            xValue shouldBe IrVal.BoolVal(true)
+            xValue shouldBe Expr.Const.BoolVal(true)
 
             // Continue to second yield
             repeat(3) {
@@ -280,8 +281,8 @@ class TransitionTest : FreeSpec({
             val yField = FieldRef(alice, VarId("y"))
             val yValue = config.history.get(yField)
 
-            xValue shouldBe IrVal.BoolVal(true)
-            yValue shouldBe IrVal.BoolVal(true)
+            xValue shouldBe Expr.Const.BoolVal(true)
+            yValue shouldBe Expr.Const.BoolVal(true)
         }
 
         "quit moves work correctly" {
@@ -304,7 +305,7 @@ class TransitionTest : FreeSpec({
 
             // Partial should contain Quit value
             val xField = FieldRef(alice, VarId("x"))
-            config.partialFrontierAssignment[xField] shouldBe IrVal.Quit
+            config.partialFrontierAssignment[xField] shouldBe Expr.Const.Quit
 
             // Finalize the quit
             config = applyMove(config, Label.FinalizeFrontier)

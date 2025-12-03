@@ -7,7 +7,7 @@
  *
  * **Pipeline**: `GameIR -> GameTree -> EFG String`
  *
- * 1. **Eval.kt** - Expression evaluation with IrVal runtime values
+ * 1. **Eval.kt** - Expression evaluation with Expr.Const runtime values
  * 2. **GameState.kt** - History representation (FrontierAssignmentSlice, History) for perfect recall
  * 3. **FromIR.kt** - Main algorithm: IR -> GameTree conversion via frontier exploration
  * 4. **Gambit.kt** - Game tree data structure (Decision/Terminal nodes)
@@ -36,7 +36,23 @@ import vegas.VarId
 import vegas.dag.FrontierMachine
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
+import vegas.ir.Expr
 import vegas.ir.GameIR
+import vegas.ir.toOutcome
+import vegas.semantics.Configuration
+import vegas.semantics.FrontierAssignmentSlice
+import vegas.semantics.GameSemantics
+import vegas.semantics.History
+import vegas.semantics.HistoryViews
+import vegas.semantics.Label
+import vegas.semantics.PlayTag
+import vegas.semantics.allParametersQuit
+import vegas.semantics.applyMove
+import vegas.semantics.enumerateRoleFrontierChoices
+import vegas.semantics.eval
+import vegas.semantics.quit
+import vegas.semantics.reconstructViews
+import vegas.semantics.redacted
 
 /**
  * Functional interface determining which actions to expand during generation.
@@ -103,7 +119,7 @@ fun interface ExpansionPolicy {
  *    frontier contributes one "epistemic layer" of writes along a history.
  *
  *  - Global history is represented as a stack of frontier slices:
- *      each slice is a map from (role, variable) to the IrVal written by some
+ *      each slice is a map from (role, variable) to the Expr.Const written by some
  *      action in that frontier.  The stack order is the order in which frontiers
  *      are resolved along that history.
  *
@@ -139,8 +155,7 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
 
     val initialConfig = Configuration(
         frontier = FrontierMachine.from(ir.dag),
-        history = History(),
-        partialFrontierAssignment = emptyMap()
+        history = History()
     )
 
     var tree = unroller.unroll(initialConfig, policy)
@@ -311,7 +326,7 @@ internal class TreeUnroller(
         )
     }
 
-    private fun computePayoffs(config: Configuration): Map<RoleId, IrVal> {
+    private fun computePayoffs(config: Configuration): Map<RoleId, Expr.Const> {
         return ir.payoffs.mapValues { (_, expr) ->
             eval({ config.history.get(it) }, expr).toOutcome()
         }
@@ -388,15 +403,6 @@ internal data class GeneratorContext(
     // The "Edge Identity" (For Policy / Resume)
     val actionId: ActionId?
 )
-
-/**
- * Create a frontier slice where all parameters of the given actions are set to [IrVal.Quit].
- * This represents the "quit" choice where a strategic player opts out of all actions at a frontier.
- */
-internal fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
-    actions.flatMap { actionId ->
-        dag.params(actionId).map { FieldRef(role, it.name) to IrVal.Quit }
-    }.toMap()
 
 /**
  * Two-phase EFG generator with spine-and-ribs architecture.
@@ -745,10 +751,10 @@ internal class EfgGenerator(val ir: GameIR) {
 /**
  * Extract action label for this role from frontier delta.
  *
- * Filters to only this role's non-Quit fields and unwraps to VarId -> IrVal.
+ * Filters to only this role's non-Quit fields and unwraps to VarId -> Expr.Const.
  */
-private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, IrVal> =
+private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, Expr.Const> =
     frontierDelta
         .filterKeys { fr -> fr.owner == role }
-        .filterValues { v -> v != IrVal.Quit }
+        .filterValues { v -> v != Expr.Const.Quit }
         .mapKeys { (fr, _) -> fr.param }

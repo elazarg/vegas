@@ -3,10 +3,10 @@ package vegas
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
-import vegas.backend.gambit.IrVal
-import vegas.backend.gambit.Label
-import vegas.backend.gambit.PlayTag
 import vegas.ir.ActionId
+import vegas.ir.Expr
+import vegas.semantics.Label
+import vegas.semantics.PlayTag
 
 /**
  * Test suite for Label types.
@@ -22,7 +22,7 @@ class LabelTest : FreeSpec({
 
         "contains role and delta" {
             val aliceField = FieldRef(alice, VarId("x"))
-            val delta = mapOf(aliceField to IrVal.BoolVal(true))
+            val delta = mapOf(aliceField to Expr.Const.BoolVal(true))
             val actionId: ActionId = alice to 0
 
             val play = Label.Play(
@@ -38,7 +38,7 @@ class LabelTest : FreeSpec({
 
         "supports quit moves" {
             val aliceField = FieldRef(alice, VarId("x"))
-            val delta = mapOf(aliceField to IrVal.Quit)
+            val delta = mapOf(aliceField to Expr.Const.Quit)
 
             val play = Label.Play(
                 role = alice,
@@ -55,8 +55,8 @@ class LabelTest : FreeSpec({
             val field1 = FieldRef(bob, VarId("x"))
             val field2 = FieldRef(bob, VarId("y"))
             val delta = mapOf(
-                field1 to IrVal.BoolVal(false),
-                field2 to IrVal.IntVal(42)
+                field1 to Expr.Const.BoolVal(false),
+                field2 to Expr.Const.IntVal(42)
             )
             val actionId: ActionId = bob to 1
 
@@ -67,8 +67,8 @@ class LabelTest : FreeSpec({
             )
 
             play.delta.size shouldBe 2
-            play.delta[field1] shouldBe IrVal.BoolVal(false)
-            play.delta[field2] shouldBe IrVal.IntVal(42)
+            play.delta[field1] shouldBe Expr.Const.BoolVal(false)
+            play.delta[field2] shouldBe Expr.Const.IntVal(42)
         }
     }
 

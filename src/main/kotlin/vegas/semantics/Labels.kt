@@ -1,7 +1,12 @@
-package vegas.backend.gambit
+package vegas.semantics
 
+import vegas.FieldRef
 import vegas.RoleId
+import vegas.ir.ActionDag
 import vegas.ir.ActionId
+import vegas.ir.Expr
+import vegas.ir.Expr.Const
+import vegas.ir.Expr.Const.Quit
 
 /**
  * Labels for the game LTS.
@@ -15,7 +20,7 @@ internal sealed class Label {
      * Player move: a role assigns values to their parameters.
      *
      * @property role The role making the choice
-     * @property delta The field assignments (FieldRef -> IrVal mapping)
+     * @property delta The field assignments (FieldRef -> Expr.Const mapping)
      * @property tag Whether this is an explicit action or quit move
      */
     data class Play(
@@ -50,3 +55,12 @@ internal sealed class PlayTag {
      */
     object Quit : PlayTag()
 }
+
+/**
+ * Create a frontier slice where all parameters of the given actions are set to [Expr.Const.Quit].
+ * This represents the "quit" choice where a strategic player opts out of all actions at a frontier.
+ */
+internal fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
+    actions.flatMap { actionId ->
+        dag.params(actionId).map { FieldRef(role, it.name) to Expr.Const.Quit }
+    }.toMap()

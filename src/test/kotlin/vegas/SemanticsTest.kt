@@ -4,12 +4,12 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
-import vegas.backend.gambit.Configuration
-import vegas.backend.gambit.GameSemantics
-import vegas.backend.gambit.History
-import vegas.backend.gambit.IrVal
-import vegas.backend.gambit.Label
-import vegas.backend.gambit.PlayTag
+import vegas.ir.Expr
+import vegas.semantics.Configuration
+import vegas.semantics.GameSemantics
+import vegas.semantics.History
+import vegas.semantics.Label
+import vegas.semantics.PlayTag
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
@@ -147,7 +147,7 @@ class SemanticsTest : FreeSpec({
 
             // Alice quits by having Quit in history
             val aliceField = FieldRef(alice, VarId("x"))
-            val quitSlice = mapOf(aliceField to IrVal.Quit)
+            val quitSlice = mapOf(aliceField to Expr.Const.Quit)
             val history = config.history with quitSlice
             config = Configuration(config.frontier.resolveEnabled(), history, emptyMap())
 
@@ -281,7 +281,7 @@ class SemanticsTest : FreeSpec({
 
             // Alice quits in history
             val aliceField = FieldRef(alice, VarId("x"))
-            val quitSlice = mapOf(aliceField to IrVal.Quit)
+            val quitSlice = mapOf(aliceField to Expr.Const.Quit)
             config = Configuration(config.frontier, config.history with quitSlice, emptyMap())
 
             // No roles need to act (Alice quit), so FinalizeFrontier enabled

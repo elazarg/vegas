@@ -4,9 +4,14 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import vegas.backend.gambit.EfgGenerator
+import vegas.backend.gambit.ExpansionPolicy
+import vegas.backend.gambit.ExtensiveFormGame
+import vegas.backend.gambit.GameTree
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
+import vegas.semantics.History
 
 const val BAIL_PERSISTENCE = """
 // Test 1.2: Abandonment persists - once a player quits, they are locked out
@@ -362,16 +367,16 @@ class GambitSemanticTest : FreeSpec({
             val ir = compileToIR(ast)
 
             // Build the full game tree with abandonment branches expanded
-            val gen = vegas.backend.gambit.EfgGenerator(ir)
+            val gen = EfgGenerator(ir)
             val frontier = vegas.dag.FrontierMachine.from(ir.dag)
-            val initialHistory = vegas.backend.gambit.History()
-            val initialViews = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.History() }
+            val initialHistory = History()
+            val initialViews = (ir.roles + ir.chanceRoles).associateWith { History() }
 
             val tree = gen.exploreFromFrontier(
                 frontier,
                 initialHistory,
                 initialViews,
-                vegas.backend.gambit.ExpansionPolicy.FULL_EXPANSION
+                ExpansionPolicy.FULL_EXPANSION
             )
 
             val alice = ir.roles.first { it.name == "Alice" }
@@ -388,17 +393,17 @@ class GambitSemanticTest : FreeSpec({
 
             var sawPathWhereAliceQuitsFirstAndActsLater = false
 
-            fun dfs(node: vegas.backend.gambit.GameTree, ctx: Ctx) {
+            fun dfs(node: GameTree, ctx: Ctx) {
                 when (node) {
-                    is vegas.backend.gambit.GameTree.Terminal -> {
+                    is GameTree.Terminal -> {
                         // Nothing to do
                     }
 
-                    is vegas.backend.gambit.GameTree.Continuation -> {
+                    is GameTree.Continuation -> {
                         error("FULL_EXPANSION should produce a tree without Continuation nodes")
                     }
 
-                    is vegas.backend.gambit.GameTree.Decision -> {
+                    is GameTree.Decision -> {
                         val isAliceNode = (node.owner == alice)
 
                         // If Alice already quit on her *first* decision along this path,
@@ -613,23 +618,23 @@ class GambitSemanticTest : FreeSpec({
             val ir = compileToIR(ast)
 
             // Generate FAIR_PLAY tree (defers abandonment)
-            val gen = vegas.backend.gambit.EfgGenerator(ir)
+            val gen = EfgGenerator(ir)
             val frontier = vegas.dag.FrontierMachine.from(ir.dag)
-            val initialState = vegas.backend.gambit.History()
-            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.History() }
+            val initialState = History()
+            val initialKnowledge = (ir.roles + ir.chanceRoles).associateWith { History() }
             val tree = gen.exploreFromFrontier(
                 frontier,
                 initialState,
                 initialKnowledge,
-                vegas.backend.gambit.ExpansionPolicy.FAIR_PLAY
+                ExpansionPolicy.FAIR_PLAY
             )
 
             // Verify tree has Continuation nodes (cannot serialize)
             var hasContinuations = false
-            fun checkForContinuations(node: vegas.backend.gambit.GameTree): Unit = when (node) {
-                is vegas.backend.gambit.GameTree.Terminal -> {}
-                is vegas.backend.gambit.GameTree.Continuation -> { hasContinuations = true }
-                is vegas.backend.gambit.GameTree.Decision -> {
+            fun checkForContinuations(node: GameTree): Unit = when (node) {
+                is GameTree.Terminal -> {}
+                is GameTree.Continuation -> { hasContinuations = true }
+                is GameTree.Decision -> {
                     node.choices.forEach { checkForContinuations(it.subtree) }
                 }
             }
@@ -637,7 +642,7 @@ class GambitSemanticTest : FreeSpec({
             hasContinuations shouldBe true
 
             // Now expand with FULL_EXPANSION to expand abandonment branches
-            gen.expand(tree, vegas.backend.gambit.ExpansionPolicy.FULL_EXPANSION)
+            gen.expand(tree, ExpansionPolicy.FULL_EXPANSION)
 
             // After expansion, should have no Continuation nodes
             hasContinuations = false
@@ -645,7 +650,7 @@ class GambitSemanticTest : FreeSpec({
             hasContinuations shouldBe false
 
             // Should now be serializable with abandonment branches
-            val efg = vegas.backend.gambit.ExtensiveFormGame(
+            val efg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
                 description = "Generated from ActionDag",
                 strategicPlayers = ir.roles,

@@ -2,14 +2,14 @@ package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import vegas.backend.gambit.Configuration
-import vegas.backend.gambit.History
-import vegas.backend.gambit.IrVal
-import vegas.backend.gambit.reconstructViews
-import vegas.backend.gambit.redacted
+import vegas.semantics.Configuration
+import vegas.semantics.History
+import vegas.semantics.reconstructViews
+import vegas.semantics.redacted
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
+import vegas.ir.Expr
 
 /**
  * Test suite for Configuration data class.
@@ -101,7 +101,7 @@ class ConfigurationTest : FreeSpec({
         "returns true when role has field in partial" {
             val ir = compileGame("join Alice() $ 100; withdraw { Alice -> 10 }")
             val frontier = FrontierMachine.from(ir.dag)
-            val partial = mapOf(FieldRef(alice, VarId("x")) to IrVal.BoolVal(true))
+            val partial = mapOf(FieldRef(alice, VarId("x")) to Expr.Const.BoolVal(true))
             val config = Configuration(frontier, History(), partial)
 
             config.hasActed(alice) shouldBe true
@@ -110,7 +110,7 @@ class ConfigurationTest : FreeSpec({
         "returns false for other roles" {
             val ir = compileGame("join Alice() $ 100; withdraw { Alice -> 10 }")
             val frontier = FrontierMachine.from(ir.dag)
-            val partial = mapOf(FieldRef(alice, VarId("x")) to IrVal.BoolVal(true))
+            val partial = mapOf(FieldRef(alice, VarId("x")) to Expr.Const.BoolVal(true))
             val config = Configuration(frontier, History(), partial)
 
             config.hasActed(bob) shouldBe false
@@ -120,8 +120,8 @@ class ConfigurationTest : FreeSpec({
             val ir = compileGame("join Alice() $ 100; withdraw { Alice -> 10 }")
             val frontier = FrontierMachine.from(ir.dag)
             val partial = mapOf(
-                FieldRef(alice, VarId("x")) to IrVal.BoolVal(true),
-                FieldRef(alice, VarId("y")) to IrVal.IntVal(42)
+                FieldRef(alice, VarId("x")) to Expr.Const.BoolVal(true),
+                FieldRef(alice, VarId("y")) to Expr.Const.IntVal(42)
             )
             val config = Configuration(frontier, History(), partial)
 
@@ -131,7 +131,7 @@ class ConfigurationTest : FreeSpec({
         "works with Quit values" {
             val ir = compileGame("join Alice() $ 100; withdraw { Alice -> 10 }")
             val frontier = FrontierMachine.from(ir.dag)
-            val partial = mapOf(FieldRef(alice, VarId("x")) to IrVal.Quit)
+            val partial = mapOf(FieldRef(alice, VarId("x")) to Expr.Const.Quit)
             val config = Configuration(frontier, History(), partial)
 
             config.hasActed(alice) shouldBe true
@@ -144,8 +144,8 @@ class ConfigurationTest : FreeSpec({
             val aliceField = FieldRef(alice, VarId("x"))
             val bobField = FieldRef(bob, VarId("y"))
             val slice = mapOf(
-                aliceField to IrVal.Hidden(IrVal.BoolVal(true)),
-                bobField to IrVal.IntVal(42)
+                aliceField to Expr.Const.Hidden(Expr.Const.BoolVal(true)),
+                bobField to Expr.Const.IntVal(42)
             )
 
             // Direct redaction
@@ -153,12 +153,12 @@ class ConfigurationTest : FreeSpec({
             val bobRedacted = redacted(slice, bob)
 
             // Alice sees unwrapped, Bob sees as-is
-            aliceRedacted[aliceField] shouldBe IrVal.BoolVal(true)
-            aliceRedacted[bobField] shouldBe IrVal.IntVal(42)
+            aliceRedacted[aliceField] shouldBe Expr.Const.BoolVal(true)
+            aliceRedacted[bobField] shouldBe Expr.Const.IntVal(42)
 
             // Bob sees Alice's as Opaque
-            bobRedacted[aliceField] shouldBe IrVal.Opaque
-            bobRedacted[bobField] shouldBe IrVal.IntVal(42)
+            bobRedacted[aliceField] shouldBe Expr.Const.Opaque
+            bobRedacted[bobField] shouldBe Expr.Const.IntVal(42)
         }
 
         "works with empty history" {
