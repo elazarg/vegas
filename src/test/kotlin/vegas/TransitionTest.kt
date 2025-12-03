@@ -79,7 +79,7 @@ class TransitionTest : FreeSpec({
             val aliceMove = moves1.filterIsInstance<Label.Play>().first { it.role == alice && it.tag is PlayTag.Action }
             config = semantics.applyMove(config, aliceMove)
 
-            // Commit frontier to advance to Bob's yield
+            // Finalize frontier to advance to Bob's yield
             config = semantics.applyMove(config, Label.FinalizeFrontier)
             config = Configuration(config.frontier, config.history, emptyMap()) // Reset partial after checking
 
@@ -138,15 +138,15 @@ class TransitionTest : FreeSpec({
             val playMove = moves.filterIsInstance<Label.Play>().first()
             config = semantics.applyMove(config, playMove)
 
-            val partialBeforeCommit = config.partial
+            val partialBeforeFinalization = config.partial
 
-            // Commit frontier
+            // Finalize frontier
             val nextConfig = semantics.applyMove(config, Label.FinalizeFrontier)
 
-            // History should contain the committed partial
+            // History should contain the finalized partial
             val aliceField = FieldRef(alice, VarId("x"))
             val valueInHistory = nextConfig.history.get(aliceField)
-            val valueInPartial = partialBeforeCommit[aliceField]
+            val valueInPartial = partialBeforeFinalization[aliceField]
 
             valueInHistory shouldBe valueInPartial
         }
@@ -172,7 +172,7 @@ class TransitionTest : FreeSpec({
             // Partial should be non-empty
             config.partial.isEmpty() shouldBe false
 
-            // Commit frontier
+            // Finalize frontier
             val nextConfig = semantics.applyMove(config, Label.FinalizeFrontier)
 
             // Partial should be cleared
@@ -192,19 +192,19 @@ class TransitionTest : FreeSpec({
             var config = Configuration(FrontierMachine.from(ir.dag), History())
             config = Configuration(config.frontier.resolveEnabled(), config.history, emptyMap())
 
-            val enabledBeforeCommit = config.frontier.enabled()
+            val enabledBeforeFinalization = config.frontier.enabled()
 
             // Alice acts
             val moves = semantics.enabledMoves(config)
             val playMove = moves.filterIsInstance<Label.Play>().first()
             config = semantics.applyMove(config, playMove)
 
-            // Commit frontier
+            // Finalize frontier
             val nextConfig = semantics.applyMove(config, Label.FinalizeFrontier)
 
             // Frontier should have advanced (different enabled actions or terminal)
-            val enabledAfterCommit = nextConfig.frontier.enabled()
-            val frontierAdvanced = (enabledAfterCommit != enabledBeforeCommit) || nextConfig.isTerminal()
+            val enabledAfterFinalization = nextConfig.frontier.enabled()
+            val frontierAdvanced = (enabledAfterFinalization != enabledBeforeFinalization) || nextConfig.isTerminal()
             frontierAdvanced shouldBe true
         }
     }
@@ -306,7 +306,7 @@ class TransitionTest : FreeSpec({
             val xField = FieldRef(alice, VarId("x"))
             config.partial[xField] shouldBe IrVal.Quit
 
-            // Commit the quit
+            // Finalize the quit
             config = semantics.applyMove(config, Label.FinalizeFrontier)
 
             // History should show Alice quit

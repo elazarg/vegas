@@ -98,6 +98,44 @@ fun interface ExpansionPolicy {
  * frontier exploration of the ActionDag and respects its causal partial order.
  */
 fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): String {
+    // Use new semantic + unroller API (semantic refactoring complete)
+    val semantics = GameSemantics(ir)
+    val unroller = TreeUnroller(semantics, ir)
+
+    val policy = if (includeAbandonment) {
+        ExpansionPolicy { _, _ -> true }  // FULL_EXPANSION
+    } else {
+        ExpansionPolicy { _, action -> action != null }  // FAIR_PLAY
+    }
+
+    val initialConfig = Configuration(
+        frontier = FrontierMachine.from(ir.dag),
+        history = History(),
+        partial = emptyMap()
+    )
+
+    var tree = unroller.unroll(initialConfig, policy)
+    tree = pruneContinuations(tree)
+
+    return ExtensiveFormGame(
+        name = ir.name.ifEmpty { "Game" },
+        description = "Generated from ActionDag",
+        strategicPlayers = ir.roles,
+        tree = tree
+    ).toEfg()
+}
+
+/**
+ * Old implementation using EfgGenerator (deprecated, kept for reference).
+ *
+ * This is the original implementation before the semantic refactoring.
+ * Kept temporarily for comparison and validation purposes.
+ */
+@Deprecated(
+    "Use generateExtensiveFormGame (now powered by TreeUnroller)",
+    ReplaceWith("generateExtensiveFormGame(ir, includeAbandonment)")
+)
+internal fun generateExtensiveFormGameOld(ir: GameIR, includeAbandonment: Boolean = true): String {
     val gen = EfgGenerator(ir)
     val policy = if (includeAbandonment) EfgGenerator.FULL_EXPANSION else EfgGenerator.FAIR_PLAY
     val frontier = FrontierMachine.from(ir.dag)
@@ -105,9 +143,6 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
     val initialKnowledge: HistoryViews = (ir.roles + ir.chanceRoles).associateWith { History() }
     var tree = gen.exploreFromFrontier(frontier, initialState, initialKnowledge, policy)
 
-    // In order to generate text, prune all Continuation nodes (abandonment branches)
-    // In order for this to be an actual game, the continuations MUST NOT cross infosets.
-    // This is true for FAIR_PLAY and (vacuously) for FULL_EXPANSION, so we're safe.
     tree = pruneContinuations(tree)
 
     return ExtensiveFormGame(

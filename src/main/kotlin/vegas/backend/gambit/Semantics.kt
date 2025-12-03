@@ -50,7 +50,6 @@ internal class GameSemantics(val ir: GameIR) {
         // 2. Explicit moves per role
         // Only generate moves for roles that haven't acted yet
         for (role in rolesInOrder) {
-            if (config.history.quit(role)) continue
             // Skip roles that already acted in this frontier
             if (config.hasActed(role)) continue
 
@@ -72,10 +71,9 @@ internal class GameSemantics(val ir: GameIR) {
             })
         }
 
-        // 3. Quit moves for strategic players only
+        // 3. Quit moves for strategic players only.
         // Only generate quit for roles that haven't acted yet
         for (role in ir.roles.sortedBy { it.name }) {  // canonical order
-            if (config.history.quit(role)) continue
             // Skip roles that already acted in this frontier
             if (config.hasActed(role)) continue
 

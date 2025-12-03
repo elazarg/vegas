@@ -92,14 +92,34 @@ internal class TreeUnroller(
         }
 
         val role = roles[roleIndex]
-        val roleMoves = movesByRole[role]
+        var roleMoves = movesByRole[role]
+        val isChance = role in ir.chanceRoles
 
-        // If role has no moves in this frontier, skip to next role
+        // Handle roles that need quit-only decision nodes when policy allows abandonment
+        // This happens in two cases:
+        // 1. Role has actions but no parameters (e.g., reveal with pre-assigned value)
+        // 2. Role has already quit in history (but has actions in current frontier)
+        if ((roleMoves == null || roleMoves.isEmpty()) && !isChance) {
+            val actionsForRole = config.actionsByRole(ir.dag)[role]
+            if (actionsForRole != null && actionsForRole.isNotEmpty()) {
+                val allParams = actionsForRole.flatMap { ir.dag.params(it) }
+                val hasQuit = config.history.quit(role)
+
+                // Create quit-only node if:
+                // - Role has no parameters (empty params), OR
+                // - Role has already quit (persistence of abandonment)
+                if ((allParams.isEmpty() || hasQuit) && policy.shouldExpand(role, null)) {
+                    // Synthesize a quit move with empty delta
+                    val quitMove = Label.Play(role, emptyMap(), PlayTag.Quit)
+                    roleMoves = listOf(quitMove)
+                }
+            }
+        }
+
+        // If still no moves, skip to next role
         if (roleMoves == null || roleMoves.isEmpty()) {
             return buildRoleDecisions(config, roles, movesByRole, roleIndex + 1, policy)
         }
-
-        val isChance = role in ir.chanceRoles
 
         // Compute infoset ID
         val views = config.views(ir.roles + ir.chanceRoles)
@@ -142,12 +162,7 @@ internal class TreeUnroller(
             )
         }
 
-        // Skip roles with no parameters (structural frontiers)
-        if (!roleHasParams(role, config)) {
-            return choices.firstOrNull()?.subtree
-                ?: buildRoleDecisions(config, roles, movesByRole, roleIndex + 1, policy)
-        }
-
+        // Don't skip roles with no parameters when they have quit-only nodes
         return GameTree.Decision(
             owner = role,
             infosetId = infosetId,

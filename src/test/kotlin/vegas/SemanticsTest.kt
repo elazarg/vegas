@@ -201,8 +201,8 @@ class SemanticsTest : FreeSpec({
             val playMoves = moves.filterIsInstance<Label.Play>()
             playMoves.shouldBeEmpty()
 
-            val commitMoves = moves.filterIsInstance<Label.FinalizeFrontier>()
-            commitMoves.shouldHaveSize(1)
+            val finalizingMoves = moves.filterIsInstance<Label.FinalizeFrontier>()
+            finalizingMoves.shouldHaveSize(1)
         }
     }
 
