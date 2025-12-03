@@ -14,6 +14,8 @@
    - `ExplicitDag.from()` throws `IllegalArgumentException` on cycles, doesn't return null
    - Wrap in try-catch when null is expected return value
 
+5. Never write history into the code. The comments in the code should be timeless.
+
 ## Project-Specific Knowledge
 
 ### Vegas Codebase Structure
@@ -51,6 +53,8 @@
   - Basic command: `mvn test`
   - Run specific test: `mvn test -Dtest=TestClassName`
   - Quieter output: `mvn -q test`
+  - Never declare completion of a mission without all the tests succeeding.
+  - Never remove a test or make it useless just so it will be deemed "passing"
 - **Platform Notes**:
   - On Windows with Git Bash or similar environments, some basic shell commands (grep, tee, tail) may not be available
   - Use Maven's built-in test filtering instead of piping output through shell commands

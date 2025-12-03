@@ -356,6 +356,90 @@ class GambitSemanticTest : FreeSpec({
             efg shouldContain "{ 10 10 }"
         }
 
+        "abandonment persists along paths (once Alice quits on x, she is locked out)" {
+            // Use the same game as BAIL_PERSISTENCE
+            val ast = parseCode(BAIL_PERSISTENCE)
+            val ir = compileToIR(ast)
+
+            // Build the full game tree with abandonment branches expanded
+            val gen = vegas.backend.gambit.EfgGenerator(ir)
+            val frontier = vegas.dag.FrontierMachine.from(ir.dag)
+            val initialHistory = vegas.backend.gambit.History()
+            val initialViews = (ir.roles + ir.chanceRoles).associateWith { vegas.backend.gambit.History() }
+
+            val tree = gen.exploreFromFrontier(
+                frontier,
+                initialHistory,
+                initialViews,
+                vegas.backend.gambit.EfgGenerator.FULL_EXPANSION
+            )
+
+            val alice = ir.roles.first { it.name == "Alice" }
+
+            // In this particular game, Alice's decisions always have exactly one boolean param
+            // (x first, then z). In our backend, the Quit choice is encoded as an empty
+            // action label for that role.
+            fun isQuitAction(action: Map<*, *>): Boolean = action.isEmpty()
+
+            data class Ctx(
+                val seenFirstAliceDecision: Boolean,
+                val seenQuitOnFirstAliceDecision: Boolean
+            )
+
+            var sawPathWhereAliceQuitsFirstAndActsLater = false
+
+            fun dfs(node: vegas.backend.gambit.GameTree, ctx: Ctx) {
+                when (node) {
+                    is vegas.backend.gambit.GameTree.Terminal -> {
+                        // Nothing to do
+                    }
+
+                    is vegas.backend.gambit.GameTree.Continuation -> {
+                        error("FULL_EXPANSION should produce a tree without Continuation nodes")
+                    }
+
+                    is vegas.backend.gambit.GameTree.Decision -> {
+                        val isAliceNode = (node.owner == alice)
+
+                        // If Alice already quit on her *first* decision along this path,
+                        // then at any later Alice decision node on this path all her
+                        // choices must be Quit-only.
+                        if (isAliceNode && ctx.seenQuitOnFirstAliceDecision) {
+                            val allQuit = node.choices.all { isQuitAction(it.action) }
+                            require(allQuit) {
+                                "Found non-Quit choice for Alice after she quit on her first decision: " +
+                                        "choices=${node.choices.map { it.action }}"
+                            }
+                            // If we actually reach here for some node, we know there is at
+                            // least one later Alice node after quitting on the first.
+                            sawPathWhereAliceQuitsFirstAndActsLater = true
+                        }
+
+                        val isFirstAliceDecisionHere =
+                            isAliceNode && !ctx.seenFirstAliceDecision
+
+                        for (choice in node.choices) {
+                            val quitHereOnFirst =
+                                isFirstAliceDecisionHere && isAliceNode && isQuitAction(choice.action)
+
+                            val nextCtx = Ctx(
+                                seenFirstAliceDecision = ctx.seenFirstAliceDecision || isFirstAliceDecisionHere,
+                                seenQuitOnFirstAliceDecision = ctx.seenQuitOnFirstAliceDecision || quitHereOnFirst
+                            )
+
+                            dfs(choice.subtree, nextCtx)
+                        }
+                    }
+                }
+            }
+
+            dfs(tree, Ctx(seenFirstAliceDecision = false, seenQuitOnFirstAliceDecision = false))
+
+            // Sanity: we actually exercised a path where Alice quit on her first decision
+            // and later had another decision node (on which the "only Quit" condition was enforced).
+            sawPathWhereAliceQuitsFirstAndActsLater shouldBe true
+        }
+
         "chance roles cannot quit" {
             // Nature (random role) should NOT have abandonment option.
 
