@@ -37,7 +37,7 @@ fun generateSMT(ir: GameIR): String {
         val guardExpr = exprToSmt(guard)
         val prereqExpr = prereq.fold("true") { acc, name -> "(and $acc $name)" }
         sb.appendLine("(assert (=> ${actionDoneName(id)} (and $prereqExpr $guardExpr)))")
-        dag.struct(id).writes.forEach { field ->
+        dag.writes(id).forEach { field ->
             sb.appendLine("(assert (=> ${actionDoneName(id)} ${doneFieldName(field)}))")
         }
         sb.appendLine()

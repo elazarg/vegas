@@ -38,7 +38,7 @@ class UnrollerTest : FreeSpec({
                 partial = emptyMap()
             )
 
-            val tree = unroller.unroll(initialConfig) { _, _ -> true }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
 
             // Should be terminal since join has no parameters
             tree.shouldBeInstanceOf<GameTree.Terminal>()
@@ -62,7 +62,7 @@ class UnrollerTest : FreeSpec({
                 partial = emptyMap()
             )
 
-            val tree = unroller.unroll(initialConfig) { _, _ -> true }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
 
             // Should have Alice's decision node (x: bool)
             tree.shouldBeInstanceOf<GameTree.Decision>()
@@ -103,7 +103,7 @@ class UnrollerTest : FreeSpec({
             )
 
             // FAIR_PLAY policy should expand explicit actions but defer quit
-            val tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
 
             tree.shouldBeInstanceOf<GameTree.Decision>()
 
@@ -143,7 +143,7 @@ class UnrollerTest : FreeSpec({
                 partial = emptyMap()
             )
 
-            val tree = unroller.unroll(initialConfig) { _, _ -> true }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
 
             // Navigate to Alice bets true, Bob calls true
             tree.shouldBeInstanceOf<GameTree.Decision>()
@@ -191,7 +191,7 @@ class UnrollerTest : FreeSpec({
                 partial = emptyMap()
             )
 
-            val tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
 
             // First decision should be Nature (chance)
             tree.shouldBeInstanceOf<GameTree.Decision>()
@@ -228,7 +228,7 @@ class UnrollerTest : FreeSpec({
                 partial = emptyMap()
             )
 
-            val tree = unroller.unroll(initialConfig) { _, _ -> true }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
 
             // First decision for x
             tree.shouldBeInstanceOf<GameTree.Decision>()
@@ -264,7 +264,7 @@ class UnrollerTest : FreeSpec({
             )
 
             // SKELETON policy should defer all expansions
-            val tree = unroller.unroll(initialConfig) { _, _ -> false }
+            val tree = unroller.unroll(initialConfig, ExpansionPolicy.SKELETON)
 
             tree.shouldBeInstanceOf<GameTree.Decision>()
 
@@ -297,7 +297,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, _ -> true }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -333,7 +333,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, _ -> true }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FULL_EXPANSION)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -365,7 +365,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -401,7 +401,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -437,7 +437,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -472,7 +472,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -500,7 +500,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -528,7 +528,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
@@ -556,7 +556,7 @@ class UnrollerTest : FreeSpec({
                 history = History(),
                 partial = emptyMap()
             )
-            var tree = unroller.unroll(initialConfig) { _, action -> action != null }
+            var tree = unroller.unroll(initialConfig, ExpansionPolicy.FAIR_PLAY)
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },

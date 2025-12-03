@@ -371,7 +371,7 @@ class GambitSemanticTest : FreeSpec({
                 frontier,
                 initialHistory,
                 initialViews,
-                vegas.backend.gambit.EfgGenerator.FULL_EXPANSION
+                vegas.backend.gambit.ExpansionPolicy.FULL_EXPANSION
             )
 
             val alice = ir.roles.first { it.name == "Alice" }
@@ -621,7 +621,7 @@ class GambitSemanticTest : FreeSpec({
                 frontier,
                 initialState,
                 initialKnowledge,
-                vegas.backend.gambit.EfgGenerator.FAIR_PLAY
+                vegas.backend.gambit.ExpansionPolicy.FAIR_PLAY
             )
 
             // Verify tree has Continuation nodes (cannot serialize)
@@ -637,7 +637,7 @@ class GambitSemanticTest : FreeSpec({
             hasContinuations shouldBe true
 
             // Now expand with FULL_EXPANSION to expand abandonment branches
-            gen.expand(tree, vegas.backend.gambit.EfgGenerator.FULL_EXPANSION)
+            gen.expand(tree, vegas.backend.gambit.ExpansionPolicy.FULL_EXPANSION)
 
             // After expansion, should have no Continuation nodes
             hasContinuations = false
