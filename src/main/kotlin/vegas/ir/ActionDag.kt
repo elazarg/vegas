@@ -133,8 +133,9 @@ class ActionDag private constructor(
     fun params(id: ActionId): List<ActionParam> = meta(id).spec.params
 
     /** Structural shortcuts. */
-    fun struct(id: ActionId): ActionStruct = meta(id).struct
+    private fun struct(id: ActionId): ActionStruct = meta(id).struct
     fun owner(id: ActionId): RoleId = struct(id).owner
+    fun writes(id: ActionId): Set<FieldRef> = struct(id).writes
     fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = struct(id).visibility
 
     /** Reachability queries. */

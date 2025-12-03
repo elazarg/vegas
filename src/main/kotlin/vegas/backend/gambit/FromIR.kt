@@ -36,11 +36,7 @@ import vegas.VarId
 import vegas.dag.FrontierMachine
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
-import vegas.ir.ActionSpec
-import vegas.ir.ActionStruct
 import vegas.ir.GameIR
-import vegas.ir.Type
-import vegas.ir.Visibility
 
 /**
  * Functional interface determining which actions to expand during generation.
@@ -60,6 +56,39 @@ fun interface ExpansionPolicy {
      * @return true to expand immediately, false to create Continuation
      */
     fun shouldExpand(owner: RoleId, action: ActionId?): Boolean
+
+
+    companion object {
+        /**
+         * FAIR_PLAY: Expand all explicit moves, defer abandonment branches.
+         *
+         * This is the default policy and produces the "spine" tree:
+         * - Focuses on strategic play where players actively participate
+         * - Abandonment branches can be added later via expand()
+         * - Equivalent to old SPINE_ONLY mode
+         */
+        val FAIR_PLAY: ExpansionPolicy = ExpansionPolicy { _, action -> action != null }
+
+        /**
+         * FULL_EXPANSION: Expand everything including abandonment branches.
+         *
+         * Produces the complete game tree with all possible paths:
+         * - Used for game-theoretic verification
+         * - Includes all abandonment/griefing scenarios
+         * - Equivalent to old FULL_EXPANSION mode
+         * - WARNING: Exponentially larger trees
+         */
+        val FULL_EXPANSION: ExpansionPolicy = ExpansionPolicy { _, _ -> true }
+
+        /**
+         * SKELETON: Defer everything, create minimal tree structure.
+         *
+         * Produces a tree with all branches suspended:
+         * - Useful for analyzing game structure without generating full tree
+         * - Can selectively expand interesting branches
+         */
+        val SKELETON: ExpansionPolicy = ExpansionPolicy { _, _ -> false }
+    }
 }
 
 /**
@@ -103,9 +132,9 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
     val unroller = TreeUnroller(semantics, ir)
 
     val policy = if (includeAbandonment) {
-        ExpansionPolicy { _, _ -> true }  // FULL_EXPANSION
+        ExpansionPolicy.FULL_EXPANSION
     } else {
-        ExpansionPolicy { _, action -> action != null }  // FAIR_PLAY
+        ExpansionPolicy .FAIR_PLAY
     }
 
     val initialConfig = Configuration(
@@ -125,33 +154,172 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
     ).toEfg()
 }
 
+
 /**
- * Old implementation using EfgGenerator (deprecated, kept for reference).
+ * Converts LTS semantics into a GameTree by unrolling configurations.
  *
- * This is the original implementation before the semantic refactoring.
- * Kept temporarily for comparison and validation purposes.
+ * This is the bridge between the semantic model (Configuration + Labels)
+ * and the EFG tree representation. Uses [ExpansionPolicy] to control
+ * which branches to expand immediately vs defer as [GameTree.Continuation].
+ *
+ * TreeUnroller interprets move labels from [GameSemantics] and builds tree structure.
+ * It handles tree-specific concerns like quit-only decision nodes for roles with
+ * no parameters or roles that have already quit (abandonment persistence).
  */
-@Deprecated(
-    "Use generateExtensiveFormGame (now powered by TreeUnroller)",
-    ReplaceWith("generateExtensiveFormGame(ir, includeAbandonment)")
-)
-internal fun generateExtensiveFormGameOld(ir: GameIR, includeAbandonment: Boolean = true): String {
-    val gen = EfgGenerator(ir)
-    val policy = if (includeAbandonment) EfgGenerator.FULL_EXPANSION else EfgGenerator.FAIR_PLAY
-    val frontier = FrontierMachine.from(ir.dag)
-    val initialState = History()
-    val initialKnowledge: HistoryViews = (ir.roles + ir.chanceRoles).associateWith { History() }
-    var tree = gen.exploreFromFrontier(frontier, initialState, initialKnowledge, policy)
+internal class TreeUnroller(
+    private val semantics: GameSemantics,
+    private val ir: GameIR
+) {
+    private val infosetManager = InfosetManager(ir.roles)
 
-    tree = pruneContinuations(tree)
+    /**
+     * Unroll the LTS from a configuration into a GameTree.
+     *
+     * Uses canonical role ordering (alphabetical by name) to ensure
+     * deterministic tree structure.
+     *
+     * @param config Starting configuration
+     * @param policy Expansion policy for strategic choices
+     * @return Game subtree rooted at this configuration
+     */
+    fun unroll(config: Configuration, policy: ExpansionPolicy): GameTree {
+        // Terminal check
+        if (config.isTerminal()) {
+            return GameTree.Terminal(computePayoffs(config))
+        }
 
-    return ExtensiveFormGame(
-        name = ir.name.ifEmpty { "Game" },
-        description = "Generated from ActionDag",
-        strategicPlayers = ir.roles,
-        tree = tree
-    ).toEfg()
+        // Get all moves via semantic layer
+        val moves = semantics.enabledMoves(config)
+
+        // Group by role in canonical order and build tree
+        return buildTreeFromMoves(config, moves, policy)
+    }
+
+    private fun buildTreeFromMoves(
+        config: Configuration,
+        moves: List<Label>,
+        policy: ExpansionPolicy
+    ): GameTree {
+        // Filter out FinalizeFrontier - it's implicit in tree structure
+        val playMoves = moves.filterIsInstance<Label.Play>()
+
+        // Group by role, maintaining canonical order
+        val movesByRole = playMoves.groupBy({ it.role }, { it })
+        val rolesInOrder = movesByRole.keys.sortedBy { it.name }
+
+        // Build tree by iterating through roles, creating decision nodes
+        return buildRoleDecisions(
+            config = config,
+            roles = rolesInOrder,
+            movesByRole = movesByRole,
+            roleIndex = 0,
+            policy = policy
+        )
+    }
+
+    private fun buildRoleDecisions(
+        config: Configuration,
+        roles: List<RoleId>,
+        movesByRole: Map<RoleId, List<Label.Play>>,
+        roleIndex: Int,
+        policy: ExpansionPolicy
+    ): GameTree {
+        // All roles done: apply FinalizeFrontier if enabled
+        if (roleIndex == roles.size) {
+            return if (semantics.canFinalizeFrontier(config)) {
+                val nextConfig = applyMove(config, Label.FinalizeFrontier)
+                unroll(nextConfig, policy)
+            } else {
+                error("Reached end of role loop but FinalizeFrontier not enabled")
+            }
+        }
+
+        val role = roles[roleIndex]
+        var roleMoves = movesByRole[role]
+        val isChance = role in ir.chanceRoles
+
+        // Handle roles that need quit-only decision nodes when policy allows abandonment
+        // This happens in two cases:
+        // 1. Role has actions but no parameters (e.g., reveal with pre-assigned value)
+        // 2. Role has already quit in history (but has actions in current frontier)
+        if ((roleMoves == null || roleMoves.isEmpty()) && !isChance) {
+            val actionsForRole = config.actionsByRole(ir.dag)[role]
+            if (actionsForRole != null && actionsForRole.isNotEmpty()) {
+                val allParams = actionsForRole.flatMap { ir.dag.params(it) }
+                val hasQuit = config.history.quit(role)
+
+                // Create quit-only node if:
+                // - Role has no parameters (empty params), OR
+                // - Role has already quit (persistence of abandonment)
+                if ((allParams.isEmpty() || hasQuit) && policy.shouldExpand(role, null)) {
+                    // Synthesize a quit move with empty delta
+                    val quitMove = Label.Play(role, emptyMap(), PlayTag.Quit)
+                    roleMoves = listOf(quitMove)
+                }
+            }
+        }
+
+        // If still no moves, skip to next role
+        if (roleMoves == null || roleMoves.isEmpty()) {
+            return buildRoleDecisions(config, roles, movesByRole, roleIndex + 1, policy)
+        }
+
+        // Compute infoset ID
+        val views = config.views(ir.roles + ir.chanceRoles)
+        val infoset = views.getValue(role)
+        val infosetId = infosetManager.getHistoryNumber(role, infoset, isChance)
+
+        // Build choices for this role
+        val choices = roleMoves.map { playMove ->
+            val shouldExpand = when (playMove.tag) {
+                is PlayTag.Action -> {
+                    // Chance always expands, strategic consults policy
+                    isChance || policy.shouldExpand(role, playMove.tag.actionId)
+                }
+                is PlayTag.Quit -> {
+                    policy.shouldExpand(role, null)
+                }
+            }
+
+            val subtree = if (shouldExpand) {
+                // Expand: apply move and recurse to next role
+                val nextConfig = applyMove(config, playMove)
+                buildRoleDecisions(nextConfig, roles, movesByRole, roleIndex + 1, policy)
+            } else {
+                // Defer: create Continuation
+                val nextConfig = applyMove(config, playMove)
+                GameTree.Continuation(
+                    GeneratorContext(
+                        frontier = nextConfig.frontier,
+                        history = nextConfig.history,
+                        partialFrontierAssignment = nextConfig.partial,
+                        actionId = (playMove.tag as? PlayTag.Action)?.actionId
+                    )
+                )
+            }
+
+            GameTree.Choice(
+                action = extractActionLabel(playMove.delta, role),
+                subtree = subtree,
+                probability = if (isChance) Rational(1, roleMoves.size) else null
+            )
+        }
+
+        return GameTree.Decision(
+            owner = role,
+            infosetId = infosetId,
+            choices = choices,
+            isChance = isChance
+        )
+    }
+
+    private fun computePayoffs(config: Configuration): Map<RoleId, IrVal> {
+        return ir.payoffs.mapValues { (_, expr) ->
+            eval({ config.history.get(it) }, expr).toOutcome()
+        }
+    }
 }
+
 
 /**
  * Remove all Continuation nodes from the tree by mutating Choice.subtree fields.
@@ -199,9 +367,8 @@ internal fun pruneContinuations(node: GameTree): GameTree {
  *
  * @param roles Set of strategic player role IDs (chance roles excluded)
  */
-private class InfosetManager(roles: Set<RoleId>) {
+internal class InfosetManager(roles: Set<RoleId>) {
     private val perRole: Map<RoleId, MutableMap<History, Int>> = roles.associateWith { mutableMapOf() }
-
     private var chanceCounter: Int = 0
 
     fun getHistoryNumber(role: RoleId, key: History, isChance: Boolean): Int {
@@ -239,151 +406,6 @@ internal fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<Actio
     }.toMap()
 
 /**
- * Combine per-action parameter assignments into a unified frontier slice.
- *
- * Takes a list of actions and corresponding assignments (maps from parameter name to value),
- * and combines them into a single frontier slice (map from FieldRef to value).
- *
- * @param roleToActionId Function to look up which role owns an action
- * @param actions List of action IDs in the frontier
- * @param assignments Corresponding parameter assignments for each action
- * @return Unified frontier slice mapping FieldRef -> IrVal
- */
-private fun combineAssignmentsIntoFrontier(
-    roleToActionId: (ActionId) -> RoleId,
-    actions: List<ActionId>,
-    assignments: List<Map<VarId, IrVal>>
-): FrontierAssignmentSlice {
-    val frontierSlice = mutableMapOf<FieldRef, IrVal>()
-    actions.zip(assignments).forEach { (actionId, localAssigment) ->
-        val role = roleToActionId(actionId)
-        localAssigment.forEach { (varId, value) ->
-            // If two actions write the same field, last-in-wins; IR should avoid that.
-            frontierSlice[FieldRef(role, varId)] = value
-        }
-    }
-    return frontierSlice
-}
-
-/**
- * Enumerate all explicit (non-abandonment) joint assignments for a role across all
- * its actions in the current frontier.
- *
- * Returns pairs of (ActionId, FrontierAssignmentSlice) where:
- * - ActionId identifies this as an explicit move (for policy checking)
- * - FrontierAssignmentSlice contains the actual field assignments
- *
- * For joint moves across multiple actions, uses the first ActionId as a marker.
- */
-internal fun enumerateRoleFrontierChoices(
-    dag: ActionDag,
-    role: RoleId,
-    actions: List<ActionId>,
-    history: History,
-    playerKnowledge: History,
-): List<Pair<ActionId, FrontierAssignmentSlice>> {
-    // ========== Check if Role Has Abandoned ==========
-    // Once a role has abandoned (some field Quit), it has no explicit choices anymore.
-    if (history.quit(role)) return emptyList()
-
-    // ========== Enumerate Assignments Per Action ==========
-    // For each action, enumerate its local assignments.
-    val perActionAssignments: List<List<Map<VarId, IrVal>>> =
-        actions.map { actionId ->
-            enumerateAssignmentsForAction(dag, actionId, history, playerKnowledge)
-        }
-
-    if (perActionAssignments.any { it.isEmpty() }) return emptyList()
-
-    // ========== Compute Cartesian Product ==========
-    // Cross-product over actions; then flatten into a single FrontierAssignmentSlice.
-    val combinations: List<List<Map<VarId, IrVal>>> = cartesian(perActionAssignments)
-
-    // Use first ActionId as a marker for explicit moves (for policy checking)
-    val representativeActionId = actions.first()
-
-    return combinations.map { localAssigmentList ->
-        val frontierSlice = combineAssignmentsIntoFrontier({ dag.struct(it).owner }, actions, localAssigmentList)
-        representativeActionId to frontierSlice
-    }
-}
-
-/**
- * Enumerate assignments for a single action under the current global history.
- * Commit/reveal semantics:
- *  - COMMIT: pick from type domain, store as Hidden(base).
- *  - REVEAL: if prior value is Hidden(x), then only choice is x (as visible value);
- *            otherwise, no legal choice.
- *  - PUBLIC: pick from type domain, store as visible value.
- *
- * Guards are evaluated with the assignment layered on top of the player's knowledge.
- */
-private fun enumerateAssignmentsForAction(
-    dag: ActionDag,
-    actionId: ActionId,
-    history: History,
-    playerKnowledge: History,
-): List<Map<VarId, IrVal>> {
-    val struct: ActionStruct = dag.struct(actionId)
-    val spec: ActionSpec = dag.spec(actionId)
-    val role = struct.owner
-
-    if (spec.params.isEmpty()) return listOf(emptyMap())
-    if (history.quit(role)) return emptyList()
-
-    // ========== Build Domain for Each Parameter ==========
-    val lists: List<List<Pair<VarId, IrVal>>> = spec.params.map { param ->
-        val fieldRef = FieldRef(role, param.name)
-        val prior = history.get(fieldRef)
-        val vis = struct.visibility.getValue(fieldRef)
-
-        val baseDomain: List<IrVal> = when (vis) {
-            Visibility.REVEAL ->
-                when (prior) {
-                    is IrVal.Hidden -> listOf(prior.inner)
-                    else -> emptyList()
-                }
-
-            Visibility.PUBLIC, Visibility.COMMIT ->
-                when (param.type) {
-                    is Type.BoolType ->
-                        listOf(IrVal.BoolVal(true), IrVal.BoolVal(false))
-
-                    is Type.SetType ->
-                        param.type.values.sorted().map { v -> IrVal.IntVal(v) }
-
-                    is Type.IntType ->
-                        throw StaticError("Cannot enumerate IntType; use SetType or BoolType")
-                }
-        }
-
-        // The packet we STORE in the frontier must respect visibility (Hidden)
-        val domainWithVis: List<IrVal> = when (vis) {
-            Visibility.COMMIT -> baseDomain.map { v -> IrVal.Hidden(v) }
-            Visibility.PUBLIC, Visibility.REVEAL -> baseDomain
-        }
-
-        domainWithVis.map { v -> param.name to v }
-    }
-
-    val rawAssignments: List<Map<VarId, IrVal>> =
-        cartesian(lists).map { it.toMap() }
-
-    // ========== Filter by Guard Condition ==========
-    // Guard: evaluated on player's knowledge with this action's packet overlayed.
-    return rawAssignments.filter { localAssigment ->
-        // Unwrap Hidden values for the actor's own guard evaluation.
-        // The player knows what they are choosing right now.
-        val unwrappedPkt = localAssigment.mapValues { (_, v) ->
-            if (v is IrVal.Hidden) v.inner else v
-        }
-
-        val tempHeap = History(toFrontierMap(role, unwrappedPkt), playerKnowledge)
-        eval({ tempHeap.get(it) }, spec.guardExpr).asBool()
-    }
-}
-
-/**
  * Two-phase EFG generator with spine-and-ribs architecture.
  *
  * Supports two modes:
@@ -411,38 +433,6 @@ private fun enumerateAssignmentsForAction(
  * ```
  */
 internal class EfgGenerator(val ir: GameIR) {
-    companion object {
-        /**
-         * FAIR_PLAY: Expand all explicit moves, defer abandonment branches.
-         *
-         * This is the default policy and produces the "spine" tree:
-         * - Focuses on strategic play where players actively participate
-         * - Abandonment branches can be added later via expand()
-         * - Equivalent to old SPINE_ONLY mode
-         */
-        val FAIR_PLAY: ExpansionPolicy = ExpansionPolicy { _, action -> action != null }
-
-        /**
-         * FULL_EXPANSION: Expand everything including abandonment branches.
-         *
-         * Produces the complete game tree with all possible paths:
-         * - Used for game-theoretic verification
-         * - Includes all abandonment/griefing scenarios
-         * - Equivalent to old FULL_EXPANSION mode
-         * - WARNING: Exponentially larger trees
-         */
-        val FULL_EXPANSION: ExpansionPolicy = ExpansionPolicy { _, _ -> true }
-
-        /**
-         * SKELETON: Defer everything, create minimal tree structure.
-         *
-         * Produces a tree with all branches suspended:
-         * - Useful for analyzing game structure without generating full tree
-         * - Can selectively expand interesting branches
-         */
-        val SKELETON: ExpansionPolicy = ExpansionPolicy { _, _ -> false }
-    }
-
     /**
      * Manages information set numbering throughout the tree build.
      * Each strategic player's infoset is identified by their redacted knowledge history.
@@ -498,7 +488,7 @@ internal class EfgGenerator(val ir: GameIR) {
      * @param node Root of the subtree to expand
      * @param policy Expansion policy determining which Continuations to expand
      */
-    fun expand(node: GameTree, policy: ExpansionPolicy = FULL_EXPANSION) {
+    fun expand(node: GameTree, policy: ExpansionPolicy = ExpansionPolicy.FULL_EXPANSION) {
         when (node) {
             is GameTree.Terminal -> {}
             is GameTree.Continuation -> {} // Root continuation (edge case)
@@ -787,15 +777,13 @@ internal class EfgGenerator(val ir: GameIR) {
         val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierAssignmentSlice>>>,
     )
 }
-
-// Label only this role's non-Quit fields.
-// Keep Hidden wrapper for commitments so Gambit GUI shows the flow.
-private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, IrVal> = frontierDelta
-    .filterKeys { fr -> fr.owner == role }
-    .filterValues { v -> v != IrVal.Quit }
-    .mapKeys { (fr, _) -> fr.param }
-
-private fun <T> cartesian(lists: List<List<T>>): List<List<T>> =
-    lists.fold(listOf(emptyList())) { acc, xs ->
-        acc.flatMap { a -> xs.map { x -> a + x } }
-    }
+/**
+ * Extract action label for this role from frontier delta.
+ *
+ * Filters to only this role's non-Quit fields and unwraps to VarId -> IrVal.
+ */
+private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, IrVal> =
+    frontierDelta
+        .filterKeys { fr -> fr.owner == role }
+        .filterValues { v -> v != IrVal.Quit }
+        .mapKeys { (fr, _) -> fr.param }

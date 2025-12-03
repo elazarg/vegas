@@ -161,12 +161,11 @@ class ActionDagFromIrTest : FreeSpec({
 
             // Every action should have struct
             for (action in dag.nodes) {
-                val struct = dag.struct(action)
-                struct.owner shouldBe action.first
+                dag.owner(action) shouldBe action.first
 
                 // Visibility map should cover all writes
-                for (field in struct.writes) {
-                    struct.visibility.keys shouldContain field
+                for (field in dag.writes(action)) {
+                    dag.visibilityOf(action).keys shouldContain field
                 }
             }
         }
