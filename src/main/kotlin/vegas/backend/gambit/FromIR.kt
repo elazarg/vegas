@@ -7,8 +7,6 @@
  *
  * **Pipeline**: `GameIR -> GameTree -> EFG String`
  *
- * 1. **Eval.kt** - Expression evaluation with Expr.Const runtime values
- * 2. **GameState.kt** - History representation (FrontierAssignmentSlice, History) for perfect recall
  * 3. **FromIR.kt** - Main algorithm: IR -> GameTree conversion via frontier exploration
  * 4. **Gambit.kt** - Game tree data structure (Decision/Terminal nodes)
  * 5. **ToText.kt** - EFG text format serialization
@@ -28,13 +26,10 @@
  */
 package vegas.backend.gambit
 
-import vegas.FieldRef
 import vegas.Rational
 import vegas.RoleId
-import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
-import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.Expr
 import vegas.ir.GameIR
@@ -43,16 +38,12 @@ import vegas.semantics.Configuration
 import vegas.semantics.FrontierAssignmentSlice
 import vegas.semantics.GameSemantics
 import vegas.semantics.History
-import vegas.semantics.HistoryViews
 import vegas.semantics.Label
 import vegas.semantics.PlayTag
-import vegas.semantics.allParametersQuit
 import vegas.semantics.applyMove
-import vegas.semantics.enumerateRoleFrontierChoices
 import vegas.semantics.eval
 import vegas.semantics.quit
 import vegas.semantics.reconstructViews
-import vegas.semantics.redacted
 
 /**
  * Functional interface determining which actions to expand during generation.
@@ -380,7 +371,7 @@ internal fun pruneContinuations(node: GameTree): GameTree {
  *
  * @param roles Set of strategic player role IDs (chance roles excluded)
  */
-internal class InfosetManager(roles: Set<RoleId>) {
+private class InfosetManager(roles: Set<RoleId>) {
     private val perRole: Map<RoleId, MutableMap<History, Int>> = roles.associateWith { mutableMapOf() }
     private var chanceCounter: Int = 0
 
@@ -398,355 +389,11 @@ internal class InfosetManager(roles: Set<RoleId>) {
  * Minimal context required to resume generation at a decision point.
  */
 internal data class GeneratorContext(
-    // The "Board State" (Outer Loop State)
     val configuration: Configuration,
     // The "Edge Identity" (For Policy / Resume)
     val actionId: ActionId?
 )
 
-/**
- * Two-phase EFG generator with spine-and-ribs architecture.
- *
- * Supports two modes:
- * - **Spine generation** (Phase 1): Generate happy-path tree without abandonment branches
- * - **Full generation** (Phase 2): Stitch abandonment branches into spine to create full tree
- *
- * The construction proceeds in two nested loops:
- * - **Frontier loop** ([exploreFromFrontier]): Advances through DAG frontiers sequentially.
- *   Each frontier represents a simultaneous-move round in the game.
- * - **Role loop** ([exploreJointChoices]): Within each frontier, enumerates all possible
- *   joint action combinations by iterating through roles in deterministic order.
- *
- * These two methods are mutually recursive:
- * - When all roles have chosen at a frontier, commit the joint choice and advance to the next frontier
- * - When exploring a frontier, enumerate each role's choices and recurse on the next role
- *
- * The class structure (rather than nested functions) enables this mutual recursion while
- * maintaining [infosetManager] as scoped mutable history that persists across both phases.
- *
- * **Usage**:
- * ```
- * val gen = EfgGenerator(ir)
- * val spine = gen.buildHappyTree()           // Phase 1: O(N^D) tree
- * val full = gen.stitchBails(spine)          // Phase 2: add abandonment branches
- * ```
- */
-internal class EfgGenerator(val ir: GameIR) {
-    /**
-     * Manages information set numbering throughout the tree build.
-     * Each strategic player's infoset is identified by their redacted knowledge history.
-     * Chance nodes receive sequential numbering.
-     */
-    private val infosetManager = InfosetManager(ir.roles)
-
-    /**
-     * Co-inductively expand Continuation nodes in-place based on a new policy.
-     *
-     * Walks the game tree and selectively expands deferred branches:
-     * - If a Continuation's (role, actionId) satisfies the new policy, resume generation
-     * - Otherwise, leave it as a Continuation (or replace with a different Continuation under new policy)
-     * - Recursively expand newly generated subtrees
-     *
-     * **Mutation**: This modifies the tree in-place via Choice.subtree (var).
-     *
-     * **Use case**: Start with FAIR_PLAY tree (no abandonment), then call expand(tree, FULL_EXPANSION)
-     * to add abandonment branches on demand.
-     *
-     * @param node Root of the subtree to expand
-     * @param policy Expansion policy determining which Continuations to expand
-     */
-    fun expand(node: GameTree, policy: ExpansionPolicy = ExpansionPolicy.FULL_EXPANSION) {
-        when (node) {
-            is GameTree.Terminal -> {}
-            is GameTree.Continuation -> {} // Root continuation (edge case)
-            is GameTree.Decision -> {
-                // 1. Capture the role from the PARENT Decision node
-                val currentRole = node.owner
-
-                node.choices.forEach { choice ->
-                    when (val subtree = choice.subtree) {
-                        is GameTree.Continuation -> {
-                            val ctx = subtree.context
-
-                            // 2. Use parent's role + context's actionId
-                            if (policy.shouldExpand(currentRole, ctx.actionId)) {
-                                // Resume generation (requires re-deriving role for context, see below)
-                                val expanded = resumeGeneration(ctx, policy)
-                                choice.subtree = expanded
-                                expand(expanded, policy)
-                            }
-                        }
-                        else -> expand(subtree, policy)
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Resume generation from a suspended Continuation context.
-     *
-     * Reconstructs the FrontierSetup by:
-     * 1. Re-deriving actionsByRole from frontier.enabled()
-     * 2. Re-computing legalChoicesByRole (CPU cost to save RAM)
-     * 3. Calling exploreJointChoices with the new policy
-     *
-     * **Tradeoff**: CPU for RAM - recomputation is acceptable since RAM is the bottleneck.
-     *
-     * @param ctx The GeneratorContext embedded in a Continuation node
-     * @param policy The expansion policy to use for resumed generation
-     * @return Newly generated game subtree
-     */
-    private fun resumeGeneration(ctx: GeneratorContext, policy: ExpansionPolicy): GameTree {
-        val config = ctx.configuration
-        // 1. Reconstruct setup (actions, views, etc.)
-        val enabled = config.frontier.enabled()
-        val actionsByRole = enabled.groupBy { ir.dag.owner(it) }
-        val roleOrder = actionsByRole.keys.sortedBy { it.name }
-
-        // 2. Reconstruct views from the global history truth
-        val reconstructedViews = reconstructViews(config.history, ir.roles + ir.chanceRoles)
-
-        val legalChoicesByRole = actionsByRole.mapValues { (role, actions) ->
-            enumerateRoleFrontierChoices(
-                ir.dag, role, actions,
-                config.history,
-                reconstructedViews.getValue(role) // Use reconstructed view
-            )
-        }
-
-        val setup = FrontierSetup(
-            config.frontier,
-            config.history,
-            reconstructedViews,
-            actionsByRole,
-            roleOrder,
-            legalChoicesByRole
-        )
-
-        // 3. Derive next role index.
-        // Find the first role in the order that:
-        //  a) Has parameters (so it SHOULD be in the map if it acted)
-        //  b) Is NOT in the map (so it hasn't acted yet)
-        // If a role has no params, we skip it (it's "done" by definition).
-        val nextRoleIndex = roleOrder.indexOfFirst { role ->
-            val hasParams = actionsByRole[role]?.any { ir.dag.params(it).isNotEmpty() } == true
-            val hasActed = config.partialFrontierAssignment.keys.any { it.owner == role }
-
-            // We stop at the first role that has work to do
-            // but hasn't done it yet.
-            hasParams && !hasActed
-        }
-
-        // Edge Case: If everyone has acted (or no one has params), index is size (terminal state for loop)
-        val effectiveIndex = if (nextRoleIndex == -1) roleOrder.size else nextRoleIndex
-        // Resume the role loop where it left off
-        return exploreJointChoices(setup, effectiveIndex, config.partialFrontierAssignment, policy)
-    }
-
-    /**
-     * Enumerate all joint action combinations at the current frontier by iterating through roles.
-     *
-     * This is the **role loop**: for each role in [setup.roleOrder][FrontierSetup.roleOrder],
-     * enumerate their legal choices and recurse to the next role. When all roles have chosen
-     * (roleIndex == roleOrder.size), commit the joint choice and advance to the next frontier.
-     *
-     * **Mutual recursion**: This method calls [exploreFromFrontier] when all roles have chosen.
-     *
-     * @param setup Precomputed frontier context (actions by role, legal choices, etc.)
-     * @param roleIndex Index into [setup.roleOrder][FrontierSetup.roleOrder] of current role
-     * @param partialFrontierAssignment Accumulated action choices from roles [0, roleIndex)
-     * @param policy Expansion policy determining which actions to expand vs defer
-     * @return Game subtree rooted at this point
-     */
-    private fun exploreJointChoices(
-        setup: FrontierSetup,
-        roleIndex: Int,
-        partialFrontierAssignment: FrontierAssignmentSlice,
-        policy: ExpansionPolicy
-    ): GameTree {
-        // ========== Terminal: All Roles Have Chosen ==========
-        if (roleIndex == setup.roleOrder.size) {
-            // All roles have chosen for this frontier: commit frontier map and advance DAG frontier.
-            val newHistory = History(partialFrontierAssignment, setup.history)
-            val newKnowledge: HistoryViews =
-                setup.views.mapValues { (role, info) ->
-                    info with redacted(partialFrontierAssignment, role)
-                }
-
-            val nextFrontier = setup.frontier.resolveEnabled()
-            return exploreFromFrontier(nextFrontier, newHistory, newKnowledge, policy)
-        }
-
-        // ========== Current Role Setup ==========
-        val role = setup.roleOrder[roleIndex]
-        val isChanceNode = role in ir.chanceRoles
-
-        // History index is a pure function of what this role currently knows.
-        val infoset = setup.views.getValue(role)
-        val infosetId = infosetManager.getHistoryNumber(role, infoset, isChanceNode)
-
-        val actionsForRole = setup.actionsByRole.getValue(role)
-        val allParams = actionsForRole.flatMap { ir.dag.params(it) }
-
-        val explicitMoves: List<Pair<ActionId, FrontierAssignmentSlice>> =
-            setup.legalChoicesByRole.getValue(role)
-
-        // ========== Unified Move Enumeration ==========
-        // Build unified list of ALL moves (explicit + abandonment), then apply policy to each.
-        // Chance nodes only have explicit moves (no abandonment option).
-        val abandonmentSlice = if (allParams.isEmpty()) emptyMap()
-        else allParametersQuit(ir.dag, role, actionsForRole)
-
-        val allMoves: List<Pair<ActionId?, FrontierAssignmentSlice>> =
-            if (isChanceNode) {
-                // Chance nodes: only explicit moves (always expand, no policy check)
-                explicitMoves
-            } else {
-                // Strategic nodes: explicit moves + quit
-                explicitMoves + (null to abandonmentSlice)
-            }
-
-        // ========== Policy-Driven Choice Generation ==========
-        // For each move, check policy to decide: expand now or create Continuation?
-        val allChoices: List<GameTree.Choice> =
-            allMoves.map { (actionId, frontierDelta) ->
-                // Chance nodes always expand. Strategic nodes consult the policy.
-                val shouldExpand = isChanceNode || policy.shouldExpand(role, actionId)
-
-                val subtree = if (shouldExpand) {
-                    // Policy says expand: recurse immediately
-                    exploreJointChoices(setup, roleIndex + 1, partialFrontierAssignment + frontierDelta, policy)
-                } else {
-                    // Policy says defer: create Continuation node with embedded context
-                    GameTree.Continuation(
-                        GeneratorContext(
-                            configuration = Configuration(
-                                frontier = setup.frontier,
-                                history = setup.history,
-                                partialFrontierAssignment = partialFrontierAssignment + frontierDelta,
-                            ),
-                            actionId = actionId
-                        )
-                    )
-                }
-
-                GameTree.Choice(
-                    action = extractActionLabel(frontierDelta, role),
-                    subtree = subtree,
-                    probability = if (isChanceNode) Rational(1, allMoves.size) else null
-                )
-            }
-
-        if (allChoices.isEmpty()) {
-            throw StaticError("No choices for role $role at frontier")
-        }
-
-        // ========== Handle Structural Frontiers (No-Op) ==========
-        // Structural frontier: this role has no parameters at all here.
-        // No real decision -> no node; just pick the (unique) subtree.
-        if (allParams.isEmpty()) {
-            return allChoices.first().subtree
-        }
-
-        // ========== Create Decision Node ==========
-        return GameTree.Decision(
-            owner = role,
-            infosetId = infosetId,
-            choices = allChoices,
-            isChance = isChanceNode
-        )
-    }
-
-    /**
-     * Explore the game tree starting from a given frontier history.
-     *
-     * This is the **frontier loop**: Process one frontier (simultaneous-move round) by:
-     * 1. Checking if we've reached a terminal node (no more frontiers)
-     * 2. Grouping enabled actions by role
-     * 3. Precomputing legal choices for each role under the current history snapshot
-     * 4. Delegating to [exploreJointChoices] to enumerate all joint action combinations
-     *
-     * **Mutual recursion**: [exploreJointChoices] calls this method when a joint choice is committed.
-     *
-     * @param frontier Current frontier machine history (enabled actions)
-     * @param history Global game history (stack of committed frontier slices)
-     * @param views Per-role redacted view of history (for information set construction)
-     * @param policy Expansion policy determining which actions to expand vs defer
-     * @return Game subtree rooted at this frontier
-     */
-    internal fun exploreFromFrontier(
-        frontier: FrontierMachine<ActionId>,
-        history: History,
-        views: HistoryViews,
-        policy: ExpansionPolicy
-    ): GameTree {
-        // ========== Check for Terminal Nodes ==========
-        if (frontier.isComplete()) {
-            val pay = ir.payoffs.mapValues { (_, e) -> eval({ history.get(it) }, e).toOutcome() }
-            return GameTree.Terminal(pay)
-        }
-
-        val enabled: Set<ActionId> = frontier.enabled()
-        require(enabled.isNotEmpty()) {
-            "Frontier has no enabled actions but is not complete"
-        }
-
-        // ========== Group Actions by Role ==========
-        // Actions enabled at this frontier, grouped per role => simultaneous "pseudo-frontier"
-        val actionsByRole: Map<RoleId, List<ActionId>> = enabled.groupBy { ir.dag.owner(it) }
-        val roleOrder: List<RoleId> = actionsByRole.keys.sortedBy { it.name }
-
-        // ========== Precompute Legal Choices ==========
-        // Precompute legal explicit assignments per role under the same snapshot history.
-        val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierAssignmentSlice>>> =
-            actionsByRole.mapValues { (role, actions) ->
-                enumerateRoleFrontierChoices(ir.dag, role, actions, history, views.getValue(role))
-            }
-
-        // ========== Explore All Joint Choices ==========
-        val setup = FrontierSetup(
-            frontier = frontier,
-            history = history,
-            views = views,
-            actionsByRole = actionsByRole,
-            roleOrder = roleOrder,
-            legalChoicesByRole = legalChoicesByRole
-        )
-
-        return exploreJointChoices(
-            setup,
-            roleIndex = 0,
-            partialFrontierAssignment = emptyMap(),
-            policy = policy
-        )
-    }
-
-    /**
-     * Frontier-level context computed once and shared across role iteration.
-     *
-     * Captures the setup for a single simultaneous-move round:
-     * - Which actions are enabled and grouped by which role
-     * - What legal choices each role has under the current history snapshot
-     * - The frontier machine history, global history, and per-role knowledge
-     *
-     * This is passed through the role loop to avoid recomputing this information for each role.
-     */
-    private data class FrontierSetup(
-        /** Frontier machine tracking which actions are enabled */
-        val frontier: FrontierMachine<ActionId>,
-        /** Global game history (stack of frontier slices) */
-        val history: History,
-        /** Per-role redacted knowledge for information set construction */
-        val views: HistoryViews,
-        /** Actions enabled at this frontier, grouped by acting role */
-        val actionsByRole: Map<RoleId, List<ActionId>>,
-        /** Deterministic ordering of roles (alphabetical by name) */
-        val roleOrder: List<RoleId>,
-        /** Precomputed legal choice combinations for each role (with ActionId for policy checking) */
-        val legalChoicesByRole: Map<RoleId, List<Pair<ActionId, FrontierAssignmentSlice>>>,
-    )
-}
 
 /**
  * Extract action label for this role from frontier delta.
