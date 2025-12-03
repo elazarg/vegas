@@ -5,8 +5,8 @@ import io.kotest.matchers.shouldBe
 import vegas.backend.gambit.Configuration
 import vegas.backend.gambit.History
 import vegas.backend.gambit.IrVal
+import vegas.backend.gambit.reconstructViews
 import vegas.backend.gambit.redacted
-import vegas.backend.gambit.views
 import vegas.dag.FrontierMachine
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
@@ -161,21 +161,8 @@ class ConfigurationTest : FreeSpec({
             bobRedacted[bobField] shouldBe IrVal.IntVal(42)
         }
 
-        "constructs views for Configuration" {
-            val ir = compileGame("join Alice() $ 100; join Bob() $ 100; withdraw { Alice -> 10; Bob -> 10 }")
-            val frontier = FrontierMachine.from(ir.dag)
-            val config = Configuration(frontier, History())
-
-            val views = config.views(setOf(alice, bob))
-            views.keys shouldBe setOf(alice, bob)
-        }
-
         "works with empty history" {
-            val ir = compileGame("join Alice() $ 100; withdraw { Alice -> 10 }")
-            val frontier = FrontierMachine.from(ir.dag)
-            val config = Configuration(frontier, History())
-
-            val views = config.views(setOf(alice, bob))
+            val views = reconstructViews(History(), setOf(alice, bob))
             views.keys shouldBe setOf(alice, bob)
         }
     }

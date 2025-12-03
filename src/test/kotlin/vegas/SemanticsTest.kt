@@ -45,10 +45,10 @@ class SemanticsTest : FreeSpec({
 
                 val move = moves.first()
                 config = when (move) {
-                    is Label.Play -> Configuration(config.frontier, config.history, config.partial + move.delta)
+                    is Label.Play -> Configuration(config.frontier, config.history, config.partialFrontierAssignment + move.delta)
                     is Label.FinalizeFrontier -> Configuration(
                         config.frontier.resolveEnabled(),
-                        config.history with config.partial,
+                        config.history with config.partialFrontierAssignment,
                         emptyMap()
                     )
                 }
@@ -98,7 +98,7 @@ class SemanticsTest : FreeSpec({
             // Alice acts
             val moves = semantics.enabledMoves(config)
             val firstMove = moves.filterIsInstance<Label.Play>().first()
-            config = Configuration(config.frontier, config.history, config.partial + firstMove.delta)
+            config = Configuration(config.frontier, config.history, config.partialFrontierAssignment + firstMove.delta)
 
             // Now Alice has acted - should have no more Play moves for Alice
             val newMoves = semantics.enabledMoves(config)
@@ -175,7 +175,7 @@ class SemanticsTest : FreeSpec({
             // Alice acts with explicit move
             val moves = semantics.enabledMoves(config)
             val explicitMove = moves.filterIsInstance<Label.Play>().first { it.tag is PlayTag.Action }
-            config = Configuration(config.frontier, config.history, config.partial + explicitMove.delta)
+            config = Configuration(config.frontier, config.history, config.partialFrontierAssignment + explicitMove.delta)
 
             // Alice should have no quit move (already acted)
             val newMoves = semantics.enabledMoves(config)
@@ -225,7 +225,7 @@ class SemanticsTest : FreeSpec({
             // Alice acts
             val moves = semantics.enabledMoves(config)
             val firstMove = moves.filterIsInstance<Label.Play>().first()
-            config = Configuration(config.frontier, config.history, config.partial + firstMove.delta)
+            config = Configuration(config.frontier, config.history, config.partialFrontierAssignment + firstMove.delta)
 
             // Alice acted, FinalizeFrontier should be enabled
             semantics.canFinalizeFrontier(config) shouldBe true

@@ -7,7 +7,6 @@ import vegas.VarId
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.ActionSpec
-import vegas.ir.ActionStruct
 import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.Visibility
@@ -51,7 +50,7 @@ internal class GameSemantics(val ir: GameIR) {
 
         val moves = mutableListOf<Label>()
         val allRoles = ir.roles + ir.chanceRoles
-        val views = config.views(allRoles)
+        val views = reconstructViews(config.history, allRoles)
         val actionsByRole = config.actionsByRole(ir.dag)
 
         // Canonical role order for deterministic tree generation
@@ -147,7 +146,7 @@ internal fun applyMove(config: Configuration, label: Label): Configuration {
             Configuration(
                 frontier = config.frontier,
                 history = config.history,
-                partial = config.partial + label.delta  // disjoint union
+                partialFrontierAssignment = config.partialFrontierAssignment + label.delta  // disjoint union
             )
         }
 
@@ -156,8 +155,8 @@ internal fun applyMove(config: Configuration, label: Label): Configuration {
             // Use existing `History.with` infix operator from GameState.kt
             Configuration(
                 frontier = config.frontier.resolveEnabled(),
-                history = config.history with config.partial,
-                partial = emptyMap()
+                history = config.history with config.partialFrontierAssignment,
+                partialFrontierAssignment = emptyMap()
             )
         }
     }
