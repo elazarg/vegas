@@ -61,7 +61,7 @@ internal class GameSemantics(val ir: GameIR) {
 
             val playerView = views.getValue(role)
 
-            // Reuse existing enumerateRoleFrontierChoices (don't reimplement!)
+            // Enumerate all valid field assignments for this role's actions
             val explicitMoves = enumerateRoleFrontierChoices(
                 ir.dag, role, actions, config.history, playerView
             )
@@ -97,13 +97,9 @@ internal class GameSemantics(val ir: GameIR) {
     /**
      * Check if the FinalizeFrontier (τ) step is enabled.
      *
-     * Enabled when:
+     * Enabled when all roles with parameters have acted:
+     * - Done_Γ = MustAct_Γ (roles with params that haven't quit = roles that have acted)
      * - Frontier is not complete (more actions remain)
-     * - Done_Γ = MustAct_Γ (all roles with parameters have acted)
-     *
-     * **Note:** This is the ONLY condition under which τ is allowed.
-     * TreeUnroller must not synthesize FinalizeFrontier unconditionally at "end of role loop"
-     * - it must check this function to see if τ is actually enabled.
      *
      * @param config The current configuration
      * @return true if FinalizeFrontier is enabled, false otherwise
@@ -123,13 +119,11 @@ internal class GameSemantics(val ir: GameIR) {
  * Apply a move label to get the next configuration.
  *
  * Transition relation:
- * - Play(r, δ, tag): Merge δ into partial frontier
+ * - Play(r, δ, tag): Merge δ into partial frontier (disjoint union)
  * - FinalizeFrontier: Commit partial to history and advance frontier
  *
- * **IMPORTANT:**
- * - Use the existing `history with slice` operation from GameState.kt (not custom stack logic)
- * - Rely on the no-overlapping-writes invariant for `partial + delta`
- * - The no-overlapping-writes invariant ensures partial.keys and delta.keys are disjoint
+ * The no-overlapping-writes invariant ensures partial.keys ∩ delta.keys = ∅,
+ * so `partial + delta` is a proper disjoint union.
  *
  * @param config The current configuration
  * @param label The move to apply

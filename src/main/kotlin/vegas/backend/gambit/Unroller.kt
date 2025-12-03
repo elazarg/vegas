@@ -8,15 +8,15 @@ import vegas.ir.ActionId
 import vegas.ir.GameIR
 
 /**
- * Converts LTS semantics into a GameTree by unrolling configurations (SEMANTICS.md §7).
+ * Converts LTS semantics into a GameTree by unrolling configurations.
  *
  * This is the bridge between the semantic model (Configuration + Labels)
  * and the EFG tree representation. Uses [ExpansionPolicy] to control
  * which branches to expand immediately vs defer as [GameTree.Continuation].
  *
- * **Design:** TreeUnroller is purely interpretive - it consumes move labels
- * from [GameSemantics] and builds tree structure. It does NOT synthesize
- * moves or make semantic decisions.
+ * TreeUnroller interprets move labels from [GameSemantics] and builds tree structure.
+ * It handles tree-specific concerns like quit-only decision nodes for roles with
+ * no parameters or roles that have already quit (abandonment persistence).
  */
 internal class TreeUnroller(
     private val semantics: GameSemantics,
@@ -28,7 +28,7 @@ internal class TreeUnroller(
      * Unroll the LTS from a configuration into a GameTree.
      *
      * Uses canonical role ordering (alphabetical by name) to ensure
-     * deterministic tree structure that matches existing implementation.
+     * deterministic tree structure.
      *
      * @param config Starting configuration
      * @param policy Expansion policy for strategic choices
@@ -44,7 +44,6 @@ internal class TreeUnroller(
         val moves = semantics.enabledMoves(config)
 
         // Group by role in canonical order and build tree
-        // This matches the existing exploreJointChoices logic
         return buildTreeFromMoves(config, moves, policy)
     }
 
@@ -60,7 +59,7 @@ internal class TreeUnroller(
         val movesByRole = playMoves.groupBy({ it.role }, { it })
         val rolesInOrder = movesByRole.keys.sortedBy { it.name }
 
-        // Build tree via role iteration (same structure as exploreJointChoices)
+        // Build tree by iterating through roles, creating decision nodes
         return buildRoleDecisions(
             config = config,
             roles = rolesInOrder,
@@ -77,16 +76,12 @@ internal class TreeUnroller(
         roleIndex: Int,
         policy: ExpansionPolicy
     ): GameTree {
-        // All roles done: check if FinalizeFrontier is enabled and apply it
-        // CRITICAL: Do not synthesize FinalizeFrontier unconditionally!
-        // Only apply if it's actually enabled in the LTS
+        // All roles done: apply FinalizeFrontier if enabled
         if (roleIndex == roles.size) {
             return if (semantics.canFinalizeFrontier(config)) {
                 val nextConfig = semantics.applyMove(config, Label.FinalizeFrontier)
                 unroll(nextConfig, policy)
             } else {
-                // FinalizeFrontier not enabled - this should not happen with well-formed games
-                // but handle gracefully (e.g., treat as deadlock/terminal)
                 error("Reached end of role loop but FinalizeFrontier not enabled")
             }
         }
@@ -162,7 +157,6 @@ internal class TreeUnroller(
             )
         }
 
-        // Don't skip roles with no parameters when they have quit-only nodes
         return GameTree.Decision(
             owner = role,
             infosetId = infosetId,
@@ -176,18 +170,13 @@ internal class TreeUnroller(
             eval({ config.history.get(it) }, expr).toOutcome()
         }
     }
-
-    private fun roleHasParams(role: RoleId, config: Configuration): Boolean {
-        val actions = config.actionsByRole(ir.dag)[role] ?: return false
-        return actions.any { ir.dag.params(it).isNotEmpty() }
-    }
 }
 
 /**
  * Manages information set identification and numbering during tree unrolling.
  *
- * This is a local copy for TreeUnroller to avoid modifying existing code.
- * Identical to InfosetManager from FromIR.kt.
+ * Each strategic role gets a separate numbering space based on its information
+ * (player view/history). Chance nodes get unique sequential numbers.
  */
 private class UnrollerInfosetManager(roles: Set<RoleId>) {
     private val perRole: Map<RoleId, MutableMap<History, Int>> = roles.associateWith { mutableMapOf() }
@@ -207,7 +196,6 @@ private class UnrollerInfosetManager(roles: Set<RoleId>) {
  * Extract action label for this role from frontier delta.
  *
  * Filters to only this role's non-Quit fields and unwraps to VarId -> IrVal.
- * Local copy to avoid modifying existing code.
  */
 private fun extractActionLabel(frontierDelta: FrontierAssignmentSlice, role: RoleId): Map<VarId, IrVal> =
     frontierDelta

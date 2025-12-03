@@ -81,12 +81,11 @@ internal fun Configuration.views(allRoles: Set<RoleId>): HistoryViews {
     }
 
     // Replay history with per-role redaction
-    // Use the existing `redacted` function from GameState.kt (do not reimplement!)
     val currentViews = allRoles.associateWith { History() }.toMutableMap()
     for (slice in slices) {
         for (role in allRoles) {
             val view = currentViews.getValue(role)
-            // Use existing redacted function and History.with operator
+            // Apply role-specific redaction and append to view
             currentViews[role] = view with redacted(slice, role)
         }
     }
