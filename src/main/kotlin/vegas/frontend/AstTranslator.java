@@ -114,11 +114,17 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
     }
 
     private Exp exp(ExpContext ctx) {
-        return (Exp) withSpan(ctx.accept(this), ctx);
+        if (ctx == null) return null; // Safety check
+        Ast node = ctx.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in expression at line " + ctx.getStart().getLine());
+        return (Exp) withSpan(node, ctx);
     }
 
     private Ext ext(ExtContext ctx) {
-        return (Ext) withSpan(ctx.accept(this), ctx);
+        if (ctx == null) return null; // Safety check
+        Ast node = ctx.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in protocol (ext) at line " + ctx.getStart().getLine());
+        return (Ext) withSpan(node, ctx);
     }
 
     @Override
@@ -266,7 +272,10 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
     }
 
     private Outcome outcome(OutcomeContext ctx) {
-        return (Outcome) withSpan(ctx.accept(this), ctx);
+        if (ctx == null) return null;
+        Ast node = ctx.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in outcome at line " + ctx.getStart().getLine());
+        return (Outcome) withSpan(node, ctx);
     }
 
     private <T1, T2> List<T2> list(List<T1> iterable, Function<T1, T2> f) {
