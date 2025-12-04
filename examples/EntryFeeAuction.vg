@@ -1,0 +1,30 @@
+// Entry-fee auction: bidders decide to enter and bid; highest bid wins, entry fee is charged if entered.
+type bid = {0 .. 10}
+
+macro winningBid(e1: bool, b1: bid, e2: bool, b2: bid): bid =
+    (!e1 && !e2) ? 0
+    : (e1 && !e2) ? b1
+    : (!e1 && e2) ? b2
+    : (b1 >= b2 ? b1 : b2);
+
+join Seller() $ 100 B1() $ 100 B2() $ 100;
+
+yield B1(enter: bool) B2(enter: bool);
+
+yield B1(b: bid) where B1.enter;
+yield B2(b: bid) where B2.enter;
+
+withdraw {
+    Seller ->
+        (B1.enter ? 1 : 0) +
+        (B2.enter ? 1 : 0) +
+        winningBid(B1.enter, B1.b, B2.enter, B2.b);
+
+    B1 ->
+        !B1.enter ? 0 :
+        ((!B2.enter || B1.b >= B2.b) ? (10 - B1.b - 1) : -1);
+
+    B2 ->
+        !B2.enter ? 0 :
+        ((!B1.enter || B2.b > B1.b) ? (10 - B2.b - 1) : -1);
+}

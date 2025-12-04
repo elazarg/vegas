@@ -1,0 +1,18 @@
+// Ultimatum Game: Proposer offers a split; Responder accepts or burns it all.
+type amount = {0 .. 100}
+
+join Proposer() $ 100 Responder() $ 100;
+
+// Proposer offers 'offer' to Responder, keeping (100 - offer)
+yield Proposer(offer: amount);
+
+// Responder decides to accept or reject
+yield Responder(accept: bool);
+
+withdraw {
+    Proposer ->
+        (Responder.accept ? (100 - Proposer.offer) : 0);
+
+    Responder ->
+        (Responder.accept ? Proposer.offer : 0);
+}

@@ -1,0 +1,15 @@
+// Hidden reserve price bargaining: seller sets hidden reserve, buyer bids, seller accepts/rejects.
+type price   = {0 .. 10}
+type reserve = {3 .. 7}
+
+join Seller() $ 100 Buyer() $ 100;
+
+yield Seller(r: hidden reserve);
+yield Buyer(b: price);
+yield Seller(accept: bool);
+
+withdraw (Seller.accept && Buyer.b >= Seller.r) ?
+    { Seller -> Buyer.b - Seller.r;
+      Buyer  -> 10 - Buyer.b; }
+  : { Seller -> 0;
+      Buyer  -> 0; }

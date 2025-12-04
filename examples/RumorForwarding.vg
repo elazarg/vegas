@@ -1,0 +1,15 @@
+// Rumor forwarding: A sends or not; B and C may forward; popularity depends on forwarding.
+join A() $ 100 B() $ 100 C() $ 100;
+
+yield A(send: bool);
+yield B(forward: bool) C(forward: bool) where A.send;
+
+withdraw !A.send ?
+    { A -> 0; B -> 0; C -> 0; }
+  :
+    (!B.forward && !C.forward) ?
+        { A -> -1; B -> 0; C -> 0; }
+    :
+        { A -> 1;
+          B -> (B.forward ? 2 : 0);
+          C -> (C.forward ? 2 : 0); }

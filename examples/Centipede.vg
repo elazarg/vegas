@@ -1,0 +1,22 @@
+// Short Centipede Game (4 stages):
+// Pot starts small. Players alternate passing to grow it.
+// Taking ends the game immediately.
+
+join Alice() $ 100 Bob() $ 100;
+
+yield Alice(m1: bool); // True = Pass, False = Take
+yield Bob(m2: bool)   where Alice.m1; // Only moves if Alice passed
+yield Alice(m3: bool) where Alice.m1 && Bob.m2;
+yield Bob(m4: bool)   where Alice.m1 && Bob.m2 && Alice.m3;
+
+withdraw
+    (!Alice.m1) ?
+        { Alice -> 4; Bob -> 1 } // Alice takes immediately
+    : (!Bob.m2) ?
+        { Alice -> 2; Bob -> 8 } // Bob takes
+    : (!Alice.m3) ?
+        { Alice -> 16; Bob -> 4 } // Alice takes later
+    : (!Bob.m4) ?
+        { Alice -> 8; Bob -> 32 } // Bob takes later
+    :
+        { Alice -> 64; Bob -> 64 } // Both cooperated fully

@@ -1,0 +1,34 @@
+// Escrow contract: buyer funds, seller ships, escrow releases or refunds.
+type decision = {0, 1}  // 0=refund, 1=release
+
+join Buyer() $ 100 Seller() $ 100 Escrow() $ 100;
+
+yield Buyer(fund: bool);
+yield Seller(ship: bool);
+yield Escrow(dec: decision);
+
+withdraw {
+    Buyer ->
+        (!Buyer.fund) ?
+            0
+        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ?
+            (10 - 10)
+        : (Buyer.fund && !Seller.ship && Escrow.dec == 0) ?
+            0
+        : (Buyer.fund ? -10 : 0);
+
+    Seller ->
+        (!Buyer.fund) ?
+            0
+        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ?
+            10
+        : 0;
+
+    Escrow ->
+        (
+            (!Buyer.fund && Escrow.dec == 0) ||
+            (Buyer.fund && Seller.ship && Escrow.dec == 1) ||
+            (Buyer.fund && !Seller.ship && Escrow.dec == 0)
+        )
+        ? 1 : -3;
+}

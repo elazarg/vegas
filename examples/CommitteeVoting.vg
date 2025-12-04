@@ -1,0 +1,19 @@
+// Committee voting with chair proposal: chair proposes; two members vote; alignment with proposal rewarded.
+macro passes(p: bool, v1: bool, v2: bool): bool =
+    ((v1 == p && v1 == true) || (v2 == p && v2 == true));
+
+join Chair() $ 100 M1() $ 100 M2() $ 100;
+
+yield Chair(p: bool);
+yield M1(v: bool) M2(v: bool);
+
+withdraw {
+    Chair ->
+        (passes(Chair.p, M1.v, M2.v) ? 3 : 0);
+
+    M1 ->
+        (passes(Chair.p, M1.v, M2.v) && M1.v == Chair.p ? 2 : 0);
+
+    M2 ->
+        (passes(Chair.p, M1.v, M2.v) && M2.v == Chair.p ? 2 : 0);
+}
