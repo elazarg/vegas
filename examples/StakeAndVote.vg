@@ -1,0 +1,22 @@
+// Stake-and-vote: protocol holds hidden truth; validators vote and are rewarded/punished by correctness.
+join V1() $ 100 V2() $ 100 Protocol() $ 100;
+
+yield Protocol(correct: hidden bool);
+
+yield V1(v: bool) V2(v: bool);
+
+withdraw {
+    V1 ->
+        (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 2
+      : (V1.v != Protocol.correct && V2.v == Protocol.correct) ? -3
+      : (V1.v == Protocol.correct && V2.v != Protocol.correct) ? 1
+      : -5;
+
+    V2 ->
+        (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 2
+      : (V2.v != Protocol.correct && V1.v == Protocol.correct) ? -3
+      : (V2.v == Protocol.correct && V1.v != Protocol.correct) ? 1
+      : -5;
+
+    Protocol -> 0;
+}

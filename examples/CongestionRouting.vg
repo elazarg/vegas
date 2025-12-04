@@ -1,0 +1,9 @@
+// Congestion routing: each sender chooses shared or alternative route; congestion reduces payoff.
+join S1() $ 100 S2() $ 100;
+
+yield S1(useShared: bool) S2(useShared: bool);
+
+withdraw {
+    S1 -> (S1.useShared ? (S2.useShared ? 0 : 5) : 2);
+    S2 -> (S2.useShared ? (S1.useShared ? 0 : 5) : 2);
+}

@@ -1,0 +1,24 @@
+// Data availability attestation: producer publishes/withholds; validator attests; users benefit or lose.
+join Producer() $ 100 Validator() $ 100 Users() $ 100;
+
+yield Producer(publish: bool) Validator(avail: bool);
+
+withdraw {
+    Producer ->
+        (Producer.publish && Validator.avail) ? 3
+      : (!Producer.publish && Validator.avail) ? 1
+      : (!Producer.publish && !Validator.avail) ? -3
+      : 0;
+
+    Validator ->
+        (Producer.publish && Validator.avail) ? 2
+      : (!Producer.publish && Validator.avail) ? -5
+      : (!Producer.publish && !Validator.avail) ? 1
+      : -1;
+
+    Users ->
+        (Producer.publish && Validator.avail) ? 3
+      : (!Producer.publish && Validator.avail) ? -5
+      : (Producer.publish && !Validator.avail) ? -1
+      : 0;
+}

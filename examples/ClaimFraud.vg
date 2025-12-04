@@ -1,0 +1,26 @@
+// Claim fraud inspection: claimant may lie, world accident, inspector may investigate and catch fraud.
+macro isFraud(accident: bool, inflate: bool, claim: bool): bool =
+    (claim && (!accident || inflate));
+
+join Claimant() $ 100 Inspector() $ 100;
+random World() $ 100;
+
+yield Claimant(claim: bool, inflate: bool);
+yield World(accident: bool);
+yield Inspector(invest: bool);
+
+withdraw {
+    Claimant ->
+        !Claimant.claim ? 0
+        :
+        Inspector.invest ?
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? -10 : 10)
+        :
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 10 : 10);
+
+    Inspector ->
+        !Inspector.invest ?
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? -5 : 0)
+        :
+            (-1 + (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 5 : 0));
+}

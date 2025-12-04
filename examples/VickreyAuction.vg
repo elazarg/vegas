@@ -1,0 +1,31 @@
+// Vickrey Auction: Winner pays the second-highest bid.
+type bid = {0 .. 100}
+
+macro max2(a: bid, b: bid): bid =
+    (a >= b ? a : b);
+
+macro max3(a: bid, b: bid, c: bid): bid =
+    max2(max2(a, b), c);
+
+macro secondMax(a: bid, b: bid, c: bid): bid =
+    (a == max3(a, b, c)) ? max2(b, c)
+    : (b == max3(a, b, c)) ? max2(a, c)
+    : max2(a, b);
+
+macro isWinner(myBid: bid, b1: bid, b2: bid, b3: bid): bool =
+    (myBid == max3(b1, b2, b3));
+
+join Seller() $ 100 B1() $ 100 B2() $ 100 B3() $ 100;
+
+// Bids are hidden to prevent price matching/adjusting
+yield B1(b: hidden bid) B2(b: hidden bid) B3(b: hidden bid);
+
+reveal B1(b: bid) B2(b: bid) B3(b: bid);
+
+withdraw {
+    Seller -> secondMax(B1.b, B2.b, B3.b);
+
+    B1 -> isWinner(B1.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
+    B2 -> isWinner(B2.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
+    B3 -> isWinner(B3.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
+}

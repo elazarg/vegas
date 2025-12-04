@@ -1,0 +1,32 @@
+// Insurance game: insured chooses to buy; world accident; claim; insurer pays or denies.
+join Insured() $ 100 Insurer() $ 100;
+random World() $ 100;
+
+yield Insured(buy: bool);
+yield World(accident: bool);
+yield Insured(claim: bool) where Insured.buy && World.accident;
+yield Insurer(pay: bool)   where Insured.claim;
+
+withdraw {
+    Insured ->
+        (!World.accident) ?
+            (Insured.buy ? -2 : 0)
+        :
+        (!Insured.buy) ?
+            -10
+        :
+        (Insured.claim && Insurer.pay) ? (10 - 2)
+      : (Insured.claim && !Insurer.pay) ? (-10 - 2)
+      : (-10 - 2);
+
+    Insurer ->
+        (!World.accident) ?
+            (Insured.buy ? 2 : 0)
+        :
+        (!Insured.buy) ?
+            0
+        :
+        (Insured.claim && Insurer.pay) ? (2 - 10)
+      : (Insured.claim && !Insurer.pay) ? 2
+      : 2;
+}

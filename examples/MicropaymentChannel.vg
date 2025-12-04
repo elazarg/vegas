@@ -1,0 +1,13 @@
+// Micropayment channel: sender proposes payout; receiver signs or refuses, causing griefing.
+type amt = {0 .. 10}
+
+join Sender() $ 100 Receiver() $ 100;
+
+yield Sender(x: amt) Receiver(sign: bool);
+
+withdraw Receiver.sign ?
+    { Sender  -> 10 - Sender.x;
+      Receiver -> Sender.x; }
+  :
+    { Sender  -> 8;
+      Receiver -> 0; }

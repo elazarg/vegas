@@ -1,0 +1,23 @@
+// Bribed arbitrator: P1 may bribe, judge accepts/rejects and chooses verdict between P1 and P2.
+type bribe   = {0, 1, 2}
+type verdict = {1, 2}  // 1=favor P1, 2=favor P2
+
+join P1() $ 100 P2() $ 100 Judge() $ 100;
+
+yield P1(b: bribe);
+yield Judge(accept: bool, v: verdict);
+
+withdraw {
+    P1 ->
+        (Judge.v == 1 ? 5 : -5)
+        - (Judge.accept ? P1.b : 0);
+
+    P2 ->
+        (Judge.v == 2 ? 5 : -5);
+
+    Judge ->
+        (Judge.accept ? P1.b : 0)
+        + ((Judge.accept && Judge.v == 1) ? -1
+           : (!Judge.accept && Judge.v == 2) ? 1
+           : 0);
+}

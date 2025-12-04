@@ -1,0 +1,23 @@
+// RPSLS: Extended version of RPS to reduce ties.
+// 0:Rock, 1:Paper, 2:Scissors, 3:Lizard, 4:Spock
+// Win logic: (p1 - p2 + 5) % 5 is 1 or 3 => p1 wins.
+type hand = {0 .. 4}
+
+macro mod5(x: int): int =
+    x - (x / 5) * 5;
+
+macro p1Wins(h1: hand, h2: hand): bool =
+    (mod5(h1 - h2 + 5) == 1 || mod5(h1 - h2 + 5) == 3);
+
+join P1() $ 100 P2() $ 100;
+
+yield P1(h: hidden hand);
+yield P2(h: hidden hand);
+
+reveal P1(h: hand);
+reveal P2(h: hand);
+
+withdraw {
+    P1 -> (P1.h == P2.h) ? 0 : (p1Wins(P1.h, P2.h) ? 10 : -10);
+    P2 -> (P1.h == P2.h) ? 0 : (p1Wins(P1.h, P2.h) ? -10 : 10);
+}
