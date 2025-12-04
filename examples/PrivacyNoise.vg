@@ -1,4 +1,4 @@
-// Privacy–noise game: querier asks; owner chooses noisy or accurate response at different costs/benefits.
+// Privacy-noise game: querier asks; owner chooses noisy or accurate response at different costs/benefits.
 join Owner() $ 100 Querier() $ 100;
 
 yield Querier(query: bool);

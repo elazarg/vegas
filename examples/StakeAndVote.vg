@@ -5,6 +5,8 @@ yield Protocol(correct: hidden bool);
 
 yield V1(v: bool) V2(v: bool);
 
+reveal Protocol(correct: bool);
+
 withdraw {
     V1 ->
         (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 2

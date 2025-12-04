@@ -222,16 +222,27 @@ private class Checker(
 
     private fun checkWhere(n: Set<RoleId>, m: Map<FieldRef, TypeExp>, q: Query) {
         val newEnv = env withMap m
+
+        // 1. Type check
         requireStatic(
             Checker(typeMap, n, newEnv, macroEnv).type(q.where) == BOOL,
             "Where clause failed",
             q
         )
 
-        // Validate: same-role hidden fields are ok (deferred checking)
-        // Other-role hidden fields are NOT ok (use-before-def)
+        // 2. Validate hidden fields
         getReferencedFields(q.where).forEach { fieldRef ->
-            if (newEnv.safeGetValue(fieldRef, q) is Hidden && fieldRef.owner != q.role.id) {
+            // Check if the role is valid in the NEW set 'n', not the old 'roles'
+            requireStatic(fieldRef.owner in n, "${fieldRef.owner} is not a role", q)
+
+            // Resolve the type directly from the environment
+            val type = try {
+                newEnv.getValue(fieldRef)
+            } catch (_: NoSuchElementException) {
+                throw StaticError("Field '$fieldRef' is undefined", q)
+            }
+
+            if (type is Hidden && fieldRef.owner != q.role.id) {
                 throw StaticError("Where clause uses $fieldRef before it is revealed", q)
             }
         }
