@@ -291,6 +291,90 @@ private fun collectCaptures(exp: AstExpr): Set<FieldRef> {
 
 // ========== Expression Lowering ==========
 
+/**
+ * Substitute all occurrences of a variable with an expression in an outcome.
+ * This performs capture-avoiding substitution.
+ */
+private fun substituteVarInOutcome(outcome: Outcome, varId: vegas.VarId, replacement: AstExpr): Outcome {
+    return when (outcome) {
+        is Outcome.Value -> {
+            val newPayoffs = outcome.ts.mapValues { (_, payoffExpr) ->
+                substituteVar(payoffExpr, varId, replacement)
+            }
+            Outcome.Value(newPayoffs)
+        }
+        is Outcome.Cond -> {
+            Outcome.Cond(
+                substituteVar(outcome.cond, varId, replacement),
+                substituteVarInOutcome(outcome.ifTrue, varId, replacement),
+                substituteVarInOutcome(outcome.ifFalse, varId, replacement)
+            )
+        }
+        is Outcome.Let -> {
+            val newInit = substituteVar(outcome.init, varId, replacement)
+            // If the let binding shadows our variable, don't substitute in body
+            val newBody = if (outcome.dec.v.id == varId) {
+                outcome.outcome  // Shadowed
+            } else {
+                substituteVarInOutcome(outcome.outcome, varId, replacement)
+            }
+            Outcome.Let(outcome.dec, newInit, newBody)
+        }
+    }
+}
+
+/**
+ * Substitute all occurrences of a variable with an expression in an AST expression.
+ * This performs capture-avoiding substitution.
+ */
+private fun substituteVar(exp: AstExpr, varId: vegas.VarId, replacement: AstExpr): AstExpr {
+    return when (exp) {
+        // Replace variable if it matches
+        is AstExpr.Var -> if (exp.id == varId) replacement else exp
+
+        // Literals - no substitution needed
+        is AstExpr.Const -> exp
+
+        // Field references - no substitution needed
+        is AstExpr.Field -> exp
+
+        // Unary operators - recurse into operand
+        is AstExpr.UnOp -> AstExpr.UnOp(exp.op, substituteVar(exp.operand, varId, replacement))
+
+        // Binary operators - recurse into both sides
+        is AstExpr.BinOp -> AstExpr.BinOp(
+            exp.op,
+            substituteVar(exp.left, varId, replacement),
+            substituteVar(exp.right, varId, replacement)
+        )
+
+        // Conditional - recurse into all branches
+        is AstExpr.Cond -> AstExpr.Cond(
+            substituteVar(exp.cond, varId, replacement),
+            substituteVar(exp.ifTrue, varId, replacement),
+            substituteVar(exp.ifFalse, varId, replacement)
+        )
+
+        // Function calls - recurse into arguments
+        is AstExpr.Call -> AstExpr.Call(
+            exp.target,
+            exp.args.map { substituteVar(it, varId, replacement) }
+        )
+
+        // Nested let - be careful with shadowing
+        is AstExpr.Let -> {
+            val newInit = substituteVar(exp.init, varId, replacement)
+            // If the let binding shadows our variable, don't substitute in body
+            val newBody = if (exp.dec.v.id == varId) {
+                exp.exp  // Shadowed - don't substitute
+            } else {
+                substituteVar(exp.exp, varId, replacement)
+            }
+            AstExpr.Let(exp.dec, newInit, newBody)
+        }
+    }
+}
+
 private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr {
     return when (exp) {
         // Literals
@@ -398,9 +482,10 @@ private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr
 
         // Let expressions (desugar by substitution)
         is AstExpr.Let -> {
-            // For simplicity: error for now
-            // Full implementation would need alpha-renaming and substitution
-            error("Let expressions not yet supported in IR lowering")
+            // Substitute the variable with its initialization value throughout the body
+            // let! x = init in body  ~~>  body[x := init]
+            val bodyWithSubstitution = substituteVar(exp.exp, exp.dec.v.id, exp.init)
+            lowerExpr(bodyWithSubstitution, typeEnv)
         }
     }
 }
@@ -440,9 +525,10 @@ private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstTyp
 
         // Let in outcome (desugar by substitution)
         is Outcome.Let -> {
-            // For simplicity: error for now
-            // Full implementation would substitute and recurse
-            error("Let in outcomes not yet supported in IR lowering")
+            // Substitute the variable with its value in the inner outcome
+            // let! x = init in outcome  ~~>  outcome[x := init]
+            val outcomeWithSubstitution = substituteVarInOutcome(outcome.outcome, outcome.dec.v.id, outcome.init)
+            desugarOutcome(outcomeWithSubstitution, typeEnv)
         }
     }
 }

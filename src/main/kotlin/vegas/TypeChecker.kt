@@ -110,13 +110,8 @@ fun typeCheck(program: GameAst) {
     // 4. Inline macros (desugar) - this must happen before IR compilation
     val inlined = inlineMacros(program)
 
-    // 5. Validate ActionDag structure when possible
-    try {
-        compileToIR(inlined)  // Use inlined program, not original
-    } catch (_: IllegalStateException) {
-        // IR lowering not supported for this construct (e.g., let expressions)
-        // Skip ActionDag validation - the game may type check but can't be compiled yet
-    }
+    // 5. Validate ActionDag structure - compile to IR to check for DAG errors
+    compileToIR(inlined)  // Use inlined program, not original
 }
 
 private class Checker(
