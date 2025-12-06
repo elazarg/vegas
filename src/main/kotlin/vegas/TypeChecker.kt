@@ -267,7 +267,7 @@ private class Checker(
                     "Bad initialization of let ext",
                     outcome.init
                 )
-                Checker(typeMap, emptySet(), env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv)
+                Checker(typeMap, roles, env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv)
                     .type(outcome.outcome)
             }
         }
