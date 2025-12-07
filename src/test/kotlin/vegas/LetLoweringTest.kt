@@ -2,6 +2,7 @@ package vegas
 
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import vegas.backend.solidity.genSolidity
 import vegas.backend.smt.generateSMT
@@ -12,6 +13,8 @@ import vegas.frontend.Exp.Field
 import vegas.frontend.Exp.Var
 import vegas.frontend.Outcome.Value
 import vegas.frontend.TypeExp.INT
+import vegas.ir.freeVars
+import vegas.ir.substituteVar
 
 /**
  * Tests for let expression IR lowering and end-to-end compilation.
@@ -215,6 +218,114 @@ class LetLoweringTest : FreeSpec({
             )
             val ir = compileToIR(prog)
             ir.payoffs[alice.id] shouldNotBe null
+        }
+    }
+
+    "α-renaming Tests" - {
+
+        "should collect free variables correctly" {
+            // Simple variable
+            freeVars(v("x")) shouldBe setOf(VarId("x"))
+
+            // Constant has no free variables
+            freeVars(n(42)) shouldBe emptySet()
+
+            // Binary operation
+            freeVars(BinOp("+", v("x"), v("y"))) shouldBe setOf(VarId("x"), VarId("y"))
+
+            // Let expression: x is bound, y is free
+            freeVars(letE("x", v("y"), BinOp("+", v("x"), v("z")))) shouldBe
+                    setOf(VarId("y"), VarId("z"))
+        }
+
+        "should not capture when substituting without conflicts" {
+            // let! x = 5 in (let! y = x in y)
+            // Substitute x := 5
+            // Result: let! y = 5 in y
+            val inner = letE("y", v("x"), v("y"))
+            val expr = letE("x", n(5), inner)
+
+            val result = substituteVar(expr.exp, VarId("x"), n(5))
+
+            // Should produce: let! y = 5 in y
+            // The inner let should have init = 5
+            result as Exp.Let
+            result.init shouldBe n(5)
+            result.exp shouldBe v("y")
+        }
+
+        "should perform α-renaming to avoid capture" {
+            // Critical test case from REVIEW.md:
+            // let! x = z in (let! z = 5 in x+z)
+            //
+            // WITHOUT α-renaming, substituting x := z would give:
+            //   let! z = 5 in z+z  (WRONG - z is captured)
+            //
+            // WITH α-renaming, we rename the inner z to avoid capture:
+            //   let! z_N = 5 in z+z_N  (CORRECT)
+
+            val innerLet = letE("z", n(5), BinOp("+", v("x"), v("z")))
+            val outerLet = letE("x", v("z"), innerLet)
+
+            // Substitute x := z in the body
+            val result = substituteVar(outerLet.exp, VarId("x"), v("z"))
+
+            // Result should be a Let expression
+            result as Exp.Let
+
+            // The init should remain 5
+            result.init shouldBe n(5)
+
+            // The binder should have been RENAMED to avoid capturing z
+            // We can't predict the exact name (z_0, z_1, etc.) but it should NOT be "z"
+            val renamedBinder = result.dec.v.id
+            (renamedBinder != VarId("z")) shouldBe true
+
+            // The body should be z + (renamed_var)
+            val body = result.exp as BinOp
+            body.op shouldBe "+"
+            body.left shouldBe v("z")  // The free z from the replacement expression
+
+            // The right side should be the renamed variable, matching the binder
+            val renamedVar = body.right as Var
+            renamedVar.id shouldBe renamedBinder  // Must match the renamed binder
+
+            // Critically: the renamed variable is NOT "z", proving capture was avoided
+            (renamedVar.id != VarId("z")) shouldBe true
+        }
+
+        "should handle nested α-renaming" {
+            // let! x = (let! y = 1 in y) in (let! y = x in y)
+            // The outer let binds x to (let! y = 1 in y)
+            // The inner let would capture y if we're not careful
+            val replacement = letE("y", n(1), v("y"))
+            val inner = letE("y", v("x"), v("y"))
+            val outer = letE("x", replacement, inner)
+
+            val result = substituteVar(outer.exp, VarId("x"), replacement)
+
+            // Should produce: let! y_N = (let! y = 1 in y) in y_N
+            result as Exp.Let
+            // Init should contain the nested let
+            result.init as Exp.Let
+        }
+
+        "should not rename when no capture risk" {
+            // let! x = 5 in (let! y = 10 in x+y)
+            // Substituting x := 5 doesn't require renaming y
+            val inner = letE("y", n(10), BinOp("+", v("x"), v("y")))
+            val outer = letE("x", n(5), inner)
+
+            val result = substituteVar(outer.exp, VarId("x"), n(5))
+
+            result as Exp.Let
+            // y should NOT be renamed (no free vars in replacement)
+            result.dec.v.id shouldBe VarId("y")
+            result.init shouldBe n(10)
+
+            val body = result.exp as BinOp
+            body.left shouldBe n(5)
+            body.right shouldBe v("y")
         }
     }
 })
