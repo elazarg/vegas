@@ -1,9 +1,7 @@
 package vegas
 
-import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import vegas.backend.solidity.genSolidity
 import vegas.backend.smt.generateSMT
 import vegas.frontend.*
@@ -13,8 +11,7 @@ import vegas.frontend.Exp.Field
 import vegas.frontend.Exp.Var
 import vegas.frontend.Outcome.Value
 import vegas.frontend.TypeExp.INT
-import vegas.ir.freeVars
-import vegas.ir.substituteVar
+import vegas.ir.*
 
 /**
  * Tests for let expression IR lowering and end-to-end compilation.
@@ -64,28 +61,37 @@ class LetLoweringTest : FreeSpec({
 
     "IR Lowering - Let Expressions" - {
 
-        "should lower simple let in expression" {
+        "should eliminate let and substitute value in payoff" {
+            // let! x = 10 in (x + 5) => 10 + 5
             val prog = program(
                 join(alice),
                 value = pay(alice to letE("x", n(10), BinOp("+", v("x"), n(5))))
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            // IR should contain substituted expression, no Let nodes
+            val payoff = ir.payoffs[alice.id]!! as Expr.Add
+            payoff.l shouldBe Expr.Const.IntVal(10)
+            payoff.r shouldBe Expr.Const.IntVal(5)
         }
 
-        "should lower let with field reference" {
+        "should substitute field reference into let body" {
+            // let! doubled = Alice.bid * 2 in doubled => Alice.bid * 2
             val prog = program(
                 join(alice),
                 yieldTo(alice, listOf(i("bid"))),
                 value = pay(alice to letE("doubled", BinOp("*", m(alice, "bid"), n(2)), v("doubled")))
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            val payoff = ir.payoffs[alice.id]!! as Expr.Mul
+            payoff.l shouldBe Expr.Field(FieldRef(alice.id, VarId("bid")))
+            payoff.r shouldBe Expr.Const.IntVal(2)
         }
 
-        "should lower nested let expressions" {
+        "should substitute nested let expressions correctly" {
+            // let! a = Alice.x + 10 in (let! b = a * 2 in b - 5)
+            // => ((Alice.x + 10) * 2) - 5
             val prog = program(
                 join(alice),
                 yieldTo(alice, listOf(i("x"))),
@@ -96,30 +102,46 @@ class LetLoweringTest : FreeSpec({
                     )
                 )
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            val payoff = ir.payoffs[alice.id]!! as Expr.Sub
+            val mul = payoff.l as Expr.Mul
+            val add = mul.l as Expr.Add
+
+            add.l shouldBe Expr.Field(FieldRef(alice.id, VarId("x")))
+            add.r shouldBe Expr.Const.IntVal(10)
+            mul.r shouldBe Expr.Const.IntVal(2)
+            payoff.r shouldBe Expr.Const.IntVal(5)
         }
 
-        "should lower let with shadowing" {
+        "should handle shadowing by using innermost binding" {
+            // let! x = 10 in (let! x = 20 in x) => 20
             val prog = program(
                 join(alice),
                 value = pay(alice to letE("x", n(10), letE("x", n(20), v("x"))))
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            // Inner x shadows outer, so result is 20
+            ir.payoffs[alice.id] shouldBe Expr.Const.IntVal(20)
         }
 
-        "should lower simple let in outcome" {
+        "should distribute let binding across multiple payoffs" {
+            // let! total = 100 in {Alice: total, Bob: 0}
+            // => {Alice: 100, Bob: 0}
             val prog = program(
                 join(alice, bob),
                 value = letO("total", n(100), pay(alice to v("total"), bob to n(0)))
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            ir.payoffs[alice.id] shouldBe Expr.Const.IntVal(100)
+            ir.payoffs[bob.id] shouldBe Expr.Const.IntVal(0)
         }
 
-        "should lower let in outcome with field references" {
+        "should substitute field references into multiple payoffs" {
+            // let! sum = Alice.x + Bob.y in {Alice: sum, Bob: -sum}
+            // => {Alice: Alice.x + Bob.y, Bob: -(Alice.x + Bob.y)}
             val prog = program(
                 join(alice, bob),
                 yieldTo(alice, listOf(i("x"))),
@@ -130,11 +152,22 @@ class LetLoweringTest : FreeSpec({
                     pay(alice to v("sum"), bob to BinOp("-", n(0), v("sum")))
                 )
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            val alicePayoff = ir.payoffs[alice.id]!! as Expr.Add
+            alicePayoff.l shouldBe Expr.Field(FieldRef(alice.id, VarId("x")))
+            alicePayoff.r shouldBe Expr.Field(FieldRef(bob.id, VarId("y")))
+
+            val bobPayoff = ir.payoffs[bob.id]!! as Expr.Sub
+            bobPayoff.l shouldBe Expr.Const.IntVal(0)
+            val bobSum = bobPayoff.r as Expr.Add
+            bobSum.l shouldBe Expr.Field(FieldRef(alice.id, VarId("x")))
+            bobSum.r shouldBe Expr.Field(FieldRef(bob.id, VarId("y")))
         }
 
-        "should lower nested let in outcome" {
+        "should substitute nested let in outcome" {
+            // let! total = 100 in (let! half = total/2 in {Alice: half, Bob: total-half})
+            // => {Alice: 100/2, Bob: 100 - (100/2)}
             val prog = program(
                 join(alice, bob),
                 value = letO(
@@ -145,14 +178,23 @@ class LetLoweringTest : FreeSpec({
                     )
                 )
             )
-            val ir = shouldNotThrow<Exception> { compileToIR(prog) }
-            ir shouldNotBe null
+            val ir = compileToIR(prog)
+
+            val alicePayoff = ir.payoffs[alice.id]!! as Expr.Div
+            alicePayoff.l shouldBe Expr.Const.IntVal(100)
+            alicePayoff.r shouldBe Expr.Const.IntVal(2)
+
+            val bobPayoff = ir.payoffs[bob.id]!! as Expr.Sub
+            bobPayoff.l shouldBe Expr.Const.IntVal(100)
+            val bobHalf = bobPayoff.r as Expr.Div
+            bobHalf.l shouldBe Expr.Const.IntVal(100)
+            bobHalf.r shouldBe Expr.Const.IntVal(2)
         }
     }
 
     "Backend Compilation - Let Expressions" - {
 
-        "should compile let to Solidity" {
+        "should compile let to Solidity without let variables" {
             val prog = program(
                 join(alice, bob),
                 value = letO(
@@ -160,64 +202,103 @@ class LetLoweringTest : FreeSpec({
                     pay(alice to BinOp("/", v("pot"), n(2)), bob to BinOp("/", v("pot"), n(2)))
                 )
             )
-            val ir = compileToIR(prog)
-            val sol = shouldNotThrow<Exception> { genSolidity(ir) }
-            sol shouldNotBe null
+            val solidity = genSolidity(compileToIR(prog))
+
+            // Generated Solidity should not contain "pot" variable name
+            (solidity.contains("pot")) shouldBe false
+            (solidity.contains("let")) shouldBe false
         }
 
-        "should compile nested let to Solidity" {
+        "should compile nested let to Solidity with full substitution" {
             val prog = program(
                 join(alice, bob),
                 value = letO(
-                    "a", n(100),
-                    letO("b", BinOp("/", v("a"), n(2)), pay(alice to v("b"), bob to v("b")))
+                    "myTotal", n(100),
+                    letO("myHalf", BinOp("/", v("myTotal"), n(2)), pay(alice to v("myHalf"), bob to v("myHalf")))
                 )
             )
             val ir = compileToIR(prog)
-            val sol = shouldNotThrow<Exception> { genSolidity(ir) }
-            sol shouldNotBe null
+
+            // IR should not contain any Let nodes
+            val solidity = genSolidity(ir)
+
+            // Solidity should not contain let-bound variable names
+            (solidity.contains("myTotal")) shouldBe false
+            (solidity.contains("myHalf")) shouldBe false
+
+            // Should compile without errors
+            solidity.isNotEmpty() shouldBe true
         }
 
-        "should compile let to SMT" {
+        "should compile let to SMT without frontend variable names" {
             val prog = program(
                 join(alice, bob),
                 value = letO("total", n(100), pay(alice to v("total"), bob to n(0)))
             )
-            val ir = compileToIR(prog)
-            val smt = shouldNotThrow<Exception> { generateSMT(ir) }
-            smt shouldNotBe null
+            val smt = generateSMT(compileToIR(prog))
+
+            // SMT output should not contain "total" from let binding
+            (smt.contains("total")) shouldBe false
+
+            // Should generate valid SMT
+            smt.isNotEmpty() shouldBe true
         }
     }
 
 
     "IR Lowering Semantics" - {
 
-        "should correctly substitute variables" {
+        "should duplicate value when variable appears multiple times" {
+            // let! x = 5 in (x + x) => 5 + 5
             val prog = program(
                 join(alice),
                 value = pay(alice to letE("x", n(5), BinOp("+", v("x"), v("x"))))
             )
             val ir = compileToIR(prog)
-            ir.payoffs[alice.id] shouldNotBe null
+
+            val payoff = ir.payoffs[alice.id]!! as Expr.Add
+            payoff.l shouldBe Expr.Const.IntVal(5)
+            payoff.r shouldBe Expr.Const.IntVal(5)
         }
 
-        "should handle shadowing correctly" {
+        "should use innermost binding for shadowed variables" {
+            // let! x = 10 in (let! x = 20 in x) => 20
             val prog = program(
                 join(alice),
                 value = pay(alice to letE("x", n(10), letE("x", n(20), v("x"))))
             )
             val ir = compileToIR(prog)
-            ir.payoffs[alice.id] shouldNotBe null
+
+            // Inner binding shadows outer, result should be 20
+            ir.payoffs[alice.id] shouldBe Expr.Const.IntVal(20)
         }
 
         "should preserve field references during substitution" {
+            // let! bonus = 10 in (Alice.bid + bonus) => Alice.bid + 10
             val prog = program(
                 join(alice),
                 yieldTo(alice, listOf(i("bid"))),
                 value = pay(alice to letE("bonus", n(10), BinOp("+", m(alice, "bid"), v("bonus"))))
             )
             val ir = compileToIR(prog)
-            ir.payoffs[alice.id] shouldNotBe null
+
+            val payoff = ir.payoffs[alice.id]!! as Expr.Add
+            payoff.l shouldBe Expr.Field(FieldRef(alice.id, VarId("bid")))
+            payoff.r shouldBe Expr.Const.IntVal(10)
+        }
+
+        "should duplicate field references when bound variable used multiple times" {
+            // let! bid = Alice.bid in (bid + bid) => Alice.bid + Alice.bid
+            val prog = program(
+                join(alice),
+                yieldTo(alice, listOf(i("bid"))),
+                value = pay(alice to letE("b", m(alice, "bid"), BinOp("+", v("b"), v("b"))))
+            )
+            val ir = compileToIR(prog)
+
+            val payoff = ir.payoffs[alice.id]!! as Expr.Add
+            payoff.l shouldBe Expr.Field(FieldRef(alice.id, VarId("bid")))
+            payoff.r shouldBe Expr.Field(FieldRef(alice.id, VarId("bid")))
         }
     }
 
@@ -255,7 +336,6 @@ class LetLoweringTest : FreeSpec({
         }
 
         "should perform α-renaming to avoid capture" {
-            // Critical test case from REVIEW.md:
             // let! x = z in (let! z = 5 in x+z)
             //
             // WITHOUT α-renaming, substituting x := z would give:
