@@ -17,7 +17,6 @@ import vegas.frontend.Query
 import vegas.frontend.Role
 import vegas.frontend.TypeExp
 import vegas.frontend.VarDec
-import vegas.ir.desugar
 
 // -------- Test-local builders --------
 private object B {
@@ -76,12 +75,12 @@ private object B {
      * Program builder per request:
      *  program(types, binds..., value?)
      *
-     * Threads binds left->right and attaches an optional final Value.
+     * Threads binds left->right and attaches an optional final Outcome.
      */
     fun program(
         types: Map<TypeId, TypeExp>,
         vararg binds: Ext,
-        value: Value? = null,
+        value: Outcome? = null,
         name: String = "TestProgram"
     ): GameAst {
         val end: Ext = Ext.Value(value ?: Value(emptyMap()))
@@ -97,7 +96,7 @@ private object B {
 
     fun program(
         vararg binds: Ext,
-        value: Value? = null,
+        value: Outcome? = null,
         name: String = "TestProgram"
     ): GameAst {
         return program(emptyMap(), binds = binds, value = value, name = name)
@@ -722,7 +721,7 @@ class TypeCheckerTest : FreeSpec({
                             Q to BinOp("-", B.n(0), B.v("total"))
                         )
                     )
-                ).let { desugar(it) } // convert Outcome.Let -> Value
+                ) // No need to call desugar - ToIR.desugarOutcome handles this
             )
             shouldNotThrow<StaticError> { typeCheck(p) }
         }
