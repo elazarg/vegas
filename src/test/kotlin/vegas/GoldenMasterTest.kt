@@ -6,6 +6,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.datatest.withData
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.solidity.genSolidity
+import vegas.backend.vyper.genVyper
 import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -51,6 +52,9 @@ class GoldenMasterTest : FreeSpec({
         listOf(
             TestCase(example, "sol", "solidity") { prog ->
                 genSolidity(compileToIR(prog))
+            },
+            TestCase(example, "vy", "vyper") { prog ->
+                genVyper(compileToIR(prog))
             },
             TestCase(example, "efg", "gambit") { prog ->
                 generateExtensiveFormGame(compileToIR(prog))
@@ -117,6 +121,17 @@ class GoldenMasterTest : FreeSpec({
             sanitizeOutput(output1, "solidity") shouldBe sanitizeOutput(output2, "solidity")
         }
 
+        "Vyper generation should be deterministic" {
+            val example = "MontyHall"
+            val program = parseExample(example)
+            val ir = compileToIR(program)
+
+            val output1 = genVyper(ir)
+            val output2 = genVyper(ir)
+
+            sanitizeOutput(output1, "vyper") shouldBe sanitizeOutput(output2, "vyper")
+        }
+
         "Gambit generation should preserve game structure" {
             val program = parseExample("Prisoners")
             val ir = compileToIR(program)
@@ -153,6 +168,13 @@ private fun sanitizeOutput(content: String, backend: String): String =
     when (backend) {
         "solidity" -> content
             .replace(Regex("//.*\\d{10,}.*\n"), "// TIMESTAMP_COMMENT\n")
+            .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
+            .replace(Regex("\\s+\n"), "\n")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+
+        "vyper" -> content
+            .replace(Regex("#.*\\d{10,}.*\n"), "# TIMESTAMP_COMMENT\n")
             .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
             .replace(Regex("\\s+\n"), "\n")
             .replace(Regex("\n{3,}"), "\n\n")

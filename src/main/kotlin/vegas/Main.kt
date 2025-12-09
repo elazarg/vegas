@@ -5,6 +5,7 @@ import vegas.backend.scribble.generateScribble
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.smt.generateSMT
 import vegas.backend.solidity.genSolidity
+import vegas.backend.vyper.genVyper
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
@@ -40,16 +41,18 @@ private data class Outputs(
     val z3: Boolean,
     val efg: Boolean,
     val scr: Boolean,
-    val sol: Boolean
+    val sol: Boolean,
+    val vyper: Boolean
 )
 
 private fun parseOutputs(flags: List<String>): Outputs {
-    if (flags.isEmpty()) return Outputs(z3 = true, efg = true, scr = true, sol = true)
+    if (flags.isEmpty()) return Outputs(z3 = true, efg = true, scr = true, sol = true, vyper = true)
 
     var wantZ3 = false
     var wantEfg = false
     var wantScr = false
     var wantSol = false
+    var wantVyper = false
 
     for (f in flags) {
         when (f.lowercase()) {
@@ -57,14 +60,15 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--efg" -> wantEfg = true
             "--scr" -> wantScr = true
             "--sol" -> wantSol = true
+            "--vyper" -> wantVyper = true
             else -> throw IllegalArgumentException("Unknown flag: $f")
         }
     }
 
     // If the user provided any known flags, emit only those.
-    val any = wantZ3 || wantEfg || wantScr || wantSol
-    return if (any) Outputs(wantZ3, wantEfg, wantScr, wantSol)
-    else Outputs(z3 = true, efg = true, scr = true, sol = true)
+    val any = wantZ3 || wantEfg || wantScr || wantSol || wantVyper
+    return if (any) Outputs(wantZ3, wantEfg, wantScr, wantSol, wantVyper)
+    else Outputs(z3 = true, efg = true, scr = true, sol = true, vyper = true)
 }
 
 private fun runFile(inputPath: Path, outputs: Outputs) {
@@ -77,6 +81,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val outEfg = outDir.resolve("$baseName.efg")
     val outScr = outDir.resolve("$baseName.scr")
     val outSol = outDir.resolve("$baseName.sol")
+    val outVyper = outDir.resolve("$baseName.vy")
 
     println("Analyzing $inputPath ...")
     val program = parseFile(inputPath.toString()).copy(name = baseName, desc = baseName)
@@ -89,6 +94,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     if (outputs.efg) writeFile(outEfg.toString()) { generateExtensiveFormGame(ir) }
     if (outputs.scr) writeFile(outScr.toString()) { generateScribble(program).prettyPrintAll() }
     if (outputs.sol) writeFile(outSol.toString()) { genSolidity(ir) }
+    if (outputs.vyper) writeFile(outVyper.toString()) { genVyper(ir) }
 
     println("Done")
     println()
@@ -98,13 +104,14 @@ fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println(
             """
-            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--scr] [--sol]
-            
+            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--scr] [--sol] [--vyper]
+
             If no format flags are given, all outputs are generated alongside the input:
               - <file>.z3   (SMT)
               - <file>.efg  (Gambit EFG)
               - <file>.scr  (Scribble)
               - <file>.sol  (Solidity)
+              - <file>.vy   (Vyper)
             """.trimIndent()
         )
         exitProcess(2)
