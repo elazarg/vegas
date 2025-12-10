@@ -4,8 +4,9 @@ import vegas.backend.scribble.prettyPrintAll
 import vegas.backend.scribble.generateScribble
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.smt.generateSMT
-import vegas.backend.solidity.genSolidity
-import vegas.backend.vyper.genVyper
+import vegas.backend.evm.compileToEvm
+import vegas.backend.evm.generateSolidity
+import vegas.backend.evm.generateVyper
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
@@ -93,8 +94,11 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
     if (outputs.efg) writeFile(outEfg.toString()) { generateExtensiveFormGame(ir) }
     if (outputs.scr) writeFile(outScr.toString()) { generateScribble(program).prettyPrintAll() }
-    if (outputs.sol) writeFile(outSol.toString()) { genSolidity(ir) }
-    if (outputs.vyper) writeFile(outVyper.toString()) { genVyper(ir) }
+
+    // EVM backends use common IR
+    val evmIr = if (outputs.sol || outputs.vyper) compileToEvm(ir) else null
+    if (outputs.sol) writeFile(outSol.toString()) { generateSolidity(evmIr!!) }
+    if (outputs.vyper) writeFile(outVyper.toString()) { generateVyper(evmIr!!) }
 
     println("Done")
     println()

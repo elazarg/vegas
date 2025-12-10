@@ -142,6 +142,11 @@ class ActionDag private constructor(
     fun reaches(from: ActionId, to: ActionId): Boolean =
         reach.reaches(from, to)
 
+    fun sinks(): Set<ActionId> {
+        val allDeps = actions.flatMap { prerequisitesOf(it) }.toSet()
+        return actions.filter { it !in allDeps }.toSet()
+    }
+
     /**
      * Concurrency test: two nodes can execute concurrently iff neither reaches the other.
      */

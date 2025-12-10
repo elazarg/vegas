@@ -73,9 +73,7 @@ data class EvmAction(
     // structural constraints above and injected by the renderer.
     val guards: List<EvmExpr>,
     val body: List<EvmStmt>
-) {
-    val owner = actionId.first
-}
+)
 
 // ==========================================
 // Structural Definitions

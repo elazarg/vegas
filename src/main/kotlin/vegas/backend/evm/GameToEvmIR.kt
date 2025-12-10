@@ -94,7 +94,7 @@ private fun buildStorage(
     // Infrastructure
     add(EvmStorageSlot("lastTs", Uint256))
     add(EvmStorageSlot("actionDone", Mapping(EnumType(roleEnumName), Mapping(Uint256, Bool))))
-    add(EvmStorageSlot("actionTimestamp", Mapping(Uint256, Uint256)))
+    add(EvmStorageSlot("actionTimestamp", Mapping(EnumType(roleEnumName), Mapping(Uint256, Uint256))))
 
     // Action Constants
     linearization.forEach { (id, idx) ->

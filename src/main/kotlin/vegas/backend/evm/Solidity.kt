@@ -81,7 +81,7 @@ private fun StringBuilder.renderStorage(s: EvmStorageSlot) {
 
 private fun StringBuilder.renderInfrastructureModifiers() {
     appendLine("""
-        receive() public payable {
+        receive() external payable {
             revert("direct ETH not allowed");
         }
         
