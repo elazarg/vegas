@@ -1,6 +1,6 @@
 # Vegas: A Domain-Specific Language for Game-Theoretically Analyzed Blockchain-Based Games
 
-Vegas (VErified Game Analysis and Synthesis) is a research tool that provides a unified language for specifying multi-party games with economic incentives, automatic translation to game-theoretic models, and smart contract generation.
+Vegas (VErified Game Analysis and Synthesis) is a research tool that provides a unified language for specifying multi-party games with economic incentives. It compiles a single game specification into both **game-theoretic models** (for analysis) and **smart contracts** (for deployment), ensuring the implementation faithfully preserves the game's strategic properties.
 
 ## Overview
 
@@ -8,47 +8,61 @@ Vegas allows you to specify strategic interactions between multiple parties, inc
 - Players joining with deposits
 - Sequential and simultaneous moves
 - Hidden information and reveal mechanisms
-- Conditional payouts based on player actions
+- Conditional payouts based on game outcomes
+
+The compiler uses a **Dependency DAG (Directed Acyclic Graph)** approach to schedule actions. Unlike traditional round-based systems, Vegas allows actions to occur asynchronously as soon as their dependencies (data or control flow) are met.
 
 From a single Vegas specification, the tool generates:
-- **Extensive form games** (Gambit EFG format) for game-theoretic analysis
-- **Solidity smart contracts** for blockchain deployment
+- **Solidity Smart Contracts**: Optimized, asynchronous contracts with automatic timeout handling.
+- **Extensive Form Games**: Gambit (`.efg`) files for finding Nash equilibria and analyzing strategy.
 
 ## Language Features
 
 ### Core Constructs
 
-- **Type declarations**: Define custom types as subsets or ranges of integers
-- **Join**: Players enter the game with deposits
-- **Yield**: Players make moves (public or hidden)
-- **Reveal**: Players reveal previously hidden information
-- **Withdraw**: Specify payouts based on game outcomes
+- **Declarative Flow**: Define actions (`yield`, `reveal`) naturally; the compiler infers the necessary execution order.
+- **Macros**: Define reusable logic and predicates to keep specifications clean.
+- **Automatic Commit-Reveal**: The compiler automatically detects concurrent public moves that are vulnerable to front-running and rewrites them into secure commit-reveal protocols.
+- **Distribution Transparency**: Write code as if it were a centralized sequential game. The compiler handles the complexity of distributed state, cryptographic commitments, and timeouts.
 
 ### Example: Monty Hall Game
 
 ```vegas
 type door = {0, 1, 2}
 
+// Players join with deposits
 join Host() $ 100;
 join Guest() $ 100;
+
+// Host hides the car (compiler generates commitment)
 yield Host(car: hidden door);
+
+// Guest makes a public choice
 yield Guest(d: door);
+
+// Host reveals a goat (constrained by game rules)
 yield Host(goat: door) where Host.goat != Guest.d;
+
+// Guest decides whether to switch
 yield Guest(switch: bool);
+
+// Host reveals the car's location
 reveal Host(car: door) where Host.goat != Host.car;
+
+// Payouts calculated based on game state
 withdraw (Host.car != null && Guest.switch != null)
      ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 20 : -20;  Host -> 0 }
      : (Host.car == null)
-     ? { Guest -> 20;   Host -> -100 }
-     : { Guest -> -100; Host -> 0 }
-```
+     ? { Guest -> 20;   Host -> -100 } // Host timed out/bailed
+     : { Guest -> -100; Host -> 0 }    // Guest timed out/bailed
+````
 
 ## Building and Running
 
 ### Build
 
 ```bash
-# Generate ANTLR parser (assumes ANTLR is configured)
+# Generate ANTLR parser
 antlr4 -o ./generated/vegasGen -package vegasGen -listener -visitor -lib . ./Vegas.g4
 
 # Compile Kotlin code
@@ -61,91 +75,25 @@ kotlinc src/vegas/*.kt -cp antlr-runtime.jar
 kotlin -cp .:antlr-runtime.jar vegas.MainKt
 ```
 
-This will process all example files and generate outputs in:
-- `examples/gambit/` - Extensive form game files (.efg)
-- `examples/solidity/` - Smart contract implementations (.sol)
-- `examples/smt/` - SMT-LIB specifications (.z3) [experimental]
-- `examples/scribble/` - Scribble protocol specifications (.scr) [experimental]
+This will process example files and generate outputs in:
 
-## Examples
-
-The `examples/` directory contains several game specifications:
-
-- **Bet.vg**: Simple betting game with random outcome
-- **MontyHall.vg**: Classic Monty Hall problem with hidden information
-- **Prisoners.vg**: Prisoner's dilemma
-- **OddsEvens.vg**: Matching pennies variant
-- **ThreeWayLottery.vg**: Three-player lottery with strategic selection
-- **Puzzle.vg**: Number factorization puzzle
+  - `examples/gambit/` - Extensive form game files (.efg)
+  - `examples/solidity/` - Smart contract implementations (.sol)
+  - `examples/graphviz/` - Visualizations of the action dependency DAG
 
 ## Output Formats
 
-### Gambit EFG
-
-Generates extensive form game representations that can be analyzed using [Gambit](http://www.gambit-project.org/) game theory software to:
-- Find Nash equilibria
-- Analyze strategic dominance
-- Compute expected payoffs
-
 ### Solidity Smart Contracts
 
-Generates Ethereum smart contracts that implement the game mechanics including:
-- Player registration with deposits
-- Move validation and sequencing
-- Commit-reveal schemes for hidden information
-- Automatic payout distribution
+Generates Ethereum smart contracts that implement:
 
-**Note**: Generated contracts are proof-of-concept and not intended for production use.
+  - **DAG-Based Scheduling**: Actions are gated by `depends` modifiers, allowing non-conflicting actions to occur in any order.
+  - **Bail-Out Logic**: If a player stops responding, they are marked as "bailed" after a timeout. Dependent actions can then proceed (treating the missing values as `null`), preventing the game from freezing permanently.
+  - **Cryptographic Security**: Commitments and reveals are generated automatically for hidden information and "risk partners" (concurrent moves).
 
-## Project Structure
+### Gambit EFG
 
-```
-.
-├── Vegas.g4                 # ANTLR grammar definition
-├── src/vegas/
-│   ├── Ast.kt               # Abstract syntax tree definitions
-│   ├── AstTranslator.java   # ANTLR to AST translation
-│   ├── Env.kt               # Environment for evaluation
-│   ├── Gambit.kt            # Extensive form game generation
-│   ├── Main.kt              # Entry point and orchestration
-│   ├── Scribble.kt          # Scribble protocol generation (experimental)
-│   ├── Smt.kt               # SMT-LIB generation (experimental)
-│   ├── Solidity.kt          # Smart contract generation
-│   ├── TypeChecker.kt       # Type system implementation
-│   └── Utils.kt             # Utility functions
-└── examples/
-    ├── *.vg                 # Vegas source files
-    ├── gambit/              # Generated .efg files
-    └── solidity/            # Generated .sol files
-```
+Generates extensive form game representations that map the DAG structure to information sets, correctly modeling:
 
-## Language Syntax
-
-### Types
-```
-type <name> = {<val1>, <val2>, ...}  // Enumerated type
-type <name> = {<min>..<max>}         // Range type
-```
-
-### Game Flow
-```
-join <Role>(<params>) $ <deposit>;    // Player joins with deposit
-yield <Role>(<params>);               // Player makes a move
-reveal <Role>(<params>);              // Reveal hidden information
-withdraw <outcome-expression>         // Specify payouts
-```
-
-### Expressions
-- Arithmetic: `+`, `-`, `*`, `/`
-- Comparison: `<`, `<=`, `>`, `>=`, `==`, `!=`
-- Boolean: `&&`, `||`, `!`, `<->` (iff)
-- Conditional: `condition ? ifTrue : ifFalse`
-- Member access: `Role.field`
-- Null check: `value == null`, `value != null`
-
-## Limitations
-
-- Type system supports only integers, booleans, and user-defined finite types
-- No support for arrays or complex data structures
-- Generated Solidity uses outdated compiler version (0.4.22)
-- SMT and Scribble backends are incomplete/experimental
+  - **Simultaneity**: Actions that can execute concurrently in the DAG are modeled as simultaneous moves in the game tree.
+  - **Information Sets**: Players only "know" information that has been explicitly revealed or is public in the DAG history.
