@@ -38,12 +38,13 @@ fun compileToEvm(game: GameIR): EvmContract {
 
     return EvmContract(
         name = game.name,
+        roles = game.roles.toList(),
         storage = storage,
         enums = listOf(buildRoleEnum(game)),
         events = emptyList(),
         actions = actions,
         payoffs = payoffs,
-        initialization = init
+        initialization = init,
     )
 }
 
@@ -57,25 +58,32 @@ private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
         .mapIndexed { idx, id -> id to idx }
         .toMap()
 
-// Naming Conventions for Storage
-private fun storageName(role: RoleId, param: VarId, hidden: Boolean): String =
-    if (hidden) "${role.name}_${param}_hidden"
-    else "${role.name}_${param}"
-
-private fun doneFlagName(role: RoleId, param: VarId): String =
-    "done_${role.name}_${param}"
 
 // =========================================================================
 // 2. Storage Generation
 // =========================================================================
-internal val roleMap = "role"
-internal val balanceMap = "balanceOf"
-internal val roleEnumName = "Role"
-internal fun roleAddr(role: String) = "address_$role"
-internal fun roleJoined(role: String) = "done_$role" // GM uses 'done_Race' for joined flag
 
-internal fun valName(field: FieldRef) = "${field.owner}_${field.param}"
-internal fun doneName(field: FieldRef) = "done_${field.owner}_${field.param}"
+// Naming Conventions for Storage
+internal const val roleMap = "roles"
+internal const val balanceMap = "balanceOf"
+internal const val roleEnumName = "Role"
+internal const val roleNone = "None"
+
+internal fun roleAddr(role: String) = "address_$role"
+internal fun roleJoined(role: String) = "done_$role"
+
+private fun storageName(role: RoleId, param: VarId, hidden: Boolean): String =
+    if (hidden) "${role.name}_${param}_hidden"
+    else "${role.name}_${param}"
+
+private fun doneFlagName(role: RoleId, param: VarId, hidden: Boolean): String {
+    return "done_${storageName(role, param, hidden)}"
+}
+
+fun inputParam(param: VarId, hidden: Boolean): String {
+    val prefix = if (hidden) "hidden_" else ""
+    return "$prefix${param.name}"
+}
 
 private fun buildStorage(
     g: GameIR,
@@ -85,7 +93,7 @@ private fun buildStorage(
 
     // Infrastructure
     add(EvmStorageSlot("lastTs", Uint256))
-    add(EvmStorageSlot("actionDone", Mapping(Uint256, Bool)))
+    add(EvmStorageSlot("actionDone", Mapping(EnumType(roleEnumName), Mapping(Uint256, Bool))))
     add(EvmStorageSlot("actionTimestamp", Mapping(Uint256, Uint256)))
 
     // Action Constants
@@ -111,6 +119,8 @@ private fun buildStorage(
     // Player State
     (g.roles + g.chanceRoles).forEach { role ->
         add(EvmStorageSlot(roleAddr(role.name), Address))
+    }
+    (g.roles + g.chanceRoles).forEach { role ->
         add(EvmStorageSlot(roleJoined(role.name), Bool)) // done_Role
     }
     add(EvmStorageSlot("payoffs_distributed", Bool))
@@ -121,28 +131,24 @@ private fun buildStorage(
         meta.struct.visibility.forEach { (field, vis) ->
             if (!visited.add(field)) return@forEach
 
+            // (Clear values)
             val paramType = meta.spec.params.find { it.name == field.param }?.type ?: Type.IntType
             val evmType = translateType(paramType)
-
-            // Public/Reveal (Clear values)
-            if (vis == Visibility.PUBLIC || vis == Visibility.REVEAL) {
-                add(EvmStorageSlot(valName(field), evmType))
-                add(EvmStorageSlot(doneName(field), Bool))
-            }
+            add(EvmStorageSlot(storageName(field.owner, field.param, false), evmType))
+            add(EvmStorageSlot(doneFlagName(field.owner, field.param, false), Bool))
 
             // Commit (Hidden values)
             if (vis == Visibility.COMMIT) {
-                // Assuming naming convention for hidden fields matches what you might need later
                 // GM doesn't show hidden fields, assuming standard pattern
-                add(EvmStorageSlot(valName(field) + "_hidden", Bytes32))
-                add(EvmStorageSlot(doneName(field) + "_hidden", Bool))
+                add(EvmStorageSlot(storageName(field.owner, field.param, true), Bytes32))
+                add(EvmStorageSlot(doneFlagName(field.owner, field.param, true), Bool))
             }
         }
     }
 }
 
 private fun buildRoleEnum(g: GameIR): EvmEnum {
-    val values = listOf("None") + (g.roles + g.chanceRoles).map { it.name }
+    val values = listOf(roleNone) + (g.roles + g.chanceRoles).map { it.name }
     return EvmEnum(roleEnumName, values)
 }
 
@@ -159,14 +165,15 @@ private fun buildAction(
     val idx = linearization.getValue(id)
     val spec = meta.spec
     val kind = meta.kind // PUBLIC, COMMIT, or REVEAL
+    val hidden = kind == Visibility.COMMIT
 
     // 3a. Inputs
     val inputs = buildList {
         // Standard params
         spec.params.forEach { p ->
-            val isHiddenInput = (kind == Visibility.COMMIT)
-            val type = if (isHiddenInput) Bytes32 else translateType(p.type)
-            add(EvmParam(p.name, type))
+            val type = if (hidden) Bytes32 else translateType(p.type)
+            val varName = VarId(inputParam(p.name, hidden))
+            add(EvmParam(varName, type))
         }
         // Reveals need a salt
         if (kind == Visibility.REVEAL) {
@@ -174,45 +181,60 @@ private fun buildAction(
         }
     }
 
-    // 3b. Body Logic
+    // 3c. Guards - `where` expressions
+    val guards = if (!hidden) {
+        translateDomainGuards(spec.params) + if (spec.guardExpr != Expr.Const.BoolVal(true)) {
+            listOf(
+                translateExpr(
+                    spec.guardExpr,
+                    contextOwner = meta.struct.owner,
+                    contextParams = spec.params.map { it.name }.toSet()
+                )
+            )
+        } else {
+            listOf()
+        }
+    } else {
+        listOf()
+    }
+    // 3c. Body Logic
     val body = buildList {
         // Join Logic (Deposit, Role assignment)
         if (spec.join != null) {
             val role = meta.struct.owner
             val deposit = spec.join.deposit.v
 
-            // require(roles[msg.sender] == None)
-            add(Guard(
-                Binary(BinaryOp.EQ,
-                    Index(Member(BuiltIn.Self, roleMap), BuiltIn.MsgSender),
-                    EnumValue(roleEnumName, "None")
-                ),
-                "already has a role"
-            ))
-
             // require(!joined_Role)
-            add(Guard(
-                Unary(UnaryOp.NOT, Member(BuiltIn.Self, "done_${role.name}")),
-                "already joined"
-            ))
+            add(
+                Require(
+                    Unary(UnaryOp.NOT, Member(BuiltIn.Self, "done_${role.name}")),
+                    "already joined"
+                )
+            )
 
             // Handle Deposit
             if (deposit > 0) {
-                add(Guard(
-                    Binary(BinaryOp.EQ, BuiltIn.MsgValue, IntLit(deposit)),
-                    "bad stake"
-                ))
-                add(Assign(
-                    Index(Member(BuiltIn.Self, balanceMap), BuiltIn.MsgSender),
-                    BuiltIn.MsgValue
-                ))
+                add(
+                    Require(
+                        Binary(BinaryOp.EQ, BuiltIn.MsgValue, IntLit(deposit)),
+                        "bad stake"
+                    )
+                )
+                add(
+                    Assign(
+                        Index(Member(BuiltIn.Self, balanceMap), BuiltIn.MsgSender),
+                        BuiltIn.MsgValue
+                    )
+                )
             }
 
             // Effects
-            add(Assign(
-                Index(Member(BuiltIn.Self, roleMap), BuiltIn.MsgSender),
-                EnumValue(roleEnumName, role.name)
-            ))
+            add(
+                Assign(
+                    Index(Member(BuiltIn.Self, roleMap), BuiltIn.MsgSender),
+                    EnumValue(roleEnumName, role.name)
+                )
+            )
             add(Assign(Member(BuiltIn.Self, "address_${role.name}"), BuiltIn.MsgSender))
             add(Assign(Member(BuiltIn.Self, "done_${role.name}"), BoolLit(true)))
         }
@@ -221,62 +243,48 @@ private fun buildAction(
         if (kind == Visibility.REVEAL) {
             spec.params.forEach { p ->
                 // hash(param, salt) == stored_commitment
-                val input = p.name
-                val salt = VarId("salt")
-                val packed = AbiEncode(listOf(input, salt), isPacked = true) // Solidity style packing
+                val input = VarId(inputParam( p.name, false))
+                val salt = VarId(inputParam( VarId("salt"), false))
+                val packed = AbiEncode(listOf(Var(input), Var(salt)), isPacked = true) // Solidity style packing
                 val hash = Keccak256(packed)
 
                 val commitment = Member(BuiltIn.Self, storageName(meta.struct.owner, p.name, true))
 
-                add(Guard(
-                    Binary(BinaryOp.EQ, hash, commitment),
-                    "reveal failed for ${p.name}"
-                ))
+                add(
+                    Require(
+                        Binary(BinaryOp.EQ, hash, commitment),
+                        "reveal failed for ${p.name}"
+                    )
+                )
             }
-        }
-
-        // Guard Expression (The "Where" Clause)
-        // Note: For COMMIT actions, the spec.guardExpr is usually true (checked at Reveal),
-        // but we compile it anyway if present.
-        if (spec.guardExpr != Expr.Const.BoolVal(true)) {
-            val guardCheck = translateExpr(
-                spec.guardExpr,
-                contextOwner = meta.struct.owner,
-                contextParams = spec.params.map { it.name }.toSet()
-            )
-            add(Guard(guardCheck, "guard condition failed"))
         }
 
         // State Updates (Writing to Storage)
         spec.params.forEach { p ->
-            val isCommit = (kind == Visibility.COMMIT)
-            val targetName = storageName(meta.struct.owner, p.name, isCommit)
-            val flagName = doneFlagName(meta.struct.owner, p.name) + (if(isCommit) "_hidden" else "")
+            val targetName = storageName(meta.struct.owner, p.name, hidden)
+            val flagName = doneFlagName(meta.struct.owner, p.name, hidden)
+            val varName = VarId(inputParam(p.name, hidden))
 
-            add(Assign(Member(BuiltIn.Self, targetName), Var(p.name)))
+            add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
             add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
         }
-
-        // Mark Action Done
-        // We call the internal helper (which the backend must generate, or we assume exists)
-        // Ideally we'd inline the logic here, but a Call is cleaner for the IR
-        add(ExprStmt(Call("_markActionDone", listOf(IntLit(idx)))))
     }
 
     // 3c. Dependencies & Metadata
-    val dependencies = dag.prerequisitesOf(id).map { linearization.getValue(it) }
+    val dependencies = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
     // Simplistic check for terminality: if it's the last index, or explicitly marked in GameIR?
     // For now, we assume the backend calculates FINAL_ACTION based on max index.
     val isTerminal = false // The backend calculates this based on DAG topology usually
-    val owner = if (spec.join != null) "None" else meta.struct.owner.name
+    val owner = if (spec.join != null) roleNone else meta.struct.owner.name
     return EvmAction(
-        actionId = idx,
+        actionId = id,
         name = "move_${meta.struct.owner}_$idx",
-        owner = owner,
+        invokedBy = RoleId(owner),
         inputs = inputs,
         payable = (spec.join?.deposit?.v ?: 0) > 0,
         dependencies = dependencies,
         isTerminal = isTerminal,
+        guards = guards,
         body = body
     )
 }
@@ -291,11 +299,28 @@ private fun buildPayoffs(game: GameIR): Map<String, EvmExpr> {
     }
 }
 
+/** Generates 'require' statements for domain validation (e.g., `x in {1, 2, 3}`) */
+private fun translateDomainGuards(params: List<ActionParam>): List<EvmExpr> =
+    params.mapNotNull { p ->
+        when (val t = p.type) {
+            is Type.SetType -> {
+                if (t.values.isEmpty()) null
+                else {
+                    val x = Var(VarId(inputParam(p.name, false)))
+                    t.values.map { Binary(BinaryOp.EQ, x, IntLit(it)) }.reduce<EvmExpr, EvmExpr> {
+                        a, b -> Binary(BinaryOp.OR, a, b)
+                    }
+                }
+            }
+            else -> null
+        }
+    }
+
 private fun translateExpr(
     expr: Expr,
     contextOwner: RoleId?,
     contextParams: Set<VarId>
-): EvmExpr = when(expr) {
+): EvmExpr = when (expr) {
     is Expr.Const.IntVal -> IntLit(expr.v)
     is Expr.Const.BoolVal -> BoolLit(expr.v)
     is Expr.Const.Hidden -> error("Hidden constants should be resolved before backend")
@@ -306,7 +331,7 @@ private fun translateExpr(
         val (role, name) = expr.field
         // If we are inside an action and the field matches a parameter, read from Input
         if (contextOwner == role && name in contextParams) {
-            Var(VarId("_${name.name}"))
+            Var(name)
         } else {
             // Otherwise read from Storage (always the clear value)
             Member(BuiltIn.Self, storageName(role, name, false))
@@ -315,24 +340,83 @@ private fun translateExpr(
 
     is Expr.IsDefined -> {
         val (role, name) = expr.field
-        Member(BuiltIn.Self, doneFlagName(role, name))
+        Member(BuiltIn.Self, doneFlagName(role, name, false))
     }
 
-    is Expr.Add -> Binary(BinaryOp.ADD, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Sub -> Binary(BinaryOp.SUB, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Mul -> Binary(BinaryOp.MUL, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Div -> Binary(BinaryOp.DIV, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
+    is Expr.Add -> Binary(
+        BinaryOp.ADD,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Sub -> Binary(
+        BinaryOp.SUB,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Mul -> Binary(
+        BinaryOp.MUL,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Div -> Binary(
+        BinaryOp.DIV,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
     is Expr.Neg -> Unary(UnaryOp.NEG, translateExpr(expr.x, contextOwner, contextParams))
 
-    is Expr.Eq -> Binary(BinaryOp.EQ, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Ne -> Binary(BinaryOp.NE, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Lt -> Binary(BinaryOp.LT, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Le -> Binary(BinaryOp.LE, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Gt -> Binary(BinaryOp.GT, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Ge -> Binary(BinaryOp.GE, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
+    is Expr.Eq -> Binary(
+        BinaryOp.EQ,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
 
-    is Expr.And -> Binary(BinaryOp.AND, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Or -> Binary(BinaryOp.OR, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
+    is Expr.Ne -> Binary(
+        BinaryOp.NE,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Lt -> Binary(
+        BinaryOp.LT,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Le -> Binary(
+        BinaryOp.LE,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Gt -> Binary(
+        BinaryOp.GT,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Ge -> Binary(
+        BinaryOp.GE,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.And -> Binary(
+        BinaryOp.AND,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
+    is Expr.Or -> Binary(
+        BinaryOp.OR,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
     is Expr.Not -> Unary(UnaryOp.NOT, translateExpr(expr.x, contextOwner, contextParams))
 
     is Expr.Ite -> Ternary(

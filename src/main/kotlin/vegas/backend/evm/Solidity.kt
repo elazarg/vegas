@@ -16,9 +16,9 @@ fun generateSolidity(contract: EvmContract): String {
     return buildString {
         appendLine("pragma solidity ^0.8.31;")
         appendLine()
-        appendLine("contract ${contract.name} {")
+        append("contract ${contract.name}")
 
-        indent {
+        block {
             // 1. Enums
             contract.enums.forEach { renderEnum(it) }
             if (contract.enums.isNotEmpty()) appendLine()
@@ -56,8 +56,6 @@ fun generateSolidity(contract: EvmContract): String {
 //                appendLine()
 //            }
         }
-
-        appendLine("}")
     }
 }
 
@@ -86,56 +84,83 @@ private fun StringBuilder.renderInfrastructureModifiers() {
         receive() public payable {
             revert("direct ETH not allowed");
         }
-        modifier depends(uint256 actionId) {
-            require(actionDone[actionId], "dependency not satisfied");
+        
+        uint256 constant public TIMEOUT = 86400;
+
+        mapping(Role => bool) private bailed;
+        
+        function _check_timestamp(Role role) private {
+            if (role == Role.None) {
+                return;
+            }
+            if (block.timestamp > lastTs + TIMEOUT) {
+                bailed[role] = true;
+                lastTs = block.timestamp;
+            }
         }
-        modifier notDone(uint256 actionId) {
-            require((!actionDone[actionId]), "already done");
+        
+        modifier depends(Role role, uint256 actionId) {
+            _check_timestamp(role);
+            if (!bailed[role]) {
+                require(actionDone[role][actionId], "dependency not satisfied");
+            }
+            _;
         }
-        modifier by(Role r) {
-            require((${roleMap}[msg.sender] == r), "bad role");
+        
+        modifier action(Role role, uint256 actionId) {
+            require((!actionDone[role][actionId]), "already done");
+            _;
+            actionDone[role][actionId] = true;
+            actionTimestamp[role][actionId] = block.timestamp;
+            lastTs = block.timestamp;
         }
+        
+        modifier by(Role role) {
+            require((${roleMap}[msg.sender] == role), "bad role");
+            _check_timestamp(role);
+            require(!bailed[role], "you bailed");
+            _;
+        }
+        
         modifier at_final_phase() {
             require(actionDone[FINAL_ACTION], "game not over");
             require((!payoffs_distributed), "payoffs already sent");
+            _;
         }
-        function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
+        
+        function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
             require((keccak256(preimage) == commitment), "bad reveal");
-        }
-        function _markActionDone(uint256 actionId) internal {
-            actionDone[actionId] = true;
-            actionTimestamp[actionId] = block.timestamp;
-            lastTs = block.timestamp;
         }
     """.trimIndent())
 }
 
 private fun StringBuilder.renderConstructor(init: List<EvmStmt>) {
-    appendLine("constructor() {")
-    indent {
+    append("constructor()")
+    block {
         init.forEach { renderStmt(it) }
     }
-    appendLine("}")
 }
 
 private fun StringBuilder.renderAction(a: EvmAction) {
-    val inputs = a.inputs.joinToString(", ") { "${renderType(it.type)} ${it.name}" }
+    val inputs = a.inputs.joinToString(", ") { "${renderType(it.type)} ${renderExpr(Var(it.name))}" }
     val visibility = "public" // Actions are always public entry points
     val mutability = if (a.payable) " payable" else ""
 
     // Synthesize Modifiers from Declarative Constraints
     val modifiers = buildList {
-        add("by(${roleEnumName}.${a.owner})")
-        add("notDone(${a.actionId})")
-        a.dependencies.forEach { dep -> add("depends($dep)") }
+        add("by(${roleEnumName}.${a.invokedBy})")
+        add("action(Role.${a.actionId.first}, ${a.actionId.second})")
+        a.dependencies.forEach { dep -> add("depends(Role.${dep.first}, ${dep.second})") }
         if (a.isTerminal) add("at_final_phase") // Rare, usually payoffs are separate
     }.joinToString(" ")
 
-    appendLine("function ${a.name}($inputs) $visibility$mutability $modifiers {")
-    indent {
+    append("function ${a.name}($inputs) $visibility$mutability $modifiers")
+    block {
+        a.guards.forEach { guard ->
+            renderStmt(Require(guard, "domain"))
+        }
         a.body.forEach { renderStmt(it) }
     }
-    appendLine("}")
     appendLine()
 }
 
@@ -144,8 +169,8 @@ private fun StringBuilder.renderAction(a: EvmAction) {
 // =========================================================================
 
 private fun StringBuilder.renderPayoffFunction(payoffs: Map<String, EvmExpr>) {
-    appendLine("function distributePayoffs() public at_final_phase {")
-    indent {
+    append("function distributePayoffs() public at_final_phase")
+    block {
         appendLine("payoffs_distributed = true;")
         payoffs.forEach { (role, expr) ->
             // balances[address_Role] = expr
@@ -155,7 +180,6 @@ private fun StringBuilder.renderPayoffFunction(payoffs: Map<String, EvmExpr>) {
             appendLine("$lhs = $rhs;")
         }
     }
-    appendLine("}")
 }
 
 private fun StringBuilder.renderWithdrawFunction() {
@@ -184,17 +208,6 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("${renderType(stmt.type)} ${stmt.name}$init;")
         }
         is Assign -> appendLine("${renderExpr(stmt.lhs)} = ${renderExpr(stmt.rhs)};")
-        is If -> {
-            appendLine("if (${renderExpr(stmt.condition)}) {")
-            indent { stmt.thenBody.forEach { renderStmt(it) } }
-            if (stmt.elseBody.isNotEmpty()) {
-                appendLine("} else {")
-                indent { stmt.elseBody.forEach { renderStmt(it) } }
-                appendLine("}")
-            } else {
-                appendLine("}")
-            }
-        }
         is Return -> {
             val valStr = stmt.value?.let { " " + renderExpr(it) } ?: ""
             appendLine("return$valStr;")
@@ -204,7 +217,7 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("emit ${stmt.eventName}($args);")
         }
         is ExprStmt -> appendLine("${renderExpr(stmt.expr)};")
-        is Guard -> appendLine("require(${renderExpr(stmt.condition)}, \"${stmt.message}\");")
+        is Require -> appendLine("require(${renderExpr(stmt.condition)}, \"${stmt.message}\");")
         is Revert -> appendLine("revert(\"${stmt.message}\");")
         is Pass -> {} // No-op in Solidity
     }
@@ -216,7 +229,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     is StringLit -> "\"${e.value}\""
     is BytesLit -> e.value // Assumed to be hex string like "0x1234"
 
-    is Var -> e.name.name
+    is Var -> "_${e.name.name}"
     is Member -> {
         if (e.base is BuiltIn.Self) e.member // "self.x" -> "x" in Solidity
         else "${renderExpr(e.base)}.${e.member}"
@@ -262,7 +275,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     // Special
     is Keccak256 -> "keccak256(${renderExpr(e.data)})"
     is AbiEncode -> {
-        val args = e.args.joinToString(", ") { it.name }
+        val args = e.args.joinToString(", ") { renderExpr(it) }
         if (e.isPacked) "abi.encodePacked($args)" else "abi.encode($args)"
     }
     is EnumValue -> "${e.enumName}.${e.value}"
@@ -279,7 +292,9 @@ private fun renderType(t: EvmType): String = when (t) {
     is EnumType -> t.name
 }
 
-private fun StringBuilder.indent(block: StringBuilder.() -> Unit) {
-    val indented = buildString(block).prependIndent("    ")
-    append(indented)
+private fun StringBuilder.block(block: StringBuilder.() -> Unit) {
+    appendLine(" {")
+    val indented = buildString(block).prependIndent("    ").trimEnd()
+    appendLine(indented)
+    appendLine("}")
 }

@@ -102,10 +102,10 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     indent {
         // 1. Synthesize Assertions (Replacements for Modifiers)
         // Role Check
-        appendLine("assert self.roles[msg.sender] == ${roleEnumMember(a.owner)}, \"bad role\"")
+        appendLine("assert self.roles[msg.sender] == ${roleEnumMember(a.invokedBy.name)}, \"bad role\"")
 
         // Not Done Check
-        appendLine("assert not self.actionDone[${a.actionId}], \"action already done\"")
+        appendLine("assert not self.actionDone[${a.actionId.first}][${a.actionId.second}], \"action already done\"")
 
         // Dependencies
         a.dependencies.forEach { dep ->
@@ -118,6 +118,9 @@ private fun StringBuilder.renderAction(a: EvmAction) {
             appendLine("assert not self.payoffs_distributed, \"payoffs already sent\"")
         }
 
+        a.guards.forEach { guard ->
+            renderStmt(Require(guard, "domain"))
+        }
         // 2. Render Body
         if (a.body.isEmpty()) appendLine("pass")
         else a.body.forEach { renderStmt(it) }
@@ -192,14 +195,6 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("${stmt.name}: ${renderType(stmt.type)}$init")
         }
         is Assign -> appendLine("${renderExpr(stmt.lhs)} = ${renderExpr(stmt.rhs)}")
-        is If -> {
-            appendLine("if ${renderExpr(stmt.condition)}:")
-            indent { stmt.thenBody.forEach { renderStmt(it) } }
-            if (stmt.elseBody.isNotEmpty()) {
-                appendLine("else:")
-                indent { stmt.elseBody.forEach { renderStmt(it) } }
-            }
-        }
         is Return -> {
             val valStr = stmt.value?.let { " " + renderExpr(it) } ?: ""
             appendLine("return$valStr")
@@ -211,7 +206,7 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
         }
         is ExprStmt -> appendLine(renderExpr(stmt.expr))
 
-        is Guard -> appendLine("assert ${renderExpr(stmt.condition)}, \"${stmt.message}\"")
+        is Require -> appendLine("assert ${renderExpr(stmt.condition)}, \"${stmt.message}\"")
 
         is Revert -> {
             // Vyper `raise` doesn't take args in all versions,
@@ -286,7 +281,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
             "concat($parts)"
         } else {
             // _abi_encode intrinsic in Vyper
-            "_abi_encode(${e.args.joinToString(", ") { it.name }})"
+            "_abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
         }
     }
     is EnumValue -> "${e.enumName}.${e.value}"

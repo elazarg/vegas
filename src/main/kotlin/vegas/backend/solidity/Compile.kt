@@ -225,7 +225,7 @@ private fun buildDagGameStorage(
                 visibility = Visibility.PUBLIC,
                 name = actionConstName(owner, idx),
                 constant = true,
-                value = SolExpr.IntLit(idx)
+                value = IntLit(idx)
             )
         )
     }
@@ -245,7 +245,7 @@ private fun buildDagGameStorage(
             visibility = Visibility.PUBLIC,
             name = "FINAL_ACTION",
             constant = true,
-            value = SolExpr.IntLit(finalActionIdx)
+            value = IntLit(finalActionIdx)
         )
     )
 
@@ -546,7 +546,7 @@ private fun buildDagYield(
             addAll(translateDomainGuards(spec.params))
             addAll(translateWhere(spec.guardExpr, role, spec.params))
             addAll(translateAssignments(role, spec.params))
-            add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
+            add(Statement.ExprStmt(Call("_markActionDone", listOf(int(actionIdx)))))
         }
     )
 }
@@ -597,7 +597,7 @@ private fun buildDagCommit(
             ))
         }
 
-        add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
+        add(Statement.ExprStmt(Call("_markActionDone", listOf(int(actionIdx)))))
     }
 
     return FunctionDecl(
@@ -647,7 +647,7 @@ private fun buildDagReveal(
             val commitment = v(storageParam(role, p.name, hidden = true))
             add(
                 Statement.ExprStmt(
-                    SolExpr.Call("_checkReveal", listOf(commitment, preimage))
+                    Call("_checkReveal", listOf(commitment, preimage))
                 )
             )
         }
@@ -656,7 +656,7 @@ private fun buildDagReveal(
         addAll(translateWhere(spec.guardExpr, role, spec.params))
         addAll(translateAssignments(role, revealParams))
 
-        add(Statement.ExprStmt(SolExpr.Call("_markActionDone", listOf(int(actionIdx)))))
+        add(Statement.ExprStmt(Call("_markActionDone", listOf(int(actionIdx)))))
     }
 
     return FunctionDecl(
@@ -899,4 +899,4 @@ private fun translateIrExprAtTerminal(
 
 // Helper to create modifier call
 private fun by(roleId: RoleId): ModifierCall = ModifierCall("by", listOf(role(roleId.name)))
-private fun role(byRole: String): SolExpr.EnumValue = enumVal(ROLE_ENUM, byRole)
+private fun role(byRole: String): EnumValue = enumVal(ROLE_ENUM, byRole)

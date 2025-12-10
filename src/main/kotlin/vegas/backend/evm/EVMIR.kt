@@ -1,6 +1,8 @@
 package vegas.backend.evm
 
+import vegas.RoleId
 import vegas.VarId
+import vegas.ir.ActionId
 
 /**
  * The "Game-Specific" EVM Intermediate Representation.
@@ -24,6 +26,7 @@ import vegas.VarId
  */
 data class EvmContract(
     val name: String,
+    val roles: List<RoleId>,
 
     // 1. THE STATE (Concrete Layout)
     val storage: List<EvmStorageSlot>,
@@ -52,24 +55,27 @@ data class EvmContract(
  * them idiomatically (e.g. Modifiers vs. Asserts).
  */
 data class EvmAction(
-    val actionId: Int,
+    val actionId: ActionId,
     val name: String,
-    val owner: String,                 // The Role allowed to call this
+    val invokedBy: RoleId,
 
     // The ABI Interface
     val inputs: List<EvmParam>,
     val payable: Boolean,              // True if this action accepts ETH (e.g. Join)
 
     // The State Machine Constraints (Declarative)
-    val dependencies: List<Int>,       // List of ActionIDs that must be DONE
+    val dependencies: List<ActionId>,  // List of ActionIDs that must be DONE
     val isTerminal: Boolean,           // If true, this action triggers the end-game check
 
     // The Imperative Logic
     // Contains ONLY the logic for this move (guards, storage updates, emits).
     // Generic logic (like checking 'actionDone' bitmaps) is implied by the
     // structural constraints above and injected by the renderer.
+    val guards: List<EvmExpr>,
     val body: List<EvmStmt>
-)
+) {
+    val owner = actionId.first
+}
 
 // ==========================================
 // Structural Definitions
@@ -108,13 +114,6 @@ sealed class EvmStmt {
     // Assignment: `x = y` or `self.x = y`
     data class Assign(val lhs: EvmExpr, val rhs: EvmExpr) : EvmStmt()
 
-    // Control Flow
-    data class If(
-        val condition: EvmExpr,
-        val thenBody: List<EvmStmt>,
-        val elseBody: List<EvmStmt> = emptyList()
-    ) : EvmStmt()
-
     data class Return(val value: EvmExpr? = null) : EvmStmt()
 
     data class Emit(val eventName: String, val args: List<EvmExpr>) : EvmStmt()
@@ -122,10 +121,7 @@ sealed class EvmStmt {
     // Expressions as statements (e.g. void function calls)
     data class ExprStmt(val expr: EvmExpr) : EvmStmt()
 
-    // Semantic Guard: The condition that must hold for execution to proceed.
-    // Solidity -> require(cond, msg)
-    // Vyper   -> assert cond, msg
-    data class Guard(val condition: EvmExpr, val message: String) : EvmStmt()
+    data class Require(val condition: EvmExpr, val message: String) : EvmStmt()
 
     // Hard stop
     data class Revert(val message: String) : EvmStmt()
@@ -172,7 +168,7 @@ sealed class EvmExpr {
     data class Keccak256(val data: EvmExpr) : EvmExpr()
 
     data class AbiEncode(
-        val args: List<VarId>,
+        val args: List<Var>,
         val isPacked: Boolean = false // packed for Sol, separate/raw for Vyper
     ) : EvmExpr()
 
