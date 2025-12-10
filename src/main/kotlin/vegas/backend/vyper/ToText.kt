@@ -129,7 +129,7 @@ private fun renderStatement(stmt: Statement, indent: Int): String {
                 is VyExpr.And, is VyExpr.Or, is VyExpr.Not -> renderExprWithoutOuterParens(stmt.condition)
                 else -> renderExpr(stmt.condition)
             }
-            "$prefix" + "assert $cond, \"${stmt.message}\""
+            prefix + "assert $cond, \"${stmt.message}\""
         }
 
         is Statement.If -> {

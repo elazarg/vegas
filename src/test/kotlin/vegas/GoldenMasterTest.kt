@@ -4,9 +4,10 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.datatest.withData
+import vegas.backend.evm.compileToEvm
 import vegas.backend.gambit.generateExtensiveFormGame
-import vegas.backend.solidity.genSolidity
-import vegas.backend.vyper.genVyper
+import vegas.backend.evm.generateSolidity
+import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -51,10 +52,10 @@ class GoldenMasterTest : FreeSpec({
     val testCases = exampleFiles.flatMap { example ->
         listOf(
             TestCase(example, "sol", "solidity") { prog ->
-                genSolidity(compileToIR(prog))
+                generateSolidity(compileToEvm(compileToIR(prog)))
             },
             TestCase(example, "vy", "vyper") { prog ->
-                genVyper(compileToIR(prog))
+                generateVyper(compileToEvm(compileToIR(prog)))
             },
             TestCase(example, "efg", "gambit") { prog ->
                 generateExtensiveFormGame(compileToIR(prog))
@@ -115,8 +116,8 @@ class GoldenMasterTest : FreeSpec({
             val program = parseExample(example)
             val ir = compileToIR(program)
 
-            val output1 = genSolidity(ir)
-            val output2 = genSolidity(ir)
+            val output1 = generateSolidity(compileToEvm(ir))
+            val output2 = generateSolidity(compileToEvm(ir))
 
             sanitizeOutput(output1, "solidity") shouldBe sanitizeOutput(output2, "solidity")
         }
@@ -126,8 +127,8 @@ class GoldenMasterTest : FreeSpec({
             val program = parseExample(example)
             val ir = compileToIR(program)
 
-            val output1 = genVyper(ir)
-            val output2 = genVyper(ir)
+            val output1 = generateVyper(compileToEvm(ir))
+            val output2 = generateVyper(compileToEvm(ir))
 
             sanitizeOutput(output1, "vyper") shouldBe sanitizeOutput(output2, "vyper")
         }
