@@ -5,20 +5,19 @@ contract Simple {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_A_0 = 0;
     uint256 constant public ACTION_B_1 = 1;
     uint256 constant public ACTION_A_2 = 2;
     uint256 constant public ACTION_B_3 = 3;
     uint256 constant public ACTION_A_4 = 4;
-    uint256 constant public FINAL_ACTION = 4;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_A;
     address public address_B;
     bool public done_A;
     bool public done_B;
-    bool public payoffs_distributed;
+    bool public claimed_A;
+    bool public claimed_B;
     bool public A_c;
     bool public done_A_c;
     bytes32 public A_c_hidden;
@@ -26,7 +25,7 @@ contract Simple {
     bool public B_c;
     bool public done_B_c;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -67,12 +66,6 @@ contract Simple {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -84,7 +77,6 @@ contract Simple {
     function move_A_0() public payable by(Role.None) action(Role.A, 0) {
         require((!done_A), "already joined");
         require((msg.value == 1), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
@@ -93,7 +85,6 @@ contract Simple {
     function move_B_1() public payable by(Role.None) action(Role.B, 1) depends(Role.A, 0) {
         require((!done_B), "already joined");
         require((msg.value == 1), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.B;
         address_B = msg.sender;
         done_B = true;
@@ -115,17 +106,23 @@ contract Simple {
         done_A_c = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_A] = (((A_c != B_c) || (!done_B_c)) ? 1 : (-1));
-        balanceOf[address_B] = (((A_c == B_c) || (!done_A_c)) ? 1 : (-1));
+    function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) {
+        require((!claimed_A), "already claimed");
+        claimed_A = true;
+        int256 payout = (((A_c != B_c) || (!done_B_c)) ? 1 : (-1));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_B() public by(Role.B) action(Role.B, 6) depends(Role.A, 4) {
+        require((!claimed_B), "already claimed");
+        claimed_B = true;
+        int256 payout = (((A_c == B_c) || (!done_A_c)) ? 1 : (-1));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_B).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

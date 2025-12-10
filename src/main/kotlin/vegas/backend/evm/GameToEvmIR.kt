@@ -14,26 +14,21 @@ import vegas.backend.evm.EvmType.*
  */
 fun compileToEvm(game: GameIR): EvmContract {
     val dag = game.dag
-    // 1. Linearize the DAG to get stable integer IDs for every action
     val linearization = linearizeDag(dag)
-
-    // 2. Build the Storage Layout (State)
     val storage = buildStorage(game, dag, linearization)
 
-    // 3. Build the Actions (Transitions)
-    val actions = dag.topo().map { actionId ->
+    val gameActions = dag.topo().map { actionId ->
         buildAction(actionId, dag, linearization)
     }
 
-    // 4. Build the Payoff Logic (Outcome)
-    val payoffs = buildPayoffs(game)
+    // Build per-role withdraw actions
+    val sinks = dag.sinks()
+    val withdrawActions = buildWithdrawActions(game, sinks, linearization.size)
 
-    // 5. Build Initialization (Constructor)
+    val actions = gameActions + withdrawActions
+
     val init = listOf(
-        Assign(
-            Member(BuiltIn.Self, "lastTs"),
-            BuiltIn.Timestamp
-        )
+        Assign(Member(BuiltIn.Self, "lastTs"), BuiltIn.Timestamp)
     )
 
     return EvmContract(
@@ -43,7 +38,6 @@ fun compileToEvm(game: GameIR): EvmContract {
         enums = listOf(buildRoleEnum(game)),
         events = emptyList(),
         actions = actions,
-        payoffs = payoffs,
         initialization = init,
     )
 }
@@ -65,7 +59,6 @@ private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
 
 // Naming Conventions for Storage
 internal const val roleMap = "roles"
-internal const val balanceMap = "balanceOf"
 internal const val roleEnumName = "Role"
 internal const val roleNone = "None"
 
@@ -102,19 +95,9 @@ private fun buildStorage(
         add(EvmStorageSlot(constName, Uint256, IntLit(idx), isImmutable = true))
     }
 
-    // FINAL_ACTION Constant
-    val revealIds = dag.metas.filter { it.kind == Visibility.REVEAL }.map { it.id }
-    val finalActionIdx = if (revealIds.isNotEmpty()) {
-        revealIds.maxOf { linearization.getValue(it) }
-    } else {
-        linearization.values.maxOrNull() ?: 0
-    }
-    add(EvmStorageSlot("FINAL_ACTION", Uint256, IntLit(finalActionIdx), isImmutable = true))
-
     // Roles & Balances
     val roleType = EnumType(roleEnumName)
     add(EvmStorageSlot(roleMap, Mapping(Address, roleType)))
-    add(EvmStorageSlot(balanceMap, Mapping(Address, Int256)))
 
     // Player State
     (g.roles + g.chanceRoles).forEach { role ->
@@ -123,7 +106,11 @@ private fun buildStorage(
     (g.roles + g.chanceRoles).forEach { role ->
         add(EvmStorageSlot(roleJoined(role.name), Bool)) // done_Role
     }
-    add(EvmStorageSlot("payoffs_distributed", Bool))
+
+    // Per-role claimed flags (replaces payoffs_distributed)
+    (g.roles + g.chanceRoles).forEach { role ->
+        add(EvmStorageSlot("claimed_${role.name}", Bool))
+    }
 
     // Game Variables
     val visited = mutableSetOf<FieldRef>()
@@ -220,12 +207,6 @@ private fun buildAction(
                         "bad stake"
                     )
                 )
-                add(
-                    Assign(
-                        Index(Member(BuiltIn.Self, balanceMap), BuiltIn.MsgSender),
-                        BuiltIn.MsgValue
-                    )
-                )
             }
 
             // Effects
@@ -289,16 +270,49 @@ private fun buildAction(
     )
 }
 
-// =========================================================================
-// 4. Expression Translation
-// =========================================================================
+private fun buildWithdrawActions(
+    game: GameIR,
+    sinks: Set<ActionId>,
+    startIdx: Int
+): List<EvmAction> {
+    return game.payoffs.entries.mapIndexed { i, (role, expr) ->
+        val actionId: ActionId = role to (startIdx + i)
+        val claimedFlag = "claimed_${role.name}"
 
-private fun buildPayoffs(game: GameIR): Map<String, EvmExpr> {
-    return game.payoffs.mapKeys { it.key.name }.mapValues { (_, expr) ->
-        translateExpr(expr, contextOwner = null, contextParams = emptySet())
+        val body = buildList<EvmStmt> {
+            // require(!claimed_Role, "already claimed")
+            add(Require(
+                Unary(UnaryOp.NOT, Member(BuiltIn.Self, claimedFlag)),
+                "already claimed"
+            ))
+
+            // claimed_Role = true
+            add(Assign(
+                Member(BuiltIn.Self, claimedFlag),
+                BoolLit(true)
+            ))
+
+            // Send ETH: payable(address_Role).call{value: payout}
+            val payoutExpr = translateExpr(expr, contextOwner = null, contextParams = emptySet())
+            add(SendEth(
+                to = Member(BuiltIn.Self, roleAddr(role.name)),
+                amount = payoutExpr
+            ))
+        }
+
+        EvmAction(
+            actionId = actionId,
+            name = "withdraw_${role.name}",
+            invokedBy = role,
+            inputs = emptyList(),
+            payable = false,
+            dependencies = sinks.toList(),
+            isTerminal = false,
+            guards = emptyList(),
+            body = body,
+        )
     }
 }
-
 /** Generates 'require' statements for domain validation (e.g., `x in {1, 2, 3}`) */
 private fun translateDomainGuards(params: List<ActionParam>): List<EvmExpr> =
     params.mapNotNull { p ->

@@ -41,20 +41,6 @@ fun generateSolidity(contract: EvmContract): String {
 
             // 6. Game Actions
             contract.actions.forEach { renderAction(it) }
-
-            // 7. Backend-Synthesized Functions
-            renderPayoffFunction(contract.payoffs)
-            appendLine()
-            renderWithdrawFunction()
-            appendLine()
-
-            // 8. Internal Helpers (e.g. Commit/Reveal utils)
-            // We check if we need them based on whether they are used?
-            // Or just emit them if the game has commit/reveal logic.
-            // For simplicity, we emit the standard helper if needed.
-//            if (needsCheckReveal(contract)) {
-//                appendLine()
-//            }
         }
     }
 }
@@ -122,12 +108,6 @@ private fun StringBuilder.renderInfrastructureModifiers() {
             _;
         }
         
-        modifier at_final_phase() {
-            require(actionDone[FINAL_ACTION], "game not over");
-            require((!payoffs_distributed), "payoffs already sent");
-            _;
-        }
-        
         function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
             require((keccak256(preimage) == commitment), "bad reveal");
         }
@@ -168,39 +148,6 @@ private fun StringBuilder.renderAction(a: EvmAction) {
 // Synthesized Logic
 // =========================================================================
 
-private fun StringBuilder.renderPayoffFunction(payoffs: Map<String, EvmExpr>) {
-    append("function distributePayoffs() public at_final_phase")
-    block {
-        appendLine("payoffs_distributed = true;")
-        payoffs.forEach { (role, expr) ->
-            // balances[address_Role] = expr
-            // We construct the assignment statement manually here or render string directly
-            val lhs = "${balanceMap}[${roleAddr(role)}]"
-            val rhs = renderExpr(expr)
-            appendLine("$lhs = $rhs;")
-        }
-    }
-}
-
-private fun StringBuilder.renderWithdrawFunction() {
-    appendLine("""
-        function withdraw() public {
-            int256 bal = ${balanceMap}[msg.sender];
-            require((bal > 0), "no funds");
-            ${balanceMap}[msg.sender] = 0;
-            (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-            require(ok, "ETH send failed");
-        }
-    """.trimIndent())
-}
-
-private fun needsCheckReveal(c: EvmContract): Boolean {
-    // Simple heuristic: if any action body calls "_checkReveal"
-    return c.actions.any { a ->
-        a.body.any { it is ExprStmt && it.expr is Call && it.expr.func == "_checkReveal" }
-    }
-}
-
 private fun StringBuilder.renderStmt(stmt: EvmStmt) {
     when (stmt) {
         is VarDecl -> {
@@ -220,6 +167,14 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
         is Require -> appendLine("require(${renderExpr(stmt.condition)}, \"${stmt.message}\");")
         is Revert -> appendLine("revert(\"${stmt.message}\");")
         is Pass -> {} // No-op in Solidity
+        is SendEth -> {
+            // Only send if positive
+            appendLine("int256 payout = ${renderExpr(stmt.amount)};")
+            appendLine("if (payout > 0) {")
+            appendLine("    (bool ok, ) = payable(${renderExpr(stmt.to)}).call{value: uint256(payout)}(\"\");")
+            appendLine("    require(ok, \"ETH send failed\");")
+            appendLine("}")
+        }
     }
 }
 

@@ -5,16 +5,14 @@ contract Trivial1 {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_A_0 = 0;
-    uint256 constant public FINAL_ACTION = 0;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_A;
     bool public done_A;
-    bool public payoffs_distributed;
+    bool public claimed_A;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -55,12 +53,6 @@ contract Trivial1 {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -76,16 +68,13 @@ contract Trivial1 {
         done_A = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_A] = 0;
-    }
-    
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_A() public by(Role.A) action(Role.A, 1) depends(Role.A, 0) {
+        require((!claimed_A), "already claimed");
+        claimed_A = true;
+        int256 payout = 0;
+        if (payout > 0) {
+            (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

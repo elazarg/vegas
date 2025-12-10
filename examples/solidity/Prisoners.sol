@@ -5,21 +5,20 @@ contract Prisoners {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_A_0 = 0;
     uint256 constant public ACTION_B_1 = 1;
     uint256 constant public ACTION_A_3 = 2;
     uint256 constant public ACTION_A_4 = 3;
     uint256 constant public ACTION_B_5 = 4;
     uint256 constant public ACTION_B_6 = 5;
-    uint256 constant public FINAL_ACTION = 5;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_A;
     address public address_B;
     bool public done_A;
     bool public done_B;
-    bool public payoffs_distributed;
+    bool public claimed_A;
+    bool public claimed_B;
     bool public A_c;
     bool public done_A_c;
     bytes32 public A_c_hidden;
@@ -29,7 +28,7 @@ contract Prisoners {
     bytes32 public B_c_hidden;
     bool public done_B_c_hidden;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -70,12 +69,6 @@ contract Prisoners {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -87,7 +80,6 @@ contract Prisoners {
     function move_A_0() public payable by(Role.None) action(Role.A, 0) {
         require((!done_A), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
@@ -96,7 +88,6 @@ contract Prisoners {
     function move_B_1() public payable by(Role.None) action(Role.B, 1) depends(Role.A, 0) {
         require((!done_B), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.B;
         address_B = msg.sender;
         done_B = true;
@@ -124,17 +115,23 @@ contract Prisoners {
         done_B_c = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_A] = ((done_A_c && done_B_c) ? ((A_c && B_c) ? (-2) : ((A_c && (!B_c)) ? 0 : (((!A_c) && B_c) ? (-3) : (-1)))) : ((!done_A_c) ? (-100) : 10));
-        balanceOf[address_B] = ((done_A_c && done_B_c) ? ((A_c && B_c) ? (-2) : ((A_c && (!B_c)) ? (-3) : (((!A_c) && B_c) ? 0 : (-1)))) : ((!done_A_c) ? 10 : (-100)));
+    function withdraw_A() public by(Role.A) action(Role.A, 6) depends(Role.A, 4) depends(Role.B, 6) {
+        require((!claimed_A), "already claimed");
+        claimed_A = true;
+        int256 payout = ((done_A_c && done_B_c) ? ((A_c && B_c) ? (-2) : ((A_c && (!B_c)) ? 0 : (((!A_c) && B_c) ? (-3) : (-1)))) : ((!done_A_c) ? (-100) : 10));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_B() public by(Role.B) action(Role.B, 7) depends(Role.A, 4) depends(Role.B, 6) {
+        require((!claimed_B), "already claimed");
+        claimed_B = true;
+        int256 payout = ((done_A_c && done_B_c) ? ((A_c && B_c) ? (-2) : ((A_c && (!B_c)) ? (-3) : (((!A_c) && B_c) ? 0 : (-1)))) : ((!done_A_c) ? 10 : (-100)));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_B).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

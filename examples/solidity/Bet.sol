@@ -5,24 +5,23 @@ contract Bet {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_Race_0 = 0;
     uint256 constant public ACTION_Gambler_1 = 1;
     uint256 constant public ACTION_Race_2 = 2;
-    uint256 constant public FINAL_ACTION = 2;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_Gambler;
     address public address_Race;
     bool public done_Gambler;
     bool public done_Race;
-    bool public payoffs_distributed;
+    bool public claimed_Gambler;
+    bool public claimed_Race;
     int256 public Gambler_bet;
     bool public done_Gambler_bet;
     int256 public Race_winner;
     bool public done_Race_winner;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -63,12 +62,6 @@ contract Bet {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -80,7 +73,6 @@ contract Bet {
     function move_Race_0() public payable by(Role.None) action(Role.Race, 0) {
         require((!done_Race), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Race;
         address_Race = msg.sender;
         done_Race = true;
@@ -90,7 +82,6 @@ contract Bet {
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         require((!done_Gambler), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Gambler;
         address_Gambler = msg.sender;
         done_Gambler = true;
@@ -104,17 +95,23 @@ contract Bet {
         done_Race_winner = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_Gambler] = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 100 : 0);
-        balanceOf[address_Race] = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 0 : 100);
+    function withdraw_Gambler() public by(Role.Gambler) action(Role.Gambler, 3) depends(Role.Race, 2) {
+        require((!claimed_Gambler), "already claimed");
+        claimed_Gambler = true;
+        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 100 : 0);
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Gambler).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_Race() public by(Role.Race) action(Role.Race, 4) depends(Role.Race, 2) {
+        require((!claimed_Race), "already claimed");
+        claimed_Race = true;
+        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 0 : 100);
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Race).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

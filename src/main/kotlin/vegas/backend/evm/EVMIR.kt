@@ -37,11 +37,6 @@ data class EvmContract(
     // The explicit, rigid state machine nodes.
     val actions: List<EvmAction>,
 
-    // 3. THE OUTCOME (Terminal State)
-    // Maps Role -> Expression calculating their final payout.
-    // Backends use this to generate 'distributePayoffs' and 'withdraw' logic.
-    val payoffs: Map<String, EvmExpr>,
-
     // Initialization logic (e.g. setting initial timestamps)
     val initialization: List<EvmStmt>,
 )
@@ -126,6 +121,8 @@ sealed class EvmStmt {
 
     // Pass (No-op), useful for empty bodies in Vyper
     object Pass : EvmStmt()
+
+    data class SendEth(val to: EvmExpr, val amount: EvmExpr) : EvmStmt()
 }
 
 // ==========================================

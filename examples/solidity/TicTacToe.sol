@@ -5,7 +5,7 @@ contract TicTacToe {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_X_0 = 0;
     uint256 constant public ACTION_O_1 = 1;
     uint256 constant public ACTION_X_2 = 2;
@@ -16,14 +16,13 @@ contract TicTacToe {
     uint256 constant public ACTION_O_7 = 7;
     uint256 constant public ACTION_X_8 = 8;
     uint256 constant public ACTION_O_9 = 9;
-    uint256 constant public FINAL_ACTION = 9;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_X;
     address public address_O;
     bool public done_X;
     bool public done_O;
-    bool public payoffs_distributed;
+    bool public claimed_X;
+    bool public claimed_O;
     int256 public X_c1;
     bool public done_X_c1;
     int256 public O_c1;
@@ -41,7 +40,7 @@ contract TicTacToe {
     int256 public O_c4;
     bool public done_O_c4;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -82,12 +81,6 @@ contract TicTacToe {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -99,7 +92,6 @@ contract TicTacToe {
     function move_X_0() public payable by(Role.None) action(Role.X, 0) {
         require((!done_X), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.X;
         address_X = msg.sender;
         done_X = true;
@@ -108,7 +100,6 @@ contract TicTacToe {
     function move_O_1() public payable by(Role.None) action(Role.O, 1) depends(Role.X, 0) {
         require((!done_O), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.O;
         address_O = msg.sender;
         done_O = true;
@@ -169,17 +160,23 @@ contract TicTacToe {
         done_O_c4 = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_X] = 0;
-        balanceOf[address_O] = 0;
+    function withdraw_X() public by(Role.X) action(Role.X, 10) depends(Role.O, 9) {
+        require((!claimed_X), "already claimed");
+        claimed_X = true;
+        int256 payout = 0;
+        if (payout > 0) {
+            (bool ok, ) = payable(address_X).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_O() public by(Role.O) action(Role.O, 11) depends(Role.O, 9) {
+        require((!claimed_O), "already claimed");
+        claimed_O = true;
+        int256 payout = 0;
+        if (payout > 0) {
+            (bool ok, ) = payable(address_O).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

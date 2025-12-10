@@ -5,7 +5,7 @@ contract ThreeWayLotteryBuggy {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_Issuer_0 = 0;
     uint256 constant public ACTION_Alice_1 = 1;
     uint256 constant public ACTION_Bob_2 = 2;
@@ -15,16 +15,16 @@ contract ThreeWayLotteryBuggy {
     uint256 constant public ACTION_Alice_7 = 6;
     uint256 constant public ACTION_Bob_8 = 7;
     uint256 constant public ACTION_Bob_9 = 8;
-    uint256 constant public FINAL_ACTION = 8;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_Issuer;
     address public address_Alice;
     address public address_Bob;
     bool public done_Issuer;
     bool public done_Alice;
     bool public done_Bob;
-    bool public payoffs_distributed;
+    bool public claimed_Issuer;
+    bool public claimed_Alice;
+    bool public claimed_Bob;
     int256 public Issuer_c;
     bool public done_Issuer_c;
     bytes32 public Issuer_c_hidden;
@@ -38,7 +38,7 @@ contract ThreeWayLotteryBuggy {
     bytes32 public Bob_c_hidden;
     bool public done_Bob_c_hidden;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -79,12 +79,6 @@ contract ThreeWayLotteryBuggy {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -96,7 +90,6 @@ contract ThreeWayLotteryBuggy {
     function move_Issuer_0() public payable by(Role.None) action(Role.Issuer, 0) {
         require((!done_Issuer), "already joined");
         require((msg.value == 10), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
         done_Issuer = true;
@@ -105,7 +98,6 @@ contract ThreeWayLotteryBuggy {
     function move_Alice_1() public payable by(Role.None) action(Role.Alice, 1) depends(Role.Issuer, 0) {
         require((!done_Alice), "already joined");
         require((msg.value == 10), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
         done_Alice = true;
@@ -114,7 +106,6 @@ contract ThreeWayLotteryBuggy {
     function move_Bob_2() public payable by(Role.None) action(Role.Bob, 2) depends(Role.Alice, 1) {
         require((!done_Bob), "already joined");
         require((msg.value == 10), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
         done_Bob = true;
@@ -156,18 +147,33 @@ contract ThreeWayLotteryBuggy {
         done_Bob_c = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_Bob] = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? (-10) : ((Alice_c == Bob_c) ? (-10) : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? (-10) : 20))));
-        balanceOf[address_Issuer] = (((!done_Alice_c) || (!done_Bob_c)) ? 20 : ((!done_Issuer_c) ? (-10) : ((Alice_c == Bob_c) ? 20 : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? (-10) : (-10)))));
-        balanceOf[address_Alice] = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? 20 : ((Alice_c == Bob_c) ? (-10) : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? 20 : (-10)))));
+    function withdraw_Bob() public by(Role.Bob) action(Role.Bob, 9) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+        require((!claimed_Bob), "already claimed");
+        claimed_Bob = true;
+        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? (-10) : ((Alice_c == Bob_c) ? (-10) : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? (-10) : 20))));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Bob).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_Issuer() public by(Role.Issuer) action(Role.Issuer, 10) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+        require((!claimed_Issuer), "already claimed");
+        claimed_Issuer = true;
+        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? 20 : ((!done_Issuer_c) ? (-10) : ((Alice_c == Bob_c) ? 20 : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? (-10) : (-10)))));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Issuer).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
+    }
+    
+    function withdraw_Alice() public by(Role.Alice) action(Role.Alice, 11) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+        require((!claimed_Alice), "already claimed");
+        claimed_Alice = true;
+        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? 20 : ((Alice_c == Bob_c) ? (-10) : ((((((Alice_c + Bob_c) + Issuer_c) / 2) * 2) == ((Alice_c + Bob_c) + Issuer_c)) ? 20 : (-10)))));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Alice).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

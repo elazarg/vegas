@@ -5,7 +5,7 @@ contract MontyHallChance {
     
     uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
-    mapping(uint256 => uint256) public actionTimestamp;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
     uint256 constant public ACTION_Host_0 = 0;
     uint256 constant public ACTION_Guest_1 = 1;
     uint256 constant public ACTION_Host_2 = 2;
@@ -13,14 +13,13 @@ contract MontyHallChance {
     uint256 constant public ACTION_Host_4 = 4;
     uint256 constant public ACTION_Guest_5 = 5;
     uint256 constant public ACTION_Host_6 = 6;
-    uint256 constant public FINAL_ACTION = 6;
     mapping(address => Role) public roles;
-    mapping(address => int256) public balanceOf;
     address public address_Guest;
     address public address_Host;
     bool public done_Guest;
     bool public done_Host;
-    bool public payoffs_distributed;
+    bool public claimed_Guest;
+    bool public claimed_Host;
     int256 public Host_car;
     bool public done_Host_car;
     bytes32 public Host_car_hidden;
@@ -32,7 +31,7 @@ contract MontyHallChance {
     bool public Guest_switch;
     bool public done_Guest_switch;
     
-    receive() public payable {
+    receive() external payable {
         revert("direct ETH not allowed");
     }
     
@@ -73,12 +72,6 @@ contract MontyHallChance {
         _;
     }
     
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-        _;
-    }
-    
     function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
         require((keccak256(preimage) == commitment), "bad reveal");
     }
@@ -90,7 +83,6 @@ contract MontyHallChance {
     function move_Host_0() public payable by(Role.None) action(Role.Host, 0) {
         require((!done_Host), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Host;
         address_Host = msg.sender;
         done_Host = true;
@@ -99,7 +91,6 @@ contract MontyHallChance {
     function move_Guest_1() public payable by(Role.None) action(Role.Guest, 1) depends(Role.Host, 0) {
         require((!done_Guest), "already joined");
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         roles[msg.sender] = Role.Guest;
         address_Guest = msg.sender;
         done_Guest = true;
@@ -135,17 +126,23 @@ contract MontyHallChance {
         done_Host_car = true;
     }
     
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_Guest] = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 20 : (-20)) : (((!done_Host_car) || (!done_Host_goat)) ? 20 : (-100)));
-        balanceOf[address_Host] = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? 0 : (((!done_Host_car) || (!done_Host_goat)) ? (-100) : 0));
+    function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 7) depends(Role.Host, 6) {
+        require((!claimed_Guest), "already claimed");
+        claimed_Guest = true;
+        int256 payout = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 20 : (-20)) : (((!done_Host_car) || (!done_Host_goat)) ? 20 : (-100)));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Guest).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
     
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
+    function withdraw_Host() public by(Role.Host) action(Role.Host, 8) depends(Role.Host, 6) {
+        require((!claimed_Host), "already claimed");
+        claimed_Host = true;
+        int256 payout = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? 0 : (((!done_Host_car) || (!done_Host_goat)) ? (-100) : 0));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Host).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }

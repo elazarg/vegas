@@ -5,23 +5,22 @@ import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
 
 /**
- * Renders the EVM IR directly to Vyper source code.
+ * Render the EVM IR to Vyper source code.
  */
-
 fun generateVyper(contract: EvmContract): String {
     return buildString {
         appendLine("# @version 0.4.0")
         appendLine()
 
-        // 1. Enums (Vyper enum syntax)
+        // Enums
         contract.enums.forEach { renderEnum(it) }
         if (contract.enums.isNotEmpty()) appendLine()
 
-        // 2. Events
+        // Events
         contract.events.forEach { renderEvent(it) }
         if (contract.events.isNotEmpty()) appendLine()
 
-        // 3. Storage
+        // Storage
         // Vyper defines storage variables at the top level
         contract.storage.forEach { slot ->
             renderStorage(slot)
@@ -31,24 +30,18 @@ fun generateVyper(contract: EvmContract): String {
         appendLine("bailed: HashMap[Role, bool]")
         if (contract.storage.isNotEmpty()) appendLine()
 
-        // 4. Constructor
+        // Constructor
         renderConstructor(contract.initialization)
         appendLine()
 
-        // 5. Game Actions
+        // Game Actions
         contract.actions.forEach { renderAction(it) }
 
-        // 6. Backend-Synthesized Functions
-        renderPayoffFunction(contract.payoffs)
-        appendLine()
-        renderWithdrawFunction()
-        appendLine()
-
-        // 7. Fallback function (prevent accidental ETH transfers)
+        // Fallback function (prevent accidental ETH transfers)
         renderDefaultFunction()
         appendLine()
 
-        // 8. Internal Helpers
+        // Internal Helpers
         renderCheckTimestampHelper()
         appendLine()
 
@@ -163,37 +156,6 @@ private fun StringBuilder.renderAction(a: EvmAction) {
 // Synthesized Logic
 // =========================================================================
 
-private fun StringBuilder.renderPayoffFunction(payoffs: Map<String, EvmExpr>) {
-    appendLine("@external")
-    appendLine("def distributePayoffs():")
-    indent {
-        appendLine("assert self.actionDone[FINAL_ACTION], \"game not over\"")
-        appendLine("assert not self.payoffs_distributed, \"payoffs already sent\"")
-        appendLine("self.payoffs_distributed = True")
-
-        payoffs.forEach { (role, expr) ->
-            // self.balanceOf[self.address_Role] = expr
-            val lhs = "self.$balanceMap[self.${roleAddr(role)}]"
-            val rhs = renderExpr(expr)
-            appendLine("$lhs = $rhs")
-        }
-    }
-}
-
-private fun StringBuilder.renderWithdrawFunction() {
-    appendLine("@external")
-    appendLine("def withdraw():")
-    indent {
-        appendLine("bal: int256 = self.$balanceMap[msg.sender]")
-        appendLine("assert bal > 0, \"no funds\"")
-        appendLine("self.$balanceMap[msg.sender] = 0")
-        // CEI pattern: Check-Effects-Interact
-        // raw_call with revert_on_failure=False returns success status
-        appendLine("success: bool = raw_call(msg.sender, b\"\", value=convert(bal, uint256), revert_on_failure=False)")
-        appendLine("assert success, \"ETH send failed\"")
-    }
-}
-
 private fun StringBuilder.renderDefaultFunction() {
     // Vyper's fallback function (prevents accidental ETH transfers)
     appendLine("@payable")
@@ -240,8 +202,6 @@ private fun StringBuilder.renderCheckRevealHelper() {
     }
 }
 
-// Helper no longer needed - done inline in each action function
-
 private fun StringBuilder.renderStmt(stmt: EvmStmt) {
     when (stmt) {
         is VarDecl -> {
@@ -268,6 +228,14 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("assert False, \"${stmt.message}\"")
         }
         is Pass -> appendLine("pass")
+        is SendEth -> {
+            // Store payout in local variable to avoid evaluating twice
+            val payoutExpr = renderExpr(stmt.amount)
+            appendLine("payout: int256 = $payoutExpr")
+            appendLine("if payout > 0:")
+            appendLine("    success: bool = raw_call(${renderExpr(stmt.to)}, b\"\", value=convert(payout, uint256), revert_on_failure=False)")
+            appendLine("    assert success, \"ETH send failed\"")
+        }
     }
 }
 

@@ -7,17 +7,16 @@ enum Role:
 
 lastTs: uint256
 actionDone: HashMap[Role, HashMap[uint256, bool]]
-actionTimestamp: HashMap[uint256, uint256]
+actionTimestamp: HashMap[Role, HashMap[uint256, uint256]]
 ACTION_Q_0: constant(uint256) = 0
 ACTION_A_1: constant(uint256) = 1
-FINAL_ACTION: constant(uint256) = 1
 roles: HashMap[address, Role]
-balanceOf: HashMap[address, int256]
 address_Q: address
 address_A: address
 done_Q: bool
 done_A: bool
-payoffs_distributed: bool
+claimed_Q: bool
+claimed_A: bool
 Q_x: int256
 done_Q_x: bool
 A_p: int256
@@ -30,7 +29,6 @@ bailed: HashMap[Role, bool]
 @external
 def __init__():
     self.lastTs = block.timestamp
-    
 
 @external
 @payable
@@ -41,7 +39,6 @@ def move_Q_0(_x: int256):
     assert not self.actionDone[Role.Q][0], "already done"
     assert (not self.done_Q), "already joined"
     assert (msg.value == 50), "bad stake"
-    self.balanceOf[msg.sender] = msg.value
     self.roles[msg.sender] = Role.Q
     self.address_Q = msg.sender
     self.done_Q = True
@@ -50,7 +47,6 @@ def move_Q_0(_x: int256):
     self.actionDone[Role.Q][0] = True
     self.actionTimestamp[Role.Q][0] = block.timestamp
     self.lastTs = block.timestamp
-    
 
 @external
 def move_A_1(_p: int256, _q: int256):
@@ -73,40 +69,55 @@ def move_A_1(_p: int256, _q: int256):
     self.actionDone[Role.A][1] = True
     self.actionTimestamp[Role.A][1] = block.timestamp
     self.lastTs = block.timestamp
-    
 
 @external
-def distributePayoffs():
-    assert self.actionDone[FINAL_ACTION], "game not over"
-    assert not self.payoffs_distributed, "payoffs already sent"
-    self.payoffs_distributed = True
-    self.balanceOf[self.address_Q] = 0
-    self.balanceOf[self.address_A] = 50
-    
+def withdraw_Q():
+    assert self.roles[msg.sender] == Role.Q, "bad role"
+    self._check_timestamp(Role.Q)
+    assert not self.bailed[Role.Q], "you bailed"
+    assert not self.actionDone[Role.Q][2], "already done"
+    self._check_timestamp(Role.A)
+    if not self.bailed[Role.A]:
+        assert self.actionDone[Role.A][1], "dependency not satisfied"
+    assert (not self.claimed_Q), "already claimed"
+    self.claimed_Q = True
+    payout: int256 = 0
+    if payout > 0:
+        success: bool = raw_call(self.address_Q, b"", value=convert(payout, uint256), revert_on_failure=False)
+        assert success, "ETH send failed"
+    self.actionDone[Role.Q][2] = True
+    self.actionTimestamp[Role.Q][2] = block.timestamp
+    self.lastTs = block.timestamp
 
 @external
-def withdraw():
-    bal: int256 = self.balanceOf[msg.sender]
-    assert bal > 0, "no funds"
-    self.balanceOf[msg.sender] = 0
-    success: bool = raw_call(msg.sender, b"", value=convert(bal, uint256), revert_on_failure=False)
-    assert success, "ETH send failed"
-    
+def withdraw_A():
+    assert self.roles[msg.sender] == Role.A, "bad role"
+    self._check_timestamp(Role.A)
+    assert not self.bailed[Role.A], "you bailed"
+    assert not self.actionDone[Role.A][3], "already done"
+    self._check_timestamp(Role.A)
+    if not self.bailed[Role.A]:
+        assert self.actionDone[Role.A][1], "dependency not satisfied"
+    assert (not self.claimed_A), "already claimed"
+    self.claimed_A = True
+    payout: int256 = 50
+    if payout > 0:
+        success: bool = raw_call(self.address_A, b"", value=convert(payout, uint256), revert_on_failure=False)
+        assert success, "ETH send failed"
+    self.actionDone[Role.A][3] = True
+    self.actionTimestamp[Role.A][3] = block.timestamp
+    self.lastTs = block.timestamp
 
 @payable
 @external
 def __default__():
     assert False, "direct ETH not allowed"
-    
 
 @internal
 def _check_timestamp(role: Role):
     if role == Role.None:
         return
-    
     if block.timestamp > self.lastTs + TIMEOUT:
         self.bailed[role] = True
         self.lastTs = block.timestamp
-    
-    
 
