@@ -1,152 +1,137 @@
 pragma solidity ^0.8.31;
 
 contract OddsEvens {
+    enum Role { None, Odd, Even }
+    
+    uint256 public lastTs;
+    mapping(Role => mapping(uint256 => bool)) public actionDone;
+    mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 constant public ACTION_Even_0 = 0;
+    uint256 constant public ACTION_Odd_0 = 1;
+    uint256 constant public ACTION_Odd_2 = 2;
+    uint256 constant public ACTION_Odd_3 = 3;
+    uint256 constant public ACTION_Even_4 = 4;
+    uint256 constant public ACTION_Even_5 = 5;
+    mapping(address => Role) public roles;
+    address public address_Odd;
+    address public address_Even;
+    bool public done_Odd;
+    bool public done_Even;
+    bool public claimed_Odd;
+    bool public claimed_Even;
+    bool public Odd_c;
+    bool public done_Odd_c;
+    bytes32 public Odd_c_hidden;
+    bool public done_Odd_c_hidden;
+    bool public Even_c;
+    bool public done_Even_c;
+    bytes32 public Even_c_hidden;
+    bool public done_Even_c_hidden;
+    
+    receive() external payable {
+        revert("direct ETH not allowed");
+    }
+    
+    uint256 constant public TIMEOUT = 86400;
+    
+    mapping(Role => bool) private bailed;
+    
+    function _check_timestamp(Role role) private {
+        if (role == Role.None) {
+            return;
+        }
+        if (block.timestamp > lastTs + TIMEOUT) {
+            bailed[role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(role);
+        if (!bailed[role]) {
+            require(actionDone[role][actionId], "dependency not satisfied");
+        }
+        _;
+    }
+    
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[role][actionId]), "already done");
+        _;
+        actionDone[role][actionId] = true;
+        actionTimestamp[role][actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+    
+    modifier by(Role role) {
+        require((roles[msg.sender] == role), "bad role");
+        _check_timestamp(role);
+        require(!bailed[role], "you bailed");
+        _;
+    }
+    
+    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
+        require((keccak256(preimage) == commitment), "bad reveal");
+    }
+    
     constructor() {
         lastTs = block.timestamp;
     }
-
-    enum Role { None, Odd, Even }
-
-    uint256 public lastTs;
-
-    mapping(uint256 => bool) public actionDone;
-
-    mapping(uint256 => uint256) public actionTimestamp;
-
-    uint256 constant public ACTION_Even_0 = 0;
-
-    uint256 constant public ACTION_Odd_1 = 1;
-
-    uint256 constant public ACTION_Odd_2 = 2;
-
-    uint256 constant public ACTION_Odd_3 = 3;
-
-    uint256 constant public ACTION_Even_4 = 4;
-
-    uint256 constant public ACTION_Even_5 = 5;
-
-    uint256 constant public FINAL_ACTION = 5;
-
-    mapping(address => Role) public role;
-
-    mapping(address => int256) public balanceOf;
-
-    address public address_Odd;
-
-    address public address_Even;
-
-    bool public payoffs_distributed;
-
-    bool public done_Odd;
-
-    bool public done_Even;
-
-    bytes32 public Odd_hidden_c;
-
-    bool public done_Odd_hidden_c;
-
-    bool public Odd_c;
-
-    bool public done_Odd_c;
-
-    bytes32 public Even_hidden_c;
-
-    bool public done_Even_hidden_c;
-
-    bool public Even_c;
-
-    bool public done_Even_c;
-
-    modifier depends(uint256 actionId) {
-        require(actionDone[actionId], "dependency not satisfied");
-    }
-
-    modifier notDone(uint256 actionId) {
-        require((!actionDone[actionId]), "already done");
-    }
-
-    modifier by(Role r) {
-        require((role[msg.sender] == r), "bad role");
-    }
-
-    modifier at_final_phase() {
-        require(actionDone[FINAL_ACTION], "game not over");
-        require((!payoffs_distributed), "payoffs already sent");
-    }
-
-    function _checkReveal(bytes32 commitment, bytes preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-
-    function _markActionDone(uint256 actionId) internal {
-        actionDone[actionId] = true;
-        actionTimestamp[actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-
-    function move_Odd_1() public payable by(Role.None) notDone(1) {
-        require((role[msg.sender] == Role.None), "already has a role");
+    
+    function move_Odd_1() public payable by(Role.None) action(Role.Odd, 0) {
         require((!done_Odd), "already joined");
-        role[msg.sender] = Role.Odd;
+        require((msg.value == 100), "bad stake");
+        roles[msg.sender] = Role.Odd;
         address_Odd = msg.sender;
-        require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
         done_Odd = true;
-        _markActionDone(1);
     }
-
-    function move_Even_0() public payable by(Role.None) notDone(0) {
-        require((role[msg.sender] == Role.None), "already has a role");
+    
+    function move_Even_0() public payable by(Role.None) action(Role.Even, 0) {
         require((!done_Even), "already joined");
-        role[msg.sender] = Role.Even;
-        address_Even = msg.sender;
         require((msg.value == 100), "bad stake");
-        balanceOf[msg.sender] = msg.value;
+        roles[msg.sender] = Role.Even;
+        address_Even = msg.sender;
         done_Even = true;
-        _markActionDone(0);
     }
-
-    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) notDone(2) depends(1) depends(0) {
-        Odd_hidden_c = _hidden_c;
-        done_Odd_hidden_c = true;
-        _markActionDone(2);
+    
+    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) action(Role.Odd, 2) depends(Role.Even, 0) depends(Role.Odd, 0) {
+        Odd_c_hidden = _hidden_c;
+        done_Odd_c_hidden = true;
     }
-
-    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) notDone(4) depends(1) depends(0) {
-        Even_hidden_c = _hidden_c;
-        done_Even_hidden_c = true;
-        _markActionDone(4);
+    
+    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) action(Role.Even, 4) depends(Role.Even, 0) depends(Role.Odd, 0) {
+        Even_c_hidden = _hidden_c;
+        done_Even_c_hidden = true;
     }
-
-    function move_Odd_3(bool _c, uint256 salt) public by(Role.Odd) notDone(3) depends(1) depends(0) depends(2) depends(4) {
-        _checkReveal(Odd_hidden_c, abi.encodePacked(_c, salt));
+    
+    function move_Odd_3(bool _c, uint256 _salt) public by(Role.Odd) action(Role.Odd, 3) depends(Role.Even, 0) depends(Role.Odd, 0) depends(Role.Odd, 2) depends(Role.Even, 4) {
+        require((keccak256(abi.encodePacked(_c, _salt)) == Odd_c_hidden), "reveal failed for c");
         Odd_c = _c;
         done_Odd_c = true;
-        _markActionDone(3);
     }
-
-    function move_Even_5(bool _c, uint256 salt) public by(Role.Even) notDone(5) depends(1) depends(0) depends(4) depends(2) {
-        _checkReveal(Even_hidden_c, abi.encodePacked(_c, salt));
+    
+    function move_Even_5(bool _c, uint256 _salt) public by(Role.Even) action(Role.Even, 5) depends(Role.Even, 0) depends(Role.Odd, 0) depends(Role.Odd, 2) depends(Role.Even, 4) {
+        require((keccak256(abi.encodePacked(_c, _salt)) == Even_c_hidden), "reveal failed for c");
         Even_c = _c;
         done_Even_c = true;
-        _markActionDone(5);
     }
-
-    function distributePayoffs() public at_final_phase {
-        payoffs_distributed = true;
-        balanceOf[address_Odd] = ((done_Even_c && done_Odd_c)) ? ((Even_c == Odd_c)) ? (-10) : 10 : (((!done_Even_c) && done_Odd_c)) ? 10 : (-100);
-        balanceOf[address_Even] = ((done_Even_c && done_Odd_c)) ? ((Even_c == Odd_c)) ? 10 : (-10) : (((!done_Even_c) && done_Odd_c)) ? (-100) : (-100);
+    
+    function withdraw_Even() public by(Role.Even) action(Role.Even, 6) depends(Role.Odd, 3) depends(Role.Even, 5) {
+        require((!claimed_Even), "already claimed");
+        claimed_Even = true;
+        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 10 : (-10)) : (((!done_Even_c) && done_Odd_c) ? (-100) : (-100)));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Even).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
-
-    function withdraw() public {
-        int256 bal = balanceOf[msg.sender];
-        require((bal > 0), "no funds");
-        balanceOf[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: uint256(bal)}("");
-        require(ok, "ETH send failed");
-    }
-
-    receive() public payable {
-        revert("direct ETH not allowed");
+    
+    function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 7) depends(Role.Odd, 3) depends(Role.Even, 5) {
+        require((!claimed_Odd), "already claimed");
+        claimed_Odd = true;
+        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? (-10) : 10) : (((!done_Even_c) && done_Odd_c) ? 10 : (-100)));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_Odd).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
     }
 }
