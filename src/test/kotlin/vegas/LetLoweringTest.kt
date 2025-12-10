@@ -2,7 +2,8 @@ package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import vegas.backend.solidity.genSolidity
+import vegas.backend.evm.compileToEvm
+import vegas.backend.evm.generateSolidity
 import vegas.backend.smt.generateSMT
 import vegas.frontend.*
 import vegas.frontend.Exp.BinOp
@@ -202,7 +203,7 @@ class LetLoweringTest : FreeSpec({
                     pay(alice to BinOp("/", v("pot"), n(2)), bob to BinOp("/", v("pot"), n(2)))
                 )
             )
-            val solidity = genSolidity(compileToIR(prog))
+            val solidity = generateSolidity(compileToEvm(compileToIR(prog)))
 
             // Generated Solidity should not contain "pot" variable name
             (solidity.contains("pot")) shouldBe false
@@ -217,10 +218,9 @@ class LetLoweringTest : FreeSpec({
                     letO("myHalf", BinOp("/", v("myTotal"), n(2)), pay(alice to v("myHalf"), bob to v("myHalf")))
                 )
             )
-            val ir = compileToIR(prog)
 
             // IR should not contain any Let nodes
-            val solidity = genSolidity(ir)
+            val solidity = generateSolidity(compileToEvm(compileToIR(prog)))
 
             // Solidity should not contain let-bound variable names
             (solidity.contains("myTotal")) shouldBe false
