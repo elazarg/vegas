@@ -4,6 +4,7 @@ import vegas.RoleId
 import vegas.dag.FrontierMachine
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
+import vegas.ir.GameIR
 
 /**
  * A configuration in the game LTS.
@@ -54,4 +55,14 @@ internal data class Configuration(
      */
     fun hasActed(role: RoleId): Boolean =
         partialFrontierAssignment.keys.any { it.owner == role }
+
+    companion object {
+        fun initial(game: GameIR): Configuration {
+            return Configuration(
+                frontier = FrontierMachine.from(game.dag),
+                history = History(),
+                partialFrontierAssignment = emptyMap()
+            )
+        }
+    }
 }

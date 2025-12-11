@@ -9,6 +9,8 @@ import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
+import vegas.backend.bitcoin.generateLightningProtocol
+import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -34,19 +36,48 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet"),
-        Example("MontyHall"),
-        Example("MontyHallChance"),
-        Example("OddsEvens"),
-        Example("OddsEvensShort"),
-        Example("Prisoners"),
-        Example("Simple"),
-        Example("Trivial1"),
-        Example("Puzzle", disableBackend=setOf("gambit")),  // IntType enumeration not supported in Gambit
-        Example("ThreeWayLottery"),
-        Example("ThreeWayLotteryBuggy"),
-        Example("ThreeWayLotteryShort"),
-        Example("TicTacToe", disableBackend=setOf("gambit")),  // complex game with large state space
+        Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
+
+        // All games below use utility semantics instead of distribution semantics.
+        // Vegas should enforce distribution semantics (winner gets pot, loser gets 0).
+        // The EFG backend should translate to utilities for game-theoretic analysis.
+        // TODO: Rewrite examples with distribution semantics or add compiler translation.
+        Example("MontyHall", disableBackend = setOf("lightning")), // Payoffs don't sum to pot (20+0 ≠ 200)
+        Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
+        Example("OddsEvens", disableBackend = setOf("lightning")), // Utility semantics: both negative (-100, -100) on double-quit
+        Example("OddsEvensShort", disableBackend = setOf("lightning")), // Same as OddsEvens
+        Example("Prisoners", disableBackend = setOf("lightning")), // Utility semantics: both negative when cooperating
+        Example("Simple", disableBackend = setOf("lightning")), // Utility semantics: both positive (1, 1) or both negative
+        Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Utility semantics (solver gets 50, proposer gets 0)
+        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game + utility semantics (ties)
+    )
+
+    // Lightning backend requires distribution semantics: payoffs must distribute the pot.
+    // Current examples use utility semantics (game-theoretic gains/losses), which doesn't
+    // specify how to allocate deposited funds. This causes:
+    //
+    // 1. Solidity backend: Only sends positive payoffs, leaving remainder stuck in contract
+    //    (e.g., MontyHall deposits 200 wei, sends only 20 wei, wastes 180 wei)
+    //
+    // 2. Lightning backend: Rejects non-WTA outcomes where payoffs don't sum to pot
+    //    (e.g., {A -> 20, B -> 0} doesn't allocate the full 200 wei pot)
+    //
+    // 3. Gambit backend: Works fine (uses utilities for equilibrium analysis)
+    //
+    // SOLUTION: Vegas should enforce distribution semantics. Winner-takes-all means:
+    //   withdraw { Winner -> 200; Loser -> 0 }  // Full pot to winner
+    // NOT:
+    //   withdraw { Winner -> 20; Loser -> 0 }   // Partial distribution (utility semantics)
+    //
+    // TODO: Rewrite examples or add compiler translation layer.
+    //
+    // For now, individual backend tests use inline code with correct distribution semantics.
+    val lightningConfigs = mapOf<String, Pair<String, String>>(
+        // No examples currently satisfy distribution semantics
     )
 
     val testCases = exampleFiles.flatMap { example ->
@@ -65,6 +96,11 @@ class GoldenMasterTest : FreeSpec({
             },
             TestCase(example, "gc", "graphviz") { prog ->
                 compileToIR(prog).toGraphviz()
+            },
+            TestCase(example, "ln", "lightning") { prog ->
+                val (roleA, roleB) = lightningConfigs[example.name]
+                    ?: throw CompilationException("Lightning backend: ${example.name} uses utility semantics instead of distribution semantics")
+                generateLightningProtocol(compileToIR(prog), roleA, roleB, 1000)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -104,6 +140,13 @@ class GoldenMasterTest : FreeSpec({
                 } catch (_: NotImplementedError) {
                     // Skip test for unimplemented features
                     println("Skipped (not implemented): ${testCase.example.name}.${testCase.extension}")
+                } catch (e: CompilationException) {
+                    // Lightning backend compilation failure - check if expected
+                    if (testCase.backend == "lightning" && testCase.example.name in testCase.example.disableBackend) {
+                        println("Skipped (Lightning): ${testCase.example.name} - ${e.message}")
+                    } else {
+                        throw e
+                    }
                 }
             }
         }
@@ -148,6 +191,43 @@ class GoldenMasterTest : FreeSpec({
             smtOutput shouldContain "(check-sat)"
             smtOutput shouldContain "(get-model)"
         }
+
+        "Lightning generation should be deterministic" {
+            // Use a simple inline game that satisfies Lightning constraints
+            val code = """
+                join A(x: bool) $ 10;
+                join B(y: bool) $ 10;
+                withdraw (A.x<->B.y) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
+            """.trimIndent()
+
+            val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
+            val ir = compileToIR(program)
+
+            val output1 = generateLightningProtocol(ir, "A", "B", 1000)
+            val output2 = generateLightningProtocol(ir, "A", "B", 1000)
+
+            sanitizeOutput(output1, "lightning") shouldBe sanitizeOutput(output2, "lightning")
+        }
+
+        "Lightning protocol should contain key structure" {
+            // Use a simple inline game that satisfies Lightning constraints
+            val code = """
+                join A(x: bool) $ 10;
+                join B(y: bool) $ 10;
+                withdraw (A.x<->B.y) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
+            """.trimIndent()
+
+            val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
+            val ir = compileToIR(program)
+            val protocol = generateLightningProtocol(ir, "A", "B", 1000)
+
+            protocol shouldContain "LIGHTNING_PROTOCOL"
+            protocol shouldContain "ROLES:"
+            protocol shouldContain "POT:"
+            protocol shouldContain "ROOT:"
+            protocol shouldContain "STATES:"
+            protocol shouldContain "ABORT_BALANCE:"
+        }
     }
 })
 
@@ -190,6 +270,8 @@ private fun sanitizeOutput(content: String, backend: String): String =
             .replace(Regex("_\\d{7,}"), "_HASH")
             .replace(Regex("\\s+\n"), "\n")
             .trim()
+
+        "lightning" -> content.trim()
 
         else -> content.trim()
     }
