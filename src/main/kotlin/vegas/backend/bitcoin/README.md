@@ -4,6 +4,14 @@ This directory contains the **Compiler** and **Protocol Definition** for the Veg
 
 The **Runtime** (the component that actually connects to a Lightning Node and plays the game) is currently **unimplemented**. This document specifies how to build it.
 
+## Key Features
+
+The Lightning backend supports:
+- **Two-player games** with strategic interaction
+- **Simultaneous moves** via commit-reveal expansion (automatically handled by the IR)
+- **Winner-takes-all** payoff structure
+- **Deterministic serialization** of concurrent actions through lexicographic ordering
+
 ## 1. Architecture
 
 The system follows a **Verification-First** architecture:

@@ -83,16 +83,27 @@ object LightningCompiler {
                 }
             } else {
                 // --- CASE 2: Strategic State ---
-                val actors = strategicMoves.map { (it as Label.Play).role }.distinct()
-                if (actors.size > 1) {
-                    throw CompilationException("State $id is not strictly turn-based. Actors: $actors")
-                }
+                // Multiple players may have enabled moves at this frontier (e.g., concurrent commits
+                // in a commit-reveal scheme). The IR's commit-reveal expansion ensures that any
+                // topological ordering of these moves is strategically equivalent, since committed
+                // values are hidden from other players.
+                //
+                // We pick a deterministic canonical ordering: lexicographically first player by name.
+                // The game semantics enforce that once a player acts in a frontier (via hasActed()),
+                // they cannot act again until FinalizeFrontier advances to the next frontier.
+                // This serialization is transparent to the game logic.
+                val actors = strategicMoves.map { (it as Label.Play).role }.distinct().sortedBy { it.name }
                 val activePlayer = actors.first()
 
-                // Calculate Abort Balance using cascading quit
+                // Filter transitions to only this player's moves. After the active player moves,
+                // the configuration will have hasActed(activePlayer) = true, and the next state
+                // will enable the remaining players' moves.
+                val activePlayerMoves = strategicMoves.filter { (it as Label.Play).role == activePlayer }
+
+                // Calculate Abort Balance: what happens if activePlayer quits right now
                 val abortBalance = resolveAbortScenario(semantics, game, config, activePlayer, players, roleA, roleB, potAmount)
 
-                val transitions = strategicMoves.map { move ->
+                val transitions = activePlayerMoves.map { move ->
                     val rawNext = applyMove(config, move)
                     val canonNext = canonicalize(semantics, rawNext, players)
                     val nextId = getOrEnqueue(canonNext)

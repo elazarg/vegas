@@ -9,6 +9,8 @@ import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
+import vegas.backend.bitcoin.generateLightningProtocol
+import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -17,10 +19,17 @@ import java.io.File
 
 data class Example(
     val name: String,
-    val disableBackend: Set<String> = emptySet()
+    val disableBackend: Set<String> = emptySet(),
+    val disableReasons: Map<String, String> = emptyMap()
 ) {
     override fun toString() = name
 }
+
+data class LightningConfig(
+    val roleA: String,
+    val roleB: String,
+    val pot: Long = 1000
+)
 
 data class TestCase(
     val example: Example,
@@ -34,20 +43,73 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet"),
-        Example("MontyHall"),
-        Example("MontyHallChance"),
-        Example("OddsEvens"),
-        Example("OddsEvensShort"),
-        Example("Prisoners"),
-        Example("Simple"),
-        Example("Trivial1"),
-        Example("Puzzle", disableBackend=setOf("gambit")),  // IntType enumeration not supported in Gambit
-        Example("ThreeWayLottery"),
-        Example("ThreeWayLotteryBuggy"),
-        Example("ThreeWayLotteryShort"),
-        Example("TicTacToe", disableBackend=setOf("gambit")),  // complex game with large state space
+        Example("Bet",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not 2-player (has random role)")),
+        Example("MontyHall",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not winner-takes-all (Host=0 when Guest wins/loses)")),
+        Example("MontyHallChance",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "has randomness (random Host role)")),
+        Example("OddsEvens",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative on double-quit)")),
+        Example("OddsEvensShort",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative on double-quit)")),
+        Example("Prisoners",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative when cooperate/defect)")),
+        Example("Simple",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not winner-takes-all (both positive on dual quit)")),
+        Example("Trivial1",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not 2-player (only 1 player)")),
+        Example("Puzzle",
+            disableBackend = setOf("gambit", "lightning"),
+            disableReasons = mapOf(
+                "lightning" to "not winner-takes-all (both players positive payoff)"
+            )),
+        Example("ThreeWayLottery",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
+        Example("ThreeWayLotteryBuggy",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
+        Example("ThreeWayLotteryShort",
+            disableBackend = setOf("lightning"),
+            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
+        Example("TicTacToe",
+            disableBackend = setOf("gambit", "lightning"),
+            disableReasons = mapOf(
+                "gambit" to "complex game with large state space",
+                "lightning" to "not winner-takes-all (tie payoffs)"
+            )),
     )
+
+    // Lightning-specific configurations: role names and pot amount
+    //
+    // The Lightning backend has strict constraints that most games don't satisfy:
+    // 1. Exactly 2 strategic players (no random roles, no 1 or 3+ players)
+    // 2. Serializable execution (simultaneous moves are supported via commit-reveal expansion)
+    // 3. Winner-Takes-All payoffs (exactly one positive winner per terminal state)
+    // 4. Deterministic abort (explicit Quit moves that resolve deterministically)
+    // 5. No randomness (no Chance moves or random roles)
+    //
+    // Currently no games in the standard test suite satisfy all these constraints:
+    // - Bet, MontyHallChance, Trivial1: Not 2-player or has random roles
+    // - OddsEvens, OddsEvensShort, Prisoners: Not strictly WTA (both negative payoffs in some outcomes)
+    // - MontyHall, Simple, Puzzle: Not strictly WTA (zero or both-negative payoffs)
+    // - ThreeWayLottery*: 3 players
+    // - TicTacToe: Tie payoffs violate WTA
+    //
+    // Note: Simultaneous moves ARE supported (via commit-reveal + lexicographic serialization).
+    // The blocker is WTA, not turn-based execution.
+    //
+    // Individual backend tests use inline code that satisfies all constraints.
+    val lightningConfigs = mapOf<String, LightningConfig>()
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
@@ -65,6 +127,12 @@ class GoldenMasterTest : FreeSpec({
             },
             TestCase(example, "gc", "graphviz") { prog ->
                 compileToIR(prog).toGraphviz()
+            },
+            TestCase(example, "ln", "lightning") { prog ->
+                val config = lightningConfigs[example.name]
+                    ?: throw CompilationException("Lightning backend requires role configuration for ${example.name}. " +
+                        "Reason: ${example.disableReasons["lightning"] ?: "unknown"}")
+                generateLightningProtocol(compileToIR(prog), config.roleA, config.roleB, config.pot)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -104,6 +172,13 @@ class GoldenMasterTest : FreeSpec({
                 } catch (_: NotImplementedError) {
                     // Skip test for unimplemented features
                     println("Skipped (not implemented): ${testCase.example.name}.${testCase.extension}")
+                } catch (e: CompilationException) {
+                    // Lightning backend compilation failure - check if expected
+                    if (testCase.backend == "lightning" && testCase.example.disableReasons.containsKey("lightning")) {
+                        println("Skipped (expected exclusion): ${testCase.example.name}.${testCase.extension} - ${e.message}")
+                    } else {
+                        throw e
+                    }
                 }
             }
         }
@@ -148,6 +223,43 @@ class GoldenMasterTest : FreeSpec({
             smtOutput shouldContain "(check-sat)"
             smtOutput shouldContain "(get-model)"
         }
+
+        "Lightning generation should be deterministic" {
+            // Use a simple inline game that satisfies Lightning constraints
+            val code = """
+                join A(x: bool) $ 10;
+                join B(y: bool) $ 10;
+                withdraw (A.x<->B.y) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
+            """.trimIndent()
+
+            val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
+            val ir = compileToIR(program)
+
+            val output1 = generateLightningProtocol(ir, "A", "B", 1000)
+            val output2 = generateLightningProtocol(ir, "A", "B", 1000)
+
+            sanitizeOutput(output1, "lightning") shouldBe sanitizeOutput(output2, "lightning")
+        }
+
+        "Lightning protocol should contain key structure" {
+            // Use a simple inline game that satisfies Lightning constraints
+            val code = """
+                join A(x: bool) $ 10;
+                join B(y: bool) $ 10;
+                withdraw (A.x<->B.y) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
+            """.trimIndent()
+
+            val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
+            val ir = compileToIR(program)
+            val protocol = generateLightningProtocol(ir, "A", "B", 1000)
+
+            protocol shouldContain "LIGHTNING_PROTOCOL"
+            protocol shouldContain "ROLES:"
+            protocol shouldContain "POT:"
+            protocol shouldContain "ROOT:"
+            protocol shouldContain "STATES:"
+            protocol shouldContain "ABORT_BALANCE:"
+        }
     }
 })
 
@@ -190,6 +302,8 @@ private fun sanitizeOutput(content: String, backend: String): String =
             .replace(Regex("_\\d{7,}"), "_HASH")
             .replace(Regex("\\s+\n"), "\n")
             .trim()
+
+        "lightning" -> content.trim()
 
         else -> content.trim()
     }
