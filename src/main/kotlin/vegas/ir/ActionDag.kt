@@ -132,6 +132,9 @@ class ActionDag private constructor(
     fun kind(id: ActionId): Visibility = meta(id).kind
     fun params(id: ActionId): List<ActionParam> = meta(id).spec.params
 
+    fun deposit(role: RoleId): Expr.Const.IntVal =
+        actions.filter { it.first == role }.firstNotNullOf { spec(it).join }.deposit
+
     /** Structural shortcuts. */
     private fun struct(id: ActionId): ActionStruct = meta(id).struct
     fun owner(id: ActionId): RoleId = struct(id).owner

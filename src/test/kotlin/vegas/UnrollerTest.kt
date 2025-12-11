@@ -46,7 +46,7 @@ class UnrollerTest : FreeSpec({
 
             // Should be terminal since join has no parameters
             tree.shouldBeInstanceOf<GameTree.Terminal>()
-            tree.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(100)
+            tree.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(0)
         }
 
         "handles single-role simple game with choice" {
@@ -79,7 +79,7 @@ class UnrollerTest : FreeSpec({
             // All subtrees should be terminal with correct payoffs
             val trueChoice = tree.choices[0]
             trueChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
-            (trueChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(10)
+            (trueChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-90)
 
             val falseChoice = tree.choices[1]
             falseChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
@@ -154,7 +154,7 @@ class UnrollerTest : FreeSpec({
             val aliceBetsTrue = tree.choices[0].subtree as GameTree.Decision
             val bobCallsTrue = aliceBetsTrue.choices[0].subtree as GameTree.Terminal
 
-            bobCallsTrue.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(20)
+            bobCallsTrue.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-80)
             bobCallsTrue.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(0)
 
             // Navigate to Alice bets true, Bob calls false
@@ -245,7 +245,7 @@ class UnrollerTest : FreeSpec({
 
             // Both x and y true should give payoff 20
             val terminal = afterX.choices[0].subtree as GameTree.Terminal
-            terminal.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(20)
+            terminal.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-80)
         }
 
         "skeleton policy creates all continuations" {
