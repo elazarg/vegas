@@ -5,8 +5,6 @@ import vegas.RoleId
 import vegas.ir.ActionDag
 import vegas.ir.ActionId
 import vegas.ir.Expr
-import vegas.ir.Expr.Const
-import vegas.ir.Expr.Const.Quit
 
 /**
  * Labels for the game LTS.
