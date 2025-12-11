@@ -19,17 +19,10 @@ import java.io.File
 
 data class Example(
     val name: String,
-    val disableBackend: Set<String> = emptySet(),
-    val disableReasons: Map<String, String> = emptyMap()
+    val disableBackend: Set<String> = emptySet()
 ) {
     override fun toString() = name
 }
-
-data class LightningConfig(
-    val roleA: String,
-    val roleB: String,
-    val pot: Long = 1000
-)
 
 data class TestCase(
     val example: Example,
@@ -43,73 +36,49 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not 2-player (has random role)")),
-        Example("MontyHall",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not winner-takes-all (Host=0 when Guest wins/loses)")),
-        Example("MontyHallChance",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "has randomness (random Host role)")),
-        Example("OddsEvens",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative on double-quit)")),
-        Example("OddsEvensShort",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative on double-quit)")),
-        Example("Prisoners",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not winner-takes-all (both negative when cooperate/defect)")),
-        Example("Simple",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not winner-takes-all (both positive on dual quit)")),
-        Example("Trivial1",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not 2-player (only 1 player)")),
-        Example("Puzzle",
-            disableBackend = setOf("gambit", "lightning"),
-            disableReasons = mapOf(
-                "lightning" to "not winner-takes-all (both players positive payoff)"
-            )),
-        Example("ThreeWayLottery",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
-        Example("ThreeWayLotteryBuggy",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
-        Example("ThreeWayLotteryShort",
-            disableBackend = setOf("lightning"),
-            disableReasons = mapOf("lightning" to "not 2-player (3 players)")),
-        Example("TicTacToe",
-            disableBackend = setOf("gambit", "lightning"),
-            disableReasons = mapOf(
-                "gambit" to "complex game with large state space",
-                "lightning" to "not winner-takes-all (tie payoffs)"
-            )),
+        Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
+
+        // All games below use utility semantics instead of distribution semantics.
+        // Vegas should enforce distribution semantics (winner gets pot, loser gets 0).
+        // The EFG backend should translate to utilities for game-theoretic analysis.
+        // TODO: Rewrite examples with distribution semantics or add compiler translation.
+        Example("MontyHall", disableBackend = setOf("lightning")), // Payoffs don't sum to pot (20+0 ≠ 200)
+        Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
+        Example("OddsEvens", disableBackend = setOf("lightning")), // Utility semantics: both negative (-100, -100) on double-quit
+        Example("OddsEvensShort", disableBackend = setOf("lightning")), // Same as OddsEvens
+        Example("Prisoners", disableBackend = setOf("lightning")), // Utility semantics: both negative when cooperating
+        Example("Simple", disableBackend = setOf("lightning")), // Utility semantics: both positive (1, 1) or both negative
+        Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Utility semantics (solver gets 50, proposer gets 0)
+        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game + utility semantics (ties)
     )
 
-    // Lightning-specific configurations: role names and pot amount
+    // Lightning backend requires distribution semantics: payoffs must distribute the pot.
+    // Current examples use utility semantics (game-theoretic gains/losses), which doesn't
+    // specify how to allocate deposited funds. This causes:
     //
-    // The Lightning backend has strict constraints that most games don't satisfy:
-    // 1. Exactly 2 strategic players (no random roles, no 1 or 3+ players)
-    // 2. Serializable execution (simultaneous moves are supported via commit-reveal expansion)
-    // 3. Winner-Takes-All payoffs (exactly one positive winner per terminal state)
-    // 4. Deterministic abort (explicit Quit moves that resolve deterministically)
-    // 5. No randomness (no Chance moves or random roles)
+    // 1. Solidity backend: Only sends positive payoffs, leaving remainder stuck in contract
+    //    (e.g., MontyHall deposits 200 wei, sends only 20 wei, wastes 180 wei)
     //
-    // Currently no games in the standard test suite satisfy all these constraints:
-    // - Bet, MontyHallChance, Trivial1: Not 2-player or has random roles
-    // - OddsEvens, OddsEvensShort, Prisoners: Not strictly WTA (both negative payoffs in some outcomes)
-    // - MontyHall, Simple, Puzzle: Not strictly WTA (zero or both-negative payoffs)
-    // - ThreeWayLottery*: 3 players
-    // - TicTacToe: Tie payoffs violate WTA
+    // 2. Lightning backend: Rejects non-WTA outcomes where payoffs don't sum to pot
+    //    (e.g., {A -> 20, B -> 0} doesn't allocate the full 200 wei pot)
     //
-    // Note: Simultaneous moves ARE supported (via commit-reveal + lexicographic serialization).
-    // The blocker is WTA, not turn-based execution.
+    // 3. Gambit backend: Works fine (uses utilities for equilibrium analysis)
     //
-    // Individual backend tests use inline code that satisfies all constraints.
-    val lightningConfigs = mapOf<String, LightningConfig>()
+    // SOLUTION: Vegas should enforce distribution semantics. Winner-takes-all means:
+    //   withdraw { Winner -> 200; Loser -> 0 }  // Full pot to winner
+    // NOT:
+    //   withdraw { Winner -> 20; Loser -> 0 }   // Partial distribution (utility semantics)
+    //
+    // TODO: Rewrite examples or add compiler translation layer.
+    //
+    // For now, individual backend tests use inline code with correct distribution semantics.
+    val lightningConfigs = mapOf<String, Pair<String, String>>(
+        // No examples currently satisfy distribution semantics
+    )
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
@@ -129,10 +98,9 @@ class GoldenMasterTest : FreeSpec({
                 compileToIR(prog).toGraphviz()
             },
             TestCase(example, "ln", "lightning") { prog ->
-                val config = lightningConfigs[example.name]
-                    ?: throw CompilationException("Lightning backend requires role configuration for ${example.name}. " +
-                        "Reason: ${example.disableReasons["lightning"] ?: "unknown"}")
-                generateLightningProtocol(compileToIR(prog), config.roleA, config.roleB, config.pot)
+                val (roleA, roleB) = lightningConfigs[example.name]
+                    ?: throw CompilationException("Lightning backend: ${example.name} uses utility semantics instead of distribution semantics")
+                generateLightningProtocol(compileToIR(prog), roleA, roleB, 1000)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -174,8 +142,8 @@ class GoldenMasterTest : FreeSpec({
                     println("Skipped (not implemented): ${testCase.example.name}.${testCase.extension}")
                 } catch (e: CompilationException) {
                     // Lightning backend compilation failure - check if expected
-                    if (testCase.backend == "lightning" && testCase.example.disableReasons.containsKey("lightning")) {
-                        println("Skipped (expected exclusion): ${testCase.example.name}.${testCase.extension} - ${e.message}")
+                    if (testCase.backend == "lightning" && testCase.example.name in testCase.example.disableBackend) {
+                        println("Skipped (Lightning): ${testCase.example.name} - ${e.message}")
                     } else {
                         throw e
                     }
