@@ -7,13 +7,8 @@ import vegas.ir.GameIR
  * Generates a human-readable string representation of the LightningProtocol.
  * This serves as the "Object File" for the runtime and for Golden Master tests.
  */
-fun generateLightningProtocol(game: GameIR, roleAStr: String, roleBStr: String, pot: Long): String {
-    // Resolve RoleIds from string names
-    val allRoles = game.roles.associateBy { it.name }
-    val roleA = allRoles[roleAStr] ?: RoleId(roleAStr)
-    val roleB = allRoles[roleBStr] ?: RoleId(roleBStr)
-
-    val protocol = LightningCompiler.compile(game, roleA, roleB, pot)
+fun generateLightningProtocol(game: GameIR): String {
+    val protocol = LightningCompiler.compile(game)
     return protocol.toText()
 }
 

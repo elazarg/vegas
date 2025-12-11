@@ -42,14 +42,14 @@ class GoldenMasterTest : FreeSpec({
         // Vegas should enforce distribution semantics (winner gets pot, loser gets 0).
         // The EFG backend should translate to utilities for game-theoretic analysis.
         // TODO: Rewrite examples with distribution semantics or add compiler translation.
-        Example("MontyHall", disableBackend = setOf("lightning")), // Payoffs don't sum to pot (20+0 ≠ 200)
+        Example("MontyHall", disableBackend = setOf()), // Payoffs don't sum to pot (20+0 ≠ 200)
         Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
-        Example("OddsEvens", disableBackend = setOf("lightning")), // Utility semantics: both negative (-100, -100) on double-quit
-        Example("OddsEvensShort", disableBackend = setOf("lightning")), // Same as OddsEvens
-        Example("Prisoners", disableBackend = setOf("lightning")), // Utility semantics: both negative when cooperating
-        Example("Simple", disableBackend = setOf("lightning")), // Utility semantics: both positive (1, 1) or both negative
+        Example("OddsEvens", disableBackend = setOf()), // Utility semantics: both negative (-100, -100) on double-quit
+        Example("OddsEvensShort", disableBackend = setOf()), // Same as OddsEvens
+        Example("Prisoners", disableBackend = setOf()), // Utility semantics: both negative when cooperating
+        Example("Simple", disableBackend = setOf()), // Utility semantics: both positive (1, 1) or both negative
         Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
-        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Utility semantics (solver gets 50, proposer gets 0)
+        Example("Puzzle", disableBackend = setOf("gambit")), // Utility semantics (solver gets 50, proposer gets 0)
         Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
         Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
         Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
@@ -76,9 +76,6 @@ class GoldenMasterTest : FreeSpec({
     // TODO: Rewrite examples or add compiler translation layer.
     //
     // For now, individual backend tests use inline code with correct distribution semantics.
-    val lightningConfigs = mapOf<String, Pair<String, String>>(
-        // No examples currently satisfy distribution semantics
-    )
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
@@ -98,9 +95,8 @@ class GoldenMasterTest : FreeSpec({
                 compileToIR(prog).toGraphviz()
             },
             TestCase(example, "ln", "lightning") { prog ->
-                val (roleA, roleB) = lightningConfigs[example.name]
-                    ?: throw CompilationException("Lightning backend: ${example.name} uses utility semantics instead of distribution semantics")
-                generateLightningProtocol(compileToIR(prog), roleA, roleB, 1000)
+                val ir = compileToIR(prog)
+                generateLightningProtocol(ir)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -203,8 +199,8 @@ class GoldenMasterTest : FreeSpec({
             val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
             val ir = compileToIR(program)
 
-            val output1 = generateLightningProtocol(ir, "A", "B", 1000)
-            val output2 = generateLightningProtocol(ir, "A", "B", 1000)
+            val output1 = generateLightningProtocol(ir)
+            val output2 = generateLightningProtocol(ir)
 
             sanitizeOutput(output1, "lightning") shouldBe sanitizeOutput(output2, "lightning")
         }
@@ -219,7 +215,7 @@ class GoldenMasterTest : FreeSpec({
 
             val program = vegas.frontend.parseCode(code).copy(name = "TestGame")
             val ir = compileToIR(program)
-            val protocol = generateLightningProtocol(ir, "A", "B", 1000)
+            val protocol = generateLightningProtocol(ir)
 
             protocol shouldContain "LIGHTNING_PROTOCOL"
             protocol shouldContain "ROLES:"
