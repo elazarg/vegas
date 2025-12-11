@@ -1,4 +1,5 @@
 // Staking & slashing: validator may cheat; watcher may monitor; protocol rewards/punishes accordingly.
+// Distribution semantics: pot (300 wei) with slashing penalties and monitoring rewards
 join Validator() $ 100 Watcher() $ 100 Protocol() $ 100;
 
 yield Validator(cheat: bool) Watcher(monitor: bool);
@@ -6,15 +7,15 @@ yield Validator(cheat: bool) Watcher(monitor: bool);
 withdraw {
     Validator ->
         Validator.cheat ?
-            (Watcher.monitor ? -5 : 5)
-        : 2;
+            (Watcher.monitor ? 50 : 150)  // Slashed if caught, gains if not
+        : 120;  // Honest validator reward
 
     Watcher ->
-        !Watcher.monitor ? 0 :
-            (Validator.cheat ? 4 : -1);
+        !Watcher.monitor ? 100
+        : (Validator.cheat ? 140 : 90);  // Reward for catching, cost if monitoring honest
 
     Protocol ->
         Validator.cheat ?
-            (Watcher.monitor ? 2 : -5)
-        : 0;
+            (Watcher.monitor ? 110 : 50)  // Recovers slash or loses funds
+        : 90;  // Shares cost of validator reward
 }

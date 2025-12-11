@@ -40,10 +40,10 @@
 (assert (=> action_Host_6_done Host_car_done))
 
 (declare-const Guest_outcome Int)
-(assert (= Guest_outcome (ite (and Host_car_done Guest_switch_done) (ite (= (not (= Guest_d Host_car)) Guest_switch) 20 (- 20)) (ite (not Host_car_done) 20 (- 100)))))
+(assert (= Guest_outcome (ite (and Host_car_done Guest_switch_done) (ite (= (not (= Guest_d Host_car)) Guest_switch) 40 0) (ite (not Host_car_done) 40 0))))
 
 (declare-const Host_outcome Int)
-(assert (= Host_outcome (ite (and Host_car_done Guest_switch_done) 0 (ite (not Host_car_done) (- 100) 0))))
+(assert (= Host_outcome (ite (and Host_car_done Guest_switch_done) (ite (= (not (= Guest_d Host_car)) Guest_switch) 0 40) (ite (not Host_car_done) 0 40))))
 
 (check-sat)
 (get-model)

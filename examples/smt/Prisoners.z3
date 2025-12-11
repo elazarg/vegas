@@ -27,10 +27,10 @@
 (assert (=> action_B_6_done B_c_done))
 
 (declare-const A_outcome Int)
-(assert (= A_outcome (ite (and A_c_done B_c_done) (ite (and A_c B_c) (- 2) (ite (and A_c (not B_c)) 0 (ite (and (not A_c) B_c) (- 3) (- 1)))) (ite (not A_c_done) (- 100) 10))))
+(assert (= A_outcome (ite (and A_c_done B_c_done) (ite (and A_c B_c) 100 (ite (and A_c (not B_c)) 0 (ite (and (not A_c) B_c) 200 90))) (ite (not A_c_done) 0 200))))
 
 (declare-const B_outcome Int)
-(assert (= B_outcome (ite (and A_c_done B_c_done) (ite (and A_c B_c) (- 2) (ite (and A_c (not B_c)) (- 3) (ite (and (not A_c) B_c) 0 (- 1)))) (ite (not A_c_done) 10 (- 100)))))
+(assert (= B_outcome (ite (and A_c_done B_c_done) (ite (and A_c B_c) 100 (ite (and A_c (not B_c)) 200 (ite (and (not A_c) B_c) 0 110))) (ite (not A_c_done) 200 0))))
 
 (check-sat)
 (get-model)

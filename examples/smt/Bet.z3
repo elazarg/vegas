@@ -18,10 +18,10 @@
 (assert (=> action_Race_2_done Race_winner_done))
 
 (declare-const Gambler_outcome Int)
-(assert (= Gambler_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 100 0)))
+(assert (= Gambler_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 20 0)))
 
 (declare-const Race_outcome Int)
-(assert (= Race_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 0 100)))
+(assert (= Race_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 0 20)))
 
 (check-sat)
 (get-model)

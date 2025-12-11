@@ -44,13 +44,13 @@
 (assert (=> action_Bob_9_done Bob_c_done))
 
 (declare-const Bob_outcome Int)
-(assert (= Bob_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) (- 10) (ite (not Issuer_c_done) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) 20 (- 10)))))))
+(assert (= Bob_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 0 (ite (not Issuer_c_done) 0 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) 0 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) 30 0))))))
 
 (declare-const Issuer_outcome Int)
-(assert (= Issuer_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 20 (ite (not Issuer_c_done) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) (- 10) 20))))))
+(assert (= Issuer_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 30 (ite (not Issuer_c_done) 0 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) 0 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) 0 30))))))
 
 (declare-const Alice_outcome Int)
-(assert (= Alice_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) (- 10) (ite (not Issuer_c_done) 20 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) 20 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) (- 10) (- 10)))))))
+(assert (= Alice_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 0 (ite (not Issuer_c_done) 30 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) 30 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) 0 0))))))
 
 (check-sat)
 (get-model)

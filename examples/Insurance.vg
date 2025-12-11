@@ -1,4 +1,5 @@
 // Insurance game: insured chooses to buy; world accident; claim; insurer pays or denies.
+// Distribution semantics: pot (300 wei) allocated based on insurance, accident, and claim outcomes
 join Insured() $ 100 Insurer() $ 100;
 random World() $ 100;
 
@@ -10,23 +11,34 @@ yield Insurer(pay: bool)   where Insured.claim;
 withdraw {
     Insured ->
         (!World.accident) ?
-            (Insured.buy ? -2 : 0)
-        :
-        (!Insured.buy) ?
-            -10
-        :
-        (Insured.claim && Insurer.pay) ? (10 - 2)
-      : (Insured.claim && !Insurer.pay) ? (-10 - 2)
-      : (-10 - 2);
+            (Insured.buy ? 90 : 100)  // premium paid or no cost
+        : (!Insured.buy) ?
+            60  // accident without insurance, loses money
+        : (Insured.claim && Insurer.pay) ?
+            100  // claim paid, recovers
+        : (Insured.claim && !Insurer.pay) ?
+            50  // claim denied, loses premium and damage
+        : 60;  // bought insurance but didn't claim
 
     Insurer ->
         (!World.accident) ?
-            (Insured.buy ? 2 : 0)
-        :
-        (!Insured.buy) ?
-            0
-        :
-        (Insured.claim && Insurer.pay) ? (2 - 10)
-      : (Insured.claim && !Insurer.pay) ? 2
-      : 2;
+            (Insured.buy ? 110 : 100)  // premium collected or nothing
+        : (!Insured.buy) ?
+            120  // no exposure, gains from Insured's loss
+        : (Insured.claim && Insurer.pay) ?
+            90  // pays claim after collecting premium
+        : (Insured.claim && !Insurer.pay) ?
+            140  // keeps premium without paying
+        : 110;  // keeps premium, no claim
+
+    World ->
+        (!World.accident) ?
+            100  // no accident, refunded
+        : (!Insured.buy) ?
+            120  // accident, uninsured loses
+        : (Insured.claim && Insurer.pay) ?
+            110  // claim resolved
+        : (Insured.claim && !Insurer.pay) ?
+            110  // claim denied
+        : 130;  // insured but no claim
 }

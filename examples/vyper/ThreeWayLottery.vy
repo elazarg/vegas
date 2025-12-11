@@ -241,7 +241,7 @@ def withdraw_Bob():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Bob), "already claimed"
     self.claimed_Bob = True
-    payout: int256 = (-10) if ((not self.done_Alice_c) or (not self.done_Bob_c)) else (-10) if (not self.done_Issuer_c) else (-10) if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else 20 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else (-10)
+    payout: int256 = 0 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 0 if (not self.done_Issuer_c) else 0 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else 30 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else 0
     if payout > 0:
         success: bool = raw_call(self.address_Bob, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -266,7 +266,7 @@ def withdraw_Issuer():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Issuer), "already claimed"
     self.claimed_Issuer = True
-    payout: int256 = 20 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else (-10) if (not self.done_Issuer_c) else (-10) if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else (-10) if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else 20
+    payout: int256 = 30 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 0 if (not self.done_Issuer_c) else 0 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else 0 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else 30
     if payout > 0:
         success: bool = raw_call(self.address_Issuer, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -291,7 +291,7 @@ def withdraw_Alice():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Alice), "already claimed"
     self.claimed_Alice = True
-    payout: int256 = (-10) if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 20 if (not self.done_Issuer_c) else 20 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else (-10) if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else (-10)
+    payout: int256 = 0 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 30 if (not self.done_Issuer_c) else 30 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == ((self.Issuer_c + self.Alice_c) + self.Bob_c)) else 0 if (((((self.Issuer_c + self.Alice_c) + self.Bob_c) / 3) * 3) == (((self.Issuer_c + self.Alice_c) + self.Bob_c) - 1)) else 0
     if payout > 0:
         success: bool = raw_call(self.address_Alice, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

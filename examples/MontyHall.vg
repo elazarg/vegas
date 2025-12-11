@@ -1,14 +1,17 @@
+// Monty Hall game: Guest bets 20 wei with Host on finding the car
+// Distribution semantics: 20 wei transfers from loser to winner
 type door = {0, 1, 2}
 
-join Host() $ 100;
-join Guest() $ 100;
+join Host() $ 20;
+join Guest() $ 20;
 yield Host(car: hidden door);
 yield Guest(d: door);
 yield Host(goat: door) where Host.goat != Guest.d;
 yield Guest(switch: bool);
 reveal Host(car: door) where Host.goat != Host.car;
 withdraw (Host.car != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 20 : -20;  Host -> 0 }
+     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;
+         Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
      : (Host.car == null)
-     ? { Guest -> 20;   Host -> -100 }
-     : { Guest -> -100; Host -> 0 }
+     ? { Guest -> 40;   Host -> 0 }  // Host quit, Guest wins all
+     : { Guest -> 0; Host -> 40 }     // Guest quit, Host wins all

@@ -61,8 +61,9 @@ contract Trivial1 {
         lastTs = block.timestamp;
     }
     
-    function move_A_0() public by(Role.None) action(Role.A, 0) {
+    function move_A_0() public payable by(Role.None) action(Role.A, 0) {
         require((!done_A), "already joined");
+        require((msg.value == 10), "bad stake");
         roles[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
@@ -71,7 +72,7 @@ contract Trivial1 {
     function withdraw_A() public by(Role.A) action(Role.A, 1) depends(Role.A, 0) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
-        int256 payout = 0;
+        int256 payout = 10;
         if (payout > 0) {
             (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

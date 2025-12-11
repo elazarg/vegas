@@ -1,3 +1,5 @@
+// Three-way lottery (short form with join parameters)
+// Distribution semantics: winner gets full pot (30 wei), losers get 0
 type choice = {1, 2, 3}
 
 join Issuer(c: choice) $ 10
@@ -5,11 +7,11 @@ join Issuer(c: choice) $ 10
      Bob(c: choice) $ 10;
 
 withdraw (Alice.c  == null || Bob.c == null)
-             ? { Alice -> -10; Bob -> -10; Issuer ->  20 }
+             ? { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Alice or Bob quit, Issuer wins
       : (Issuer.c == null)
-             ? { Alice ->  20; Bob -> -10; Issuer -> -10 }
+             ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Issuer quit, Alice wins
       : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c))
-             ? { Alice ->  20; Bob -> -10; Issuer -> -10 }
+             ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Sum divisible by 3: Alice wins
       : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c)-1)
-             ? { Alice -> -10; Bob ->  20; Issuer -> -10 }
-      :        { Alice -> -10; Bob -> -10; Issuer ->  20 }
+             ? { Alice -> 0; Bob -> 30; Issuer -> 0 }  // Sum ≡ 1 (mod 3): Bob wins
+      :        { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Sum ≡ 2 (mod 3): Issuer wins

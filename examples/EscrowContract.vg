@@ -1,4 +1,5 @@
 // Escrow contract: buyer funds, seller ships, escrow releases or refunds.
+// Distribution semantics: pot (300 wei) allocated based on trade outcome and escrow decision
 type decision = {0, 1}  // 0=refund, 1=release
 
 join Buyer() $ 100 Seller() $ 100 Escrow() $ 100;
@@ -9,26 +10,22 @@ yield Escrow(dec: decision);
 
 withdraw {
     Buyer ->
-        (!Buyer.fund) ?
-            0
-        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ?
-            (10 - 10)
-        : (Buyer.fund && !Seller.ship && Escrow.dec == 0) ?
-            0
-        : (Buyer.fund ? -10 : 0);
+        (!Buyer.fund) ? 100  // no trade, deposit back
+        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ? 95   // trade succeeds, pays Seller
+        : (Buyer.fund && !Seller.ship && Escrow.dec == 0) ? 195  // correct refund
+        : (Buyer.fund && Seller.ship && Escrow.dec == 0) ? 200   // wrongful refund
+        : 85;  // wrongful payment (fund + !ship + release)
 
     Seller ->
-        (!Buyer.fund) ?
-            0
-        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ?
-            10
-        : 0;
+        (!Buyer.fund) ? 100  // no trade
+        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ? 200   // gets payment
+        : (Buyer.fund && !Seller.ship && Escrow.dec == 0) ? 100  // correct refund, no penalty
+        : (Buyer.fund && Seller.ship && Escrow.dec == 0) ? 85    // wrongful refund
+        : 200;  // wrongful payment
 
     Escrow ->
-        (
-            (!Buyer.fund && Escrow.dec == 0) ||
-            (Buyer.fund && Seller.ship && Escrow.dec == 1) ||
-            (Buyer.fund && !Seller.ship && Escrow.dec == 0)
-        )
-        ? 1 : -3;
+        (!Buyer.fund) ? 100  // no trade
+        : (Buyer.fund && Seller.ship && Escrow.dec == 1) ? 5     // fee for good decision
+        : (Buyer.fund && !Seller.ship && Escrow.dec == 0) ? 5    // fee for good decision
+        : 15;  // penalty for bad decision
 }

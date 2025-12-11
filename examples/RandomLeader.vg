@@ -1,4 +1,5 @@
 // Random leader election: validators commit to bits, reveal, XOR decides leader.
+// Distribution semantics: pot (300 wei) - winner gets leader reward, V3 acts as entropy source
 join V1() $ 100 V2() $ 100 V3() $ 100;
 
 yield V1(b: hidden bool) V2(b: hidden bool) V3(b: hidden bool);
@@ -7,13 +8,13 @@ reveal V1(b: bool) V2(b: bool) V3(b: bool);
 
 withdraw (V1.b != null && V2.b != null && V3.b != null) ?
 {
-    V1 -> ((((V1.b <-!-> V2.b) <-!-> V3.b) == false) ? 10 : 0);
-    V2 -> ((((V1.b <-!-> V2.b) <-!-> V3.b) == true) ? 10 : 0);
-    V3 -> 0;
+    V1 -> ((((V1.b <-!-> V2.b) <-!-> V3.b) == false) ? 150 : 0);
+    V2 -> ((((V1.b <-!-> V2.b) <-!-> V3.b) == true) ? 150 : 0);
+    V3 -> 150;  // V3 always gets fixed share as entropy provider
 }
 :
 {
-    V1 -> -5;
-    V2 -> -5;
-    V3 -> -5;
+    V1 -> 50;   // Penalized for not revealing
+    V2 -> 50;
+    V3 -> 200;  // V3 gets more if others don't participate
 }

@@ -1,4 +1,5 @@
-// Vickrey Auction: Winner pays the second-highest bid.
+// Vickrey Auction: Winner pays the second-highest bid, losers get deposits back.
+// Distribution semantics: pot (400 wei) - winner pays second price to Seller, all get deposits back
 type bid = {0 .. 100}
 
 macro max2(a: bid, b: bid): bid =
@@ -23,9 +24,9 @@ yield B1(b: hidden bid) B2(b: hidden bid) B3(b: hidden bid);
 reveal B1(b: bid) B2(b: bid) B3(b: bid);
 
 withdraw {
-    Seller -> secondMax(B1.b, B2.b, B3.b);
+    Seller -> 100 + secondMax(B1.b, B2.b, B3.b);  // deposit + winning payment
 
-    B1 -> isWinner(B1.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
-    B2 -> isWinner(B2.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
-    B3 -> isWinner(B3.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 0;
+    B1 -> isWinner(B1.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
+    B2 -> isWinner(B2.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
+    B3 -> isWinner(B3.b, B1.b, B2.b, B3.b) ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
 }

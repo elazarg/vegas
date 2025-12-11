@@ -1,16 +1,17 @@
 // Two-robot corridor: robots declare courtesy and choose entry times; collisions and yielding decide payoffs.
+// Distribution semantics: pot (200 wei) - earlier entry and courtesy affect allocation
 type time = {0, 1, 2}
 
 macro robotPayoff(myTime: time, otherTime: time, myCourteous: bool, otherCourteous: bool): int =
     (myTime != otherTime) ?
-        (10 - myTime)
+        (100 + (10 - myTime) * 10)  // Earlier entry gets bonus
     : (!myCourteous && !otherCourteous) ?
-        -5
+        50  // Collision with no courtesy
     : (myCourteous && !otherCourteous) ?
-        ((myTime + 1 <= 2) ? (10 - (myTime + 1)) : 0)
+        ((myTime + 1 <= 2) ? (100 + (10 - (myTime + 1)) * 10) : 100)  // Yield and retry
     : (!myCourteous && otherCourteous) ?
-        (10 - myTime)
-    : ((myTime + 1 <= 2) ? (10 - (myTime + 1)) : 0);
+        (100 + (10 - myTime) * 10)  // Benefit from other's courtesy
+    : ((myTime + 1 <= 2) ? (100 + (10 - (myTime + 1)) * 10) : 100);  // Both courteous
 
 join R1() $ 100 R2() $ 100;
 

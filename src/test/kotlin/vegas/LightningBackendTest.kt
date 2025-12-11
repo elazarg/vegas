@@ -39,7 +39,7 @@ class LightningBackendTest : FreeSpec({
             val output = compileCode(code)
             output shouldContain "LIGHTNING_PROTOCOL"
             output shouldContain "ROLES: A=A, B=B"
-            output shouldContain "POT: 1000"
+            output shouldContain "POT: 20"
             output shouldContain "ABORT_BALANCE:"
         }
 
@@ -121,14 +121,14 @@ class LightningBackendTest : FreeSpec({
             val code = """
                 join A() $ 10;
                 join B() $ 10;
-                withdraw { A -> -10; B -> -10 }
+                withdraw { A -> 5; B -> 10 }
             """.trimIndent()
 
             val ex = shouldThrow<CompilationException> {
                 compileCode(code)
             }
             ex.message shouldContain "Ambiguous payoff"
-            ex.message shouldContain "A=-10, B=-10"
+            ex.message shouldContain "A=5, B=10"
         }
 
         "Accepts but shouldn't: Partial payoffs (utility semantics)" {

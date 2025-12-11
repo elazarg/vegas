@@ -109,7 +109,7 @@ contract Simple {
     function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
-        int256 payout = (((A_c != B_c) || (!done_B_c)) ? 1 : (-1));
+        int256 payout = (((!done_A_c) && (!done_B_c)) ? 1 : ((!done_A_c) ? 0 : ((!done_B_c) ? 2 : ((A_c != B_c) ? 2 : 0))));
         if (payout > 0) {
             (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -119,7 +119,7 @@ contract Simple {
     function withdraw_B() public by(Role.B) action(Role.B, 6) depends(Role.A, 4) {
         require((!claimed_B), "already claimed");
         claimed_B = true;
-        int256 payout = (((A_c == B_c) || (!done_A_c)) ? 1 : (-1));
+        int256 payout = (((!done_A_c) && (!done_B_c)) ? 1 : ((!done_A_c) ? 2 : ((!done_B_c) ? 0 : ((A_c == B_c) ? 2 : 0))));
         if (payout > 0) {
             (bool ok, ) = payable(address_B).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

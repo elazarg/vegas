@@ -128,7 +128,7 @@ def withdraw_A():
         assert self.actionDone[Role.A][4], "dependency not satisfied"
     assert (not self.claimed_A), "already claimed"
     self.claimed_A = True
-    payout: int256 = 1 if ((self.A_c != self.B_c) or (not self.done_B_c)) else (-1)
+    payout: int256 = 1 if ((not self.done_A_c) and (not self.done_B_c)) else 0 if (not self.done_A_c) else 2 if (not self.done_B_c) else 2 if (self.A_c != self.B_c) else 0
     if payout > 0:
         success: bool = raw_call(self.address_A, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -147,7 +147,7 @@ def withdraw_B():
         assert self.actionDone[Role.A][4], "dependency not satisfied"
     assert (not self.claimed_B), "already claimed"
     self.claimed_B = True
-    payout: int256 = 1 if ((self.A_c == self.B_c) or (not self.done_A_c)) else (-1)
+    payout: int256 = 1 if ((not self.done_A_c) and (not self.done_B_c)) else 2 if (not self.done_A_c) else 0 if (not self.done_B_c) else 2 if (self.A_c == self.B_c) else 0
     if payout > 0:
         success: bool = raw_call(self.address_B, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

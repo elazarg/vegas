@@ -1,12 +1,14 @@
+// Three-way lottery (buggy version - different winning condition)
+// Distribution semantics: winner gets full pot (30 wei), losers get 0
 type choice = {1, 2, 3}
 
 join Issuer() $ 10;
 join Alice() $ 10;
 join Bob() $ 10;
 yield Issuer(c: choice) Alice(c: choice) Bob(c: choice);
-withdraw (Alice.c == null || Bob.c == null) ? { Alice -> -10; Bob -> -10; Issuer ->  20 }
-: (Issuer.c == null) ?                      { Alice ->  20; Bob -> -10; Issuer -> -10 }
-: (Alice.c == Bob.c ) ?                     { Alice -> -10; Bob -> -10; Issuer ->  20 }
+withdraw (Alice.c == null || Bob.c == null) ? { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Quit: Issuer wins
+: (Issuer.c == null) ?                      { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Issuer quit: Alice wins
+: (Alice.c == Bob.c ) ?                     { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Alice and Bob match: Issuer wins
 : ((Alice.c + Bob.c + Issuer.c) / 2 * 2 == (Alice.c + Bob.c + Issuer.c) ) ?
-                                            { Alice ->  20; Bob -> -10; Issuer -> -10 }
-:                                           { Alice -> -10; Bob ->  20; Issuer -> -10 }
+                                            { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Sum even: Alice wins
+:                                           { Alice -> 0; Bob -> 30; Issuer -> 0 }  // Sum odd: Bob wins

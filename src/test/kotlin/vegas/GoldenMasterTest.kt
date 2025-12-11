@@ -37,45 +37,19 @@ class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
         Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
-
-        // All games below use utility semantics instead of distribution semantics.
-        // Vegas should enforce distribution semantics (winner gets pot, loser gets 0).
-        // The EFG backend should translate to utilities for game-theoretic analysis.
-        // TODO: Rewrite examples with distribution semantics or add compiler translation.
-        Example("MontyHall", disableBackend = setOf()), // Payoffs don't sum to pot (20+0 ≠ 200)
+        Example("MontyHall", disableBackend = setOf()),
         Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
-        Example("OddsEvens", disableBackend = setOf()), // Utility semantics: both negative (-100, -100) on double-quit
-        Example("OddsEvensShort", disableBackend = setOf()), // Same as OddsEvens
-        Example("Prisoners", disableBackend = setOf()), // Utility semantics: both negative when cooperating
-        Example("Simple", disableBackend = setOf()), // Utility semantics: both positive (1, 1) or both negative
+        Example("OddsEvens", disableBackend = setOf()),
+        Example("OddsEvensShort", disableBackend = setOf()),
+        Example("Prisoners", disableBackend = setOf()),
+        Example("Simple", disableBackend = setOf()),
         Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
-        Example("Puzzle", disableBackend = setOf("gambit")), // Utility semantics (solver gets 50, proposer gets 0)
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Unbounded int
         Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
         Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
         Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game + utility semantics (ties)
+        Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game
     )
-
-    // Lightning backend requires distribution semantics: payoffs must distribute the pot.
-    // Current examples use utility semantics (game-theoretic gains/losses), which doesn't
-    // specify how to allocate deposited funds. This causes:
-    //
-    // 1. Solidity backend: Only sends positive payoffs, leaving remainder stuck in contract
-    //    (e.g., MontyHall deposits 200 wei, sends only 20 wei, wastes 180 wei)
-    //
-    // 2. Lightning backend: Rejects non-WTA outcomes where payoffs don't sum to pot
-    //    (e.g., {A -> 20, B -> 0} doesn't allocate the full 200 wei pot)
-    //
-    // 3. Gambit backend: Works fine (uses utilities for equilibrium analysis)
-    //
-    // SOLUTION: Vegas should enforce distribution semantics. Winner-takes-all means:
-    //   withdraw { Winner -> 200; Loser -> 0 }  // Full pot to winner
-    // NOT:
-    //   withdraw { Winner -> 20; Loser -> 0 }   // Partial distribution (utility semantics)
-    //
-    // TODO: Rewrite examples or add compiler translation layer.
-    //
-    // For now, individual backend tests use inline code with correct distribution semantics.
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(

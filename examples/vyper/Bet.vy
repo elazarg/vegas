@@ -37,7 +37,7 @@ def move_Race_0():
     assert not self.bailed[Role.None], "you bailed"
     assert not self.actionDone[Role.Race][0], "already done"
     assert (not self.done_Race), "already joined"
-    assert (msg.value == 100), "bad stake"
+    assert (msg.value == 10), "bad stake"
     self.roles[msg.sender] = Role.Race
     self.address_Race = msg.sender
     self.done_Race = True
@@ -57,7 +57,7 @@ def move_Gambler_1(_bet: int256):
         assert self.actionDone[Role.Race][0], "dependency not satisfied"
     assert (((_bet == 1) or (_bet == 2)) or (_bet == 3)), "domain"
     assert (not self.done_Gambler), "already joined"
-    assert (msg.value == 100), "bad stake"
+    assert (msg.value == 10), "bad stake"
     self.roles[msg.sender] = Role.Gambler
     self.address_Gambler = msg.sender
     self.done_Gambler = True
@@ -94,7 +94,7 @@ def withdraw_Gambler():
         assert self.actionDone[Role.Race][2], "dependency not satisfied"
     assert (not self.claimed_Gambler), "already claimed"
     self.claimed_Gambler = True
-    payout: int256 = 100 if ((not self.done_Race_winner) or (self.Race_winner == self.Gambler_bet)) else 0
+    payout: int256 = 20 if ((not self.done_Race_winner) or (self.Race_winner == self.Gambler_bet)) else 0
     if payout > 0:
         success: bool = raw_call(self.address_Gambler, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -113,7 +113,7 @@ def withdraw_Race():
         assert self.actionDone[Role.Race][2], "dependency not satisfied"
     assert (not self.claimed_Race), "already claimed"
     self.claimed_Race = True
-    payout: int256 = 0 if ((not self.done_Race_winner) or (self.Race_winner == self.Gambler_bet)) else 100
+    payout: int256 = 0 if ((not self.done_Race_winner) or (self.Race_winner == self.Gambler_bet)) else 20
     if payout > 0:
         success: bool = raw_call(self.address_Race, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

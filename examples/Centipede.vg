@@ -1,6 +1,6 @@
 // Short Centipede Game (4 stages):
-// Pot starts small. Players alternate passing to grow it.
-// Taking ends the game immediately.
+// Players alternate passing or taking. Later defection yields larger share.
+// Distribution semantics: pot (200 wei) allocated based on when defection occurs
 
 join Alice() $ 100 Bob() $ 100;
 
@@ -11,12 +11,12 @@ yield Bob(m4: bool)   where Alice.m1 && Bob.m2 && Alice.m3;
 
 withdraw
     (!Alice.m1) ?
-        { Alice -> 4; Bob -> 1 } // Alice takes immediately
+        { Alice -> 110; Bob -> 90 } // Alice takes immediately (small advantage)
     : (!Bob.m2) ?
-        { Alice -> 2; Bob -> 8 } // Bob takes
+        { Alice -> 80; Bob -> 120 } // Bob takes (bigger advantage)
     : (!Alice.m3) ?
-        { Alice -> 16; Bob -> 4 } // Alice takes later
+        { Alice -> 130; Bob -> 70 } // Alice takes later (even bigger)
     : (!Bob.m4) ?
-        { Alice -> 8; Bob -> 32 } // Bob takes later
+        { Alice -> 60; Bob -> 140 } // Bob takes later (biggest advantage)
     :
-        { Alice -> 64; Bob -> 64 } // Both cooperated fully
+        { Alice -> 100; Bob -> 100 } // Both cooperated fully (equal split)

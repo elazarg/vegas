@@ -171,7 +171,7 @@ def withdraw_Guest():
         assert self.actionDone[Role.Host][6], "dependency not satisfied"
     assert (not self.claimed_Guest), "already claimed"
     self.claimed_Guest = True
-    payout: int256 = 20 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else (-20) if ((self.done_Host_car and self.done_Host_goat) and self.done_Guest_switch) else 20 if ((not self.done_Host_car) or (not self.done_Host_goat)) else (-100)
+    payout: int256 = 120 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 80 if ((self.done_Host_car and self.done_Host_goat) and self.done_Guest_switch) else 200 if ((not self.done_Host_car) or (not self.done_Host_goat)) else 0
     if payout > 0:
         success: bool = raw_call(self.address_Guest, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -190,7 +190,7 @@ def withdraw_Host():
         assert self.actionDone[Role.Host][6], "dependency not satisfied"
     assert (not self.claimed_Host), "already claimed"
     self.claimed_Host = True
-    payout: int256 = 0 if ((self.done_Host_car and self.done_Host_goat) and self.done_Guest_switch) else (-100) if ((not self.done_Host_car) or (not self.done_Host_goat)) else 0
+    payout: int256 = 80 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 120 if ((self.done_Host_car and self.done_Host_goat) and self.done_Guest_switch) else 0 if ((not self.done_Host_car) or (not self.done_Host_goat)) else 200
     if payout > 0:
         success: bool = raw_call(self.address_Host, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

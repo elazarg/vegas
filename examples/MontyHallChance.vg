@@ -1,3 +1,5 @@
+// Monty Hall with random car placement
+// Distribution semantics: 20 wei transfers from loser to winner
 type door = {0, 1, 2}
 
 random Host() $ 100;
@@ -8,7 +10,7 @@ yield Host(goat: door) where Host.goat != Guest.d && Host.goat != Host.car;
 yield Guest(switch: bool);
 reveal Host(car: door);
 withdraw (Host.car != null && Host.goat != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 20 : -20;  Host -> 0 }
+     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 120 : 80;  Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 80 : 120 }
      : (Host.car == null || Host.goat == null)
-     ? { Guest -> 20;   Host -> -100 }
-     : { Guest -> -100; Host -> 0 }
+     ? { Guest -> 200;   Host -> 0 }    // Host quit, Guest wins all
+     : { Guest -> 0; Host -> 200 }      // Guest quit, Host wins all

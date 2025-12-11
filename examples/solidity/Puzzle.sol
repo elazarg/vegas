@@ -106,7 +106,7 @@ contract Puzzle {
     function withdraw_A() public by(Role.A) action(Role.A, 3) depends(Role.A, 1) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
-        int256 payout = 50;
+        int256 payout = 100;
         if (payout > 0) {
             (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

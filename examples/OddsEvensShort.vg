@@ -1,6 +1,8 @@
+// Odds and Evens (short form with join parameters)
+// Distribution semantics: winner gets full pot (200 wei), loser gets 0
 join  Odd(c: bool) $ 100
      Even(c: bool) $ 100;
 withdraw (Even.c != null && Odd.c != null) ?
-            { Even -> ((Even.c <-> Odd.c) ? 10 : -10); Odd -> ((Even.c <-> Odd.c) ? -10 : 10) }
-       : (Even.c == null && Odd.c != null) ? { Even -> -100; Odd -> 10 }
-       : { Even -> -100; Odd -> -100 }
+            { Even -> ((Even.c <-> Odd.c) ? 200 : 0); Odd -> ((Even.c <-> Odd.c) ? 0 : 200) }
+       : (Even.c == null && Odd.c != null) ? { Even -> 0; Odd -> 200 }  // Even quit, Odd wins
+       : { Even -> 100; Odd -> 100 }  // Both quit, split pot
