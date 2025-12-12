@@ -21,7 +21,7 @@ class ScribbleBackendTest : FreeSpec({
             val scribble = genScribbleFromIR(ir)
 
             // Basic structure checks
-            scribble shouldContain "module GameIR;"
+            scribble shouldContain "module Game;"
             scribble shouldContain "explicit global protocol TestScribble"
 
             // Check actions

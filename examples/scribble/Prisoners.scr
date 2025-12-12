@@ -1,4 +1,4 @@
-module GameIR;
+module Game;
 
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
