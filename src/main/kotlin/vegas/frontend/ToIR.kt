@@ -203,6 +203,8 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
         phase.actions.forEach { (role, sig) ->
             val id = role to pIdx
             val dset = deps.getOrPut(id) { mutableSetOf() }
+            val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
+            val guardReads = sig.requires.captures - writes
 
             // Phase-order dependency: immediately prior phase must have happened
             val prevPhase = pIdx - 1
@@ -213,7 +215,7 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
             }
 
             // Guard-data deps: latest writer of each captured field
-            sig.requires.captures.forEach { field ->
+            guardReads.forEach { field ->
                 val w = findLatestWriter(field, pIdx, phases)
                 if (w != null) dset += w
             }
@@ -236,7 +238,7 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
             val id = role to pIdx
 
             val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
-            val guardReads = sig.requires.captures
+            val guardReads = sig.requires.captures - writes
 
             val visibility = buildVisibilityMap(role, pIdx, sig, phases)
 
