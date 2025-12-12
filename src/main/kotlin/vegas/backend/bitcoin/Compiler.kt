@@ -318,14 +318,13 @@ object LightningCompiler {
         while (!currentConfig.isTerminal()) {
             val moves = semantics.enabledMoves(currentConfig)
 
-            val forceQuitMoves =
-                moves.filterIsInstance<Label.Play>().filter { it.tag == PlayTag.Quit && it.role in players }
-
-            if (forceQuitMoves.isEmpty()) {
+            // If multiple players are forced to quit simultaneously, we strictly enforce
+            // lexicographical ordering, to ensure deterministic abort balances.
+            val nextQuit = moves.filterIsInstance<Label.Play>().filter { it.tag == PlayTag.Quit && it.role in players }
+                .minByOrNull { it.role.name }
+            if (nextQuit == null) {
                 break
             }
-
-            val nextQuit = forceQuitMoves.first()
             currentConfig = applyMove(currentConfig, nextQuit)
             currentConfig = canonicalize(semantics, currentConfig, players)
         }
