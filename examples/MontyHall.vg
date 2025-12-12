@@ -1,5 +1,15 @@
-// Monty Hall game: Guest bets 20 wei with Host on finding the car
-// Distribution semantics: 20 wei transfers from loser to winner
+// Monty Hall game: Guest tries to find the car
+// Distribution semantics with quit punishment (pot = 40 wei, deposits = 20 each)
+//
+// Payoff structure:
+// - Fair play: Winner gets 40 (all), loser gets 0
+//   * Winner utility: +20, Loser utility: -20
+//   * Note: In this betting game, loser loses entire deposit (no partial recovery)
+// - Quit punishment: Quitter gets 0 (loses 100% of deposit, utility -20)
+//   * Non-quitter gets 40 (utility +20)
+//   * Quitting has same outcome as losing, but triggers abandonment
+//
+// This is a zero-sum betting game where partial deposit recovery doesn't make sense.
 type door = {0, 1, 2}
 
 join Host() $ 20;
@@ -10,8 +20,8 @@ yield Host(goat: door) where Host.goat != Guest.d;
 yield Guest(switch: bool);
 reveal Host(car: door) where Host.goat != Host.car;
 withdraw (Host.car != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;
+     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
          Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
-     : (Host.car == null)
-     ? { Guest -> 40;   Host -> 0 }  // Host quit, Guest wins all
-     : { Guest -> 0; Host -> 40 }     // Guest quit, Host wins all
+     : (Host.car == null)  // Host quit
+     ? { Guest -> 40;   Host -> 0 }
+     : { Guest -> 0; Host -> 40 }  // Guest quit

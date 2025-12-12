@@ -41,7 +41,7 @@ def move_A_0():
     assert not self.bailed[Role.None], "you bailed"
     assert not self.actionDone[Role.A][0], "already done"
     assert (not self.done_A), "already joined"
-    assert (msg.value == 1), "bad stake"
+    assert (msg.value == 6), "bad stake"
     self.roles[msg.sender] = Role.A
     self.address_A = msg.sender
     self.done_A = True
@@ -60,7 +60,7 @@ def move_B_1():
     if not self.bailed[Role.A]:
         assert self.actionDone[Role.A][0], "dependency not satisfied"
     assert (not self.done_B), "already joined"
-    assert (msg.value == 1), "bad stake"
+    assert (msg.value == 6), "bad stake"
     self.roles[msg.sender] = Role.B
     self.address_B = msg.sender
     self.done_B = True
@@ -128,7 +128,7 @@ def withdraw_A():
         assert self.actionDone[Role.A][4], "dependency not satisfied"
     assert (not self.claimed_A), "already claimed"
     self.claimed_A = True
-    payout: int256 = 1 if ((not self.done_A_c) and (not self.done_B_c)) else 0 if (not self.done_A_c) else 2 if (not self.done_B_c) else 2 if (self.A_c != self.B_c) else 0
+    payout: int256 = 6 if ((not self.done_A_c) and (not self.done_B_c)) else 1 if (not self.done_A_c) else 11 if (not self.done_B_c) else 9 if (self.A_c != self.B_c) else 3
     if payout > 0:
         success: bool = raw_call(self.address_A, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -147,7 +147,7 @@ def withdraw_B():
         assert self.actionDone[Role.A][4], "dependency not satisfied"
     assert (not self.claimed_B), "already claimed"
     self.claimed_B = True
-    payout: int256 = 1 if ((not self.done_A_c) and (not self.done_B_c)) else 2 if (not self.done_A_c) else 0 if (not self.done_B_c) else 2 if (self.A_c == self.B_c) else 0
+    payout: int256 = 6 if ((not self.done_A_c) and (not self.done_B_c)) else 11 if (not self.done_A_c) else 1 if (not self.done_B_c) else 9 if (self.A_c == self.B_c) else 3
     if payout > 0:
         success: bool = raw_call(self.address_B, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

@@ -27,10 +27,10 @@
 (assert (=> action_Even_5_done Even_c_done))
 
 (declare-const Even_outcome Int)
-(assert (= Even_outcome (ite (and Even_c_done Odd_c_done) (ite (= Even_c Odd_c) 200 0) (ite (and (not Even_c_done) Odd_c_done) 0 100))))
+(assert (= Even_outcome (ite (and Even_c_done Odd_c_done) (ite (= Even_c Odd_c) 126 74) (ite (and (not Even_c_done) Odd_c_done) 20 (ite (and Even_c_done (not Odd_c_done)) 180 100)))))
 
 (declare-const Odd_outcome Int)
-(assert (= Odd_outcome (ite (and Even_c_done Odd_c_done) (ite (= Even_c Odd_c) 0 200) (ite (and (not Even_c_done) Odd_c_done) 200 100))))
+(assert (= Odd_outcome (ite (and Even_c_done Odd_c_done) (ite (= Even_c Odd_c) 74 126) (ite (and (not Even_c_done) Odd_c_done) 180 (ite (and Even_c_done (not Odd_c_done)) 20 100)))))
 
 (check-sat)
 (get-model)

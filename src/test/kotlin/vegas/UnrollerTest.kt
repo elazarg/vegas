@@ -83,7 +83,7 @@ class UnrollerTest : FreeSpec({
 
             val falseChoice = tree.choices[1]
             falseChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
-            (falseChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(5)
+            (falseChoice.subtree as GameTree.Terminal).payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-95)
 
             val quitChoice = tree.choices[2]
             quitChoice.subtree.shouldBeInstanceOf<GameTree.Terminal>()
@@ -155,23 +155,23 @@ class UnrollerTest : FreeSpec({
             val bobCallsTrue = aliceBetsTrue.choices[0].subtree as GameTree.Terminal
 
             bobCallsTrue.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-80)
-            bobCallsTrue.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(0)
+            bobCallsTrue.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(-100)
 
             // Navigate to Alice bets true, Bob calls false
             val bobCallsFalse = aliceBetsTrue.choices[1].subtree as GameTree.Terminal
-            bobCallsFalse.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(5)
-            bobCallsFalse.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(15)
+            bobCallsFalse.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-95)
+            bobCallsFalse.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(-85)
 
             // Navigate to Alice bets false, Bob calls true
             val aliceBetsFalse = tree.choices[1].subtree as GameTree.Decision
             val bobCallsTrue2 = aliceBetsFalse.choices[0].subtree as GameTree.Terminal
-            bobCallsTrue2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(15)
-            bobCallsTrue2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(5)
+            bobCallsTrue2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-85)
+            bobCallsTrue2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(-95)
 
             // Navigate to Alice bets false, Bob calls false
             val bobCallsFalse2 = aliceBetsFalse.choices[1].subtree as GameTree.Terminal
-            bobCallsFalse2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(10)
-            bobCallsFalse2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(10)
+            bobCallsFalse2.payoffs[RoleId("Alice")] shouldBe Expr.Const.IntVal(-90)
+            bobCallsFalse2.payoffs[RoleId("Bob")] shouldBe Expr.Const.IntVal(-90)
         }
 
         "handles chance nodes correctly" {

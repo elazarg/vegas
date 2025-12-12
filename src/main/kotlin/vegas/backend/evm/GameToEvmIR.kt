@@ -381,6 +381,12 @@ private fun translateExpr(
         translateExpr(expr.r, contextOwner, contextParams)
     )
 
+    is Expr.Mod -> Binary(
+        BinaryOp.MOD,
+        translateExpr(expr.l, contextOwner, contextParams),
+        translateExpr(expr.r, contextOwner, contextParams)
+    )
+
     is Expr.Neg -> Unary(UnaryOp.NEG, translateExpr(expr.x, contextOwner, contextParams))
 
     is Expr.Eq -> Binary(

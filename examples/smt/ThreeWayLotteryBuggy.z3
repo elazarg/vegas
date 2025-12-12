@@ -44,13 +44,13 @@
 (assert (=> action_Bob_9_done Bob_c_done))
 
 (declare-const Bob_outcome Int)
-(assert (= Bob_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 0 (ite (not Issuer_c_done) 0 (ite (= Alice_c Bob_c) 0 (ite (= (* (div (+ (+ Alice_c Bob_c) Issuer_c) 2) 2) (+ (+ Alice_c Bob_c) Issuer_c)) 0 30))))))
+(assert (= Bob_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 6 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 6 24)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 34 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 2 (ite (not Issuer_c_done) 17 12)))))))))
 
 (declare-const Issuer_outcome Int)
-(assert (= Issuer_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 30 (ite (not Issuer_c_done) 0 (ite (= Alice_c Bob_c) 30 (ite (= (* (div (+ (+ Alice_c Bob_c) Issuer_c) 2) 2) (+ (+ Alice_c Bob_c) Issuer_c)) 0 0))))))
+(assert (= Issuer_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 24 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 6 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 34 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 2 12)))))))))
 
 (declare-const Alice_outcome Int)
-(assert (= Alice_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 0 (ite (not Issuer_c_done) 30 (ite (= Alice_c Bob_c) 0 (ite (= (* (div (+ (+ Alice_c Bob_c) Issuer_c) 2) 2) (+ (+ Alice_c Bob_c) Issuer_c)) 30 0))))))
+(assert (= Alice_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 6 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 24 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 34 (ite (not Alice_c_done) 2 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 17 12)))))))))
 
 (check-sat)
 (get-model)

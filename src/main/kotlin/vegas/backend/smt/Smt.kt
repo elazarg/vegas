@@ -80,6 +80,7 @@ private fun exprToSmt(e: Expr): String = when (e) {
     is Expr.Sub -> "(- ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
     is Expr.Mul -> "(* ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
     is Expr.Div -> "(div ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
+    is Expr.Mod -> "(mod ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
     is Expr.Neg -> "(- ${exprToSmt(e.x)})"
     is Expr.Eq -> "(= ${exprToSmt(e.l)} ${exprToSmt(e.r)})"
     is Expr.Ne -> "(not (= ${exprToSmt(e.l)} ${exprToSmt(e.r)}))"
@@ -110,6 +111,7 @@ private fun collectFields(expr: Expr): Set<FieldRef> = when (expr) {
     is Expr.Sub -> collectFields(expr.l) + collectFields(expr.r)
     is Expr.Mul -> collectFields(expr.l) + collectFields(expr.r)
     is Expr.Div -> collectFields(expr.l) + collectFields(expr.r)
+    is Expr.Mod -> collectFields(expr.l) + collectFields(expr.r)
     is Expr.Neg -> collectFields(expr.x)
     is Expr.Eq -> collectFields(expr.l) + collectFields(expr.r)
     is Expr.Ne -> collectFields(expr.l) + collectFields(expr.r)

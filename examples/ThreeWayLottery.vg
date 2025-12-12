@@ -1,18 +1,38 @@
 // Three-way lottery: winner determined by sum of choices
-// Distribution semantics: winner gets full pot (30 wei), losers get 0
+// Distribution semantics with quit punishment (pot = 36 wei, deposits = 12 each)
+//
+// Payoff structure:
+// - Fair play (all commit): Winner gets 24, losers get 6 each (50% deposit back)
+//   * Winner utility: +12, Losers utility: -6 each
+// - One quit: Quitter gets 2 (loses 83% of deposit, utility -10)
+//   * Remaining players split rest: 17 each (utility +5 each)
+// - Two quit: Non-quitter gets 34 (utility +22), quitters get 1 each (utility -11 each)
+// - All quit: Split evenly (12 each, no change)
+//
+// This ensures quitting is always worse than losing fairly (-10 or -11 vs -6).
 type choice = {1, 2, 3}
 
-join Issuer() $ 10;
-join Alice() $ 10;
-join Bob() $ 10;
+join Issuer() $ 12;
+join Alice() $ 12;
+join Bob() $ 12;
 yield Issuer(c: choice) Alice(c: choice) Bob(c: choice);
 
-withdraw (Alice.c  == null || Bob.c == null)
-            ? { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Alice or Bob quit, Issuer wins
-     : (Issuer.c == null)
-            ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Issuer quit, Alice wins
-     : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c))
-            ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Sum divisible by 3: Alice wins
-     : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c)-1)
-            ? { Alice -> 0; Bob -> 30; Issuer -> 0 }  // Sum ≡ 1 (mod 3): Bob wins
-     :        { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Sum ≡ 2 (mod 3): Issuer wins
+withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
+     ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
+            ? { Alice -> 24; Bob -> 6; Issuer -> 6 }  // Sum div by 3: Alice wins
+       : ((Issuer.c + Alice.c + Bob.c) % 3 == 1)
+            ? { Alice -> 6; Bob -> 24; Issuer -> 6 }  // Sum ≡ 1 (mod 3): Bob wins
+            : { Alice -> 6; Bob -> 6; Issuer -> 24 }) // Sum ≡ 2 (mod 3): Issuer wins
+     : (Alice.c == null && Bob.c == null)  // Two quit
+            ? { Alice -> 1; Bob -> 1; Issuer -> 34 }
+     : (Alice.c == null && Issuer.c == null)
+            ? { Alice -> 1; Bob -> 34; Issuer -> 1 }
+     : (Bob.c == null && Issuer.c == null)
+            ? { Alice -> 34; Bob -> 1; Issuer -> 1 }
+     : (Alice.c == null)  // Only Alice quit
+            ? { Alice -> 2; Bob -> 17; Issuer -> 17 }
+     : (Bob.c == null)    // Only Bob quit
+            ? { Alice -> 17; Bob -> 2; Issuer -> 17 }
+     : (Issuer.c == null) // Only Issuer quit
+            ? { Alice -> 17; Bob -> 17; Issuer -> 2 }
+            : { Alice -> 12; Bob -> 12; Issuer -> 12 }  // All quit

@@ -31,12 +31,13 @@ fun eval(exp: Exp, env: Env<Const>): Const {
                 "!=" -> Bool(l != r)
                 "<->" -> Bool(l == r)
                 "<-!->" -> Bool(l != r)
-                "+", "-", "*", "/", "<", "<=", ">", ">=" ->
+                "+", "-", "*", "/", "%", "<", "<=", ">", ">=" ->
                     if (l is Num && r is Num) when (e.op) {
                         "+" -> Num(l.n + r.n)
                         "-" -> Num(l.n - r.n)
                         "*" -> Num(l.n * r.n)
                         "/" -> Num(l.n / r.n)
+                        "%" -> Num(l.n % r.n)
                         "<" -> Bool(l.n < r.n)
                         "<=" -> Bool(l.n <= r.n)
                         ">" -> Bool(l.n > r.n)

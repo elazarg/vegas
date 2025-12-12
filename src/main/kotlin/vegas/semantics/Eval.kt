@@ -31,6 +31,7 @@ internal fun eval(readField: (FieldRef)-> Expr.Const, e: Expr): Expr.Const {
         is Expr.Sub -> IntVal(eval0(x.l).asInt() - eval0(x.r).asInt())
         is Expr.Mul -> IntVal(eval0(x.l).asInt() * eval0(x.r).asInt())
         is Expr.Div -> IntVal(eval0(x.l).asInt() / eval0(x.r).asInt())
+        is Expr.Mod -> IntVal(eval0(x.l).asInt() % eval0(x.r).asInt())
         is Expr.Neg -> IntVal(-eval0(x.x).asInt())
 
         // comparisons

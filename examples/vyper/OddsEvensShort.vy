@@ -122,7 +122,7 @@ def withdraw_Even():
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     assert (not self.claimed_Even), "already claimed"
     self.claimed_Even = True
-    payout: int256 = 200 if (self.Even_c == self.Odd_c) else 0 if (self.done_Even_c and self.done_Odd_c) else 0 if ((not self.done_Even_c) and self.done_Odd_c) else 100
+    payout: int256 = 126 if (self.Even_c == self.Odd_c) else 74 if (self.done_Even_c and self.done_Odd_c) else 20 if ((not self.done_Even_c) and self.done_Odd_c) else 180 if (self.done_Even_c and (not self.done_Odd_c)) else 100
     if payout > 0:
         success: bool = raw_call(self.address_Even, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -144,7 +144,7 @@ def withdraw_Odd():
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     assert (not self.claimed_Odd), "already claimed"
     self.claimed_Odd = True
-    payout: int256 = 0 if (self.Even_c == self.Odd_c) else 200 if (self.done_Even_c and self.done_Odd_c) else 200 if ((not self.done_Even_c) and self.done_Odd_c) else 100
+    payout: int256 = 74 if (self.Even_c == self.Odd_c) else 126 if (self.done_Even_c and self.done_Odd_c) else 180 if ((not self.done_Even_c) and self.done_Odd_c) else 20 if (self.done_Even_c and (not self.done_Odd_c)) else 100
     if payout > 0:
         success: bool = raw_call(self.address_Odd, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

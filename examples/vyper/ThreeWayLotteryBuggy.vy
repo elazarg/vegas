@@ -55,7 +55,7 @@ def move_Issuer_0():
     assert not self.bailed[Role.None], "you bailed"
     assert not self.actionDone[Role.Issuer][0], "already done"
     assert (not self.done_Issuer), "already joined"
-    assert (msg.value == 10), "bad stake"
+    assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Issuer
     self.address_Issuer = msg.sender
     self.done_Issuer = True
@@ -74,7 +74,7 @@ def move_Alice_1():
     if not self.bailed[Role.Issuer]:
         assert self.actionDone[Role.Issuer][0], "dependency not satisfied"
     assert (not self.done_Alice), "already joined"
-    assert (msg.value == 10), "bad stake"
+    assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Alice
     self.address_Alice = msg.sender
     self.done_Alice = True
@@ -93,7 +93,7 @@ def move_Bob_2():
     if not self.bailed[Role.Alice]:
         assert self.actionDone[Role.Alice][1], "dependency not satisfied"
     assert (not self.done_Bob), "already joined"
-    assert (msg.value == 10), "bad stake"
+    assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Bob
     self.address_Bob = msg.sender
     self.done_Bob = True
@@ -241,7 +241,7 @@ def withdraw_Bob():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Bob), "already claimed"
     self.claimed_Bob = True
-    payout: int256 = 0 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 0 if (not self.done_Issuer_c) else 0 if (self.Alice_c == self.Bob_c) else 0 if (((((self.Alice_c + self.Bob_c) + self.Issuer_c) / 2) * 2) == ((self.Alice_c + self.Bob_c) + self.Issuer_c)) else 30
+    payout: int256 = 6 if (self.Alice_c == self.Bob_c) else 6 if ((((self.Alice_c + self.Bob_c) + self.Issuer_c) % 2) == 0) else 24 if ((self.done_Alice_c and self.done_Bob_c) and self.done_Issuer_c) else 1 if ((not self.done_Alice_c) and (not self.done_Bob_c)) else 34 if ((not self.done_Alice_c) and (not self.done_Issuer_c)) else 1 if ((not self.done_Bob_c) and (not self.done_Issuer_c)) else 17 if (not self.done_Alice_c) else 2 if (not self.done_Bob_c) else 17 if (not self.done_Issuer_c) else 12
     if payout > 0:
         success: bool = raw_call(self.address_Bob, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -266,7 +266,7 @@ def withdraw_Issuer():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Issuer), "already claimed"
     self.claimed_Issuer = True
-    payout: int256 = 30 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 0 if (not self.done_Issuer_c) else 30 if (self.Alice_c == self.Bob_c) else 0 if (((((self.Alice_c + self.Bob_c) + self.Issuer_c) / 2) * 2) == ((self.Alice_c + self.Bob_c) + self.Issuer_c)) else 0
+    payout: int256 = 24 if (self.Alice_c == self.Bob_c) else 6 if ((((self.Alice_c + self.Bob_c) + self.Issuer_c) % 2) == 0) else 6 if ((self.done_Alice_c and self.done_Bob_c) and self.done_Issuer_c) else 34 if ((not self.done_Alice_c) and (not self.done_Bob_c)) else 1 if ((not self.done_Alice_c) and (not self.done_Issuer_c)) else 1 if ((not self.done_Bob_c) and (not self.done_Issuer_c)) else 17 if (not self.done_Alice_c) else 17 if (not self.done_Bob_c) else 2 if (not self.done_Issuer_c) else 12
     if payout > 0:
         success: bool = raw_call(self.address_Issuer, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -291,7 +291,7 @@ def withdraw_Alice():
         assert self.actionDone[Role.Bob][9], "dependency not satisfied"
     assert (not self.claimed_Alice), "already claimed"
     self.claimed_Alice = True
-    payout: int256 = 0 if ((not self.done_Alice_c) or (not self.done_Bob_c)) else 30 if (not self.done_Issuer_c) else 0 if (self.Alice_c == self.Bob_c) else 30 if (((((self.Alice_c + self.Bob_c) + self.Issuer_c) / 2) * 2) == ((self.Alice_c + self.Bob_c) + self.Issuer_c)) else 0
+    payout: int256 = 6 if (self.Alice_c == self.Bob_c) else 24 if ((((self.Alice_c + self.Bob_c) + self.Issuer_c) % 2) == 0) else 6 if ((self.done_Alice_c and self.done_Bob_c) and self.done_Issuer_c) else 1 if ((not self.done_Alice_c) and (not self.done_Bob_c)) else 1 if ((not self.done_Alice_c) and (not self.done_Issuer_c)) else 34 if ((not self.done_Bob_c) and (not self.done_Issuer_c)) else 2 if (not self.done_Alice_c) else 17 if (not self.done_Bob_c) else 17 if (not self.done_Issuer_c) else 12
     if payout > 0:
         success: bool = raw_call(self.address_Alice, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

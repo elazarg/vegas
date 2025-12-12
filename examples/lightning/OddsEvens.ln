@@ -42,38 +42,38 @@ STATES:
       -> 10 via Play(role=Even, delta={Even.c=BoolVal(v=false)}, tag=Action(actionId=(Even, 5)))
   
   STATE 7 [TURN: Odd]
-    ABORT_BALANCE: A=100, B=100
+    ABORT_BALANCE: A=180, B=20
     TRANSITIONS:
       -> 11 via Play(role=Odd, delta={Odd.c=BoolVal(v=true)}, tag=Action(actionId=(Odd, 3)))
   
   STATE 8 [TURN: Odd]
-    ABORT_BALANCE: A=100, B=100
+    ABORT_BALANCE: A=180, B=20
     TRANSITIONS:
       -> 12 via Play(role=Odd, delta={Odd.c=BoolVal(v=false)}, tag=Action(actionId=(Odd, 3)))
   
   STATE 9 [TURN: Odd]
-    ABORT_BALANCE: A=100, B=100
+    ABORT_BALANCE: A=180, B=20
     TRANSITIONS:
       -> 13 via Play(role=Odd, delta={Odd.c=BoolVal(v=true)}, tag=Action(actionId=(Odd, 3)))
   
   STATE 10 [TURN: Odd]
-    ABORT_BALANCE: A=100, B=100
+    ABORT_BALANCE: A=180, B=20
     TRANSITIONS:
       -> 14 via Play(role=Odd, delta={Odd.c=BoolVal(v=false)}, tag=Action(actionId=(Odd, 3)))
   
   STATE 11 [TERMINAL]
-    ABORT_BALANCE: A=200, B=0
+    ABORT_BALANCE: A=126, B=74
     TRANSITIONS: <NONE>
   
   STATE 12 [TERMINAL]
-    ABORT_BALANCE: A=0, B=200
+    ABORT_BALANCE: A=74, B=126
     TRANSITIONS: <NONE>
   
   STATE 13 [TERMINAL]
-    ABORT_BALANCE: A=0, B=200
+    ABORT_BALANCE: A=74, B=126
     TRANSITIONS: <NONE>
   
   STATE 14 [TERMINAL]
-    ABORT_BALANCE: A=200, B=0
+    ABORT_BALANCE: A=126, B=74
     TRANSITIONS: <NONE>
   

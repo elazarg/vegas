@@ -1,14 +1,28 @@
 // Three-way lottery (buggy version - different winning condition)
-// Distribution semantics: winner gets full pot (30 wei), losers get 0
+// Distribution semantics with quit punishment - see ThreeWayLottery.vg for rationale
 type choice = {1, 2, 3}
 
-join Issuer() $ 10;
-join Alice() $ 10;
-join Bob() $ 10;
+join Issuer() $ 12;
+join Alice() $ 12;
+join Bob() $ 12;
 yield Issuer(c: choice) Alice(c: choice) Bob(c: choice);
-withdraw (Alice.c == null || Bob.c == null) ? { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Quit: Issuer wins
-: (Issuer.c == null) ?                      { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Issuer quit: Alice wins
-: (Alice.c == Bob.c ) ?                     { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Alice and Bob match: Issuer wins
-: ((Alice.c + Bob.c + Issuer.c) / 2 * 2 == (Alice.c + Bob.c + Issuer.c) ) ?
-                                            { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Sum even: Alice wins
-:                                           { Alice -> 0; Bob -> 30; Issuer -> 0 }  // Sum odd: Bob wins
+
+withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
+     ? ((Alice.c == Bob.c)
+            ? { Alice -> 6; Bob -> 6; Issuer -> 24 }  // Match: Issuer wins
+       : (((Alice.c + Bob.c + Issuer.c) % 2) == 0)
+            ? { Alice -> 24; Bob -> 6; Issuer -> 6 }  // Sum even: Alice wins
+            : { Alice -> 6; Bob -> 24; Issuer -> 6 }) // Sum odd: Bob wins
+     : (Alice.c == null && Bob.c == null)
+            ? { Alice -> 1; Bob -> 1; Issuer -> 34 }
+     : (Alice.c == null && Issuer.c == null)
+            ? { Alice -> 1; Bob -> 34; Issuer -> 1 }
+     : (Bob.c == null && Issuer.c == null)
+            ? { Alice -> 34; Bob -> 1; Issuer -> 1 }
+     : (Alice.c == null)
+            ? { Alice -> 2; Bob -> 17; Issuer -> 17 }
+     : (Bob.c == null)
+            ? { Alice -> 17; Bob -> 2; Issuer -> 17 }
+     : (Issuer.c == null)
+            ? { Alice -> 17; Bob -> 17; Issuer -> 2 }
+            : { Alice -> 12; Bob -> 12; Issuer -> 12 }

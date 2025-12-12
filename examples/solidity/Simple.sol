@@ -76,7 +76,7 @@ contract Simple {
     
     function move_A_0() public payable by(Role.None) action(Role.A, 0) {
         require((!done_A), "already joined");
-        require((msg.value == 1), "bad stake");
+        require((msg.value == 6), "bad stake");
         roles[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
@@ -84,7 +84,7 @@ contract Simple {
     
     function move_B_1() public payable by(Role.None) action(Role.B, 1) depends(Role.A, 0) {
         require((!done_B), "already joined");
-        require((msg.value == 1), "bad stake");
+        require((msg.value == 6), "bad stake");
         roles[msg.sender] = Role.B;
         address_B = msg.sender;
         done_B = true;
@@ -109,7 +109,7 @@ contract Simple {
     function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
-        int256 payout = (((!done_A_c) && (!done_B_c)) ? 1 : ((!done_A_c) ? 0 : ((!done_B_c) ? 2 : ((A_c != B_c) ? 2 : 0))));
+        int256 payout = (((!done_A_c) && (!done_B_c)) ? 6 : ((!done_A_c) ? 1 : ((!done_B_c) ? 11 : ((A_c != B_c) ? 9 : 3))));
         if (payout > 0) {
             (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -119,7 +119,7 @@ contract Simple {
     function withdraw_B() public by(Role.B) action(Role.B, 6) depends(Role.A, 4) {
         require((!claimed_B), "already claimed");
         claimed_B = true;
-        int256 payout = (((!done_A_c) && (!done_B_c)) ? 1 : ((!done_A_c) ? 2 : ((!done_B_c) ? 0 : ((A_c == B_c) ? 2 : 0))));
+        int256 payout = (((!done_A_c) && (!done_B_c)) ? 6 : ((!done_A_c) ? 11 : ((!done_B_c) ? 1 : ((A_c == B_c) ? 9 : 3))));
         if (payout > 0) {
             (bool ok, ) = payable(address_B).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

@@ -1,17 +1,27 @@
 // Three-way lottery (short form with join parameters)
-// Distribution semantics: winner gets full pot (30 wei), losers get 0
+// Distribution semantics with quit punishment - see ThreeWayLottery.vg for rationale
 type choice = {1, 2, 3}
 
-join Issuer(c: choice) $ 10
-     Alice(c: choice) $ 10
-     Bob(c: choice) $ 10;
+join Issuer(c: choice) $ 12
+     Alice(c: choice) $ 12
+     Bob(c: choice) $ 12;
 
-withdraw (Alice.c  == null || Bob.c == null)
-             ? { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Alice or Bob quit, Issuer wins
-      : (Issuer.c == null)
-             ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Issuer quit, Alice wins
-      : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c))
-             ? { Alice -> 30; Bob -> 0; Issuer -> 0 }  // Sum divisible by 3: Alice wins
-      : ((Issuer.c + Alice.c + Bob.c) / 3 * 3 == (Issuer.c + Alice.c + Bob.c)-1)
-             ? { Alice -> 0; Bob -> 30; Issuer -> 0 }  // Sum ≡ 1 (mod 3): Bob wins
-      :        { Alice -> 0; Bob -> 0; Issuer -> 30 }  // Sum ≡ 2 (mod 3): Issuer wins
+withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
+     ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
+            ? { Alice -> 24; Bob -> 6; Issuer -> 6 }
+       : ((Issuer.c + Alice.c + Bob.c) % 3 == 1)
+            ? { Alice -> 6; Bob -> 24; Issuer -> 6 }
+            : { Alice -> 6; Bob -> 6; Issuer -> 24 })
+     : (Alice.c == null && Bob.c == null)
+            ? { Alice -> 1; Bob -> 1; Issuer -> 34 }
+     : (Alice.c == null && Issuer.c == null)
+            ? { Alice -> 1; Bob -> 34; Issuer -> 1 }
+     : (Bob.c == null && Issuer.c == null)
+            ? { Alice -> 34; Bob -> 1; Issuer -> 1 }
+     : (Alice.c == null)
+            ? { Alice -> 2; Bob -> 17; Issuer -> 17 }
+     : (Bob.c == null)
+            ? { Alice -> 17; Bob -> 2; Issuer -> 17 }
+     : (Issuer.c == null)
+            ? { Alice -> 17; Bob -> 17; Issuer -> 2 }
+            : { Alice -> 12; Bob -> 12; Issuer -> 12 }

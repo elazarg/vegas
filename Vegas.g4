@@ -42,7 +42,7 @@ exp
     | role=roleId '.' field=varId                            # MemberExp
     | callee=varId '(' (args+=exp (',' args+=exp)*)?  ')'    # CallExp
     | op=('-' | '!') exp                                     # UnOpExp
-    | left=exp op=('*' | '/') right=exp                      # BinOpMultExp
+    | left=exp op=('*' | '/' | '%') right=exp                # BinOpMultExp
     | left=exp op=('+' | '-') right=exp                      # BinOpAddExp
     | exp op=('!='|'==') 'null'                              # UndefExp
     | left=exp op=('<' | '<=' | '>=' | '>') right=exp        # BinOpCompExp
