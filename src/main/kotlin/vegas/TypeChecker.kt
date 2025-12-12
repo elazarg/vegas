@@ -50,7 +50,7 @@ private object Pretty {
         INT -> "int"
         BOOL -> "bool"
         ADDRESS -> "address"
-        EMPTY -> "∅"
+        EMPTY -> "Empty"
         is TypeId -> t.name
         is Hidden -> "hidden ${wrapIfComplex(t.type)}"
         is Opt -> "opt ${wrapIfComplex(t.type)}"
@@ -429,7 +429,7 @@ private class Checker(
      * Compatibility: resolves aliases, strips Hidden, then:
      *  - equal types are compatible,
      *  - if join collapses to one side, types are compatible,
-     *  - Range/Subset compatible if subset ⊆ range.
+     *  - Range/Subset compatible if subset <= range.
      */
     fun compatible(t1Raw: TypeExp, t2Raw: TypeExp): Boolean {
         val t1 = stripHidden(resolve(t1Raw))

@@ -253,12 +253,12 @@ private fun computeDiff(expected: String, actual: String): String {
 
     val maxLines = maxOf(expectedLines.size, actualLines.size)
     for (i in 0 until maxLines) {
-        val e = expectedLines.getOrNull(i) ?: ""
-        val a = actualLines.getOrNull(i) ?: ""
-        if (e != a) {
+        val expectedLine = expectedLines.getOrNull(i) ?: ""
+        val actualLine = actualLines.getOrNull(i) ?: ""
+        if (expectedLine != actualLine) {
             diff.appendLine("Line ${i + 1}:")
-            if (e.isNotEmpty()) diff.appendLine("  - $e")
-            if (a.isNotEmpty()) diff.appendLine("  + $a")
+            if (expectedLine.isNotEmpty()) diff.appendLine("  - $expectedLine")
+            if (actualLine.isNotEmpty()) diff.appendLine("  + $actualLine")
         }
     }
     return if (diff.isEmpty()) "No differences" else diff.toString()
