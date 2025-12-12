@@ -78,7 +78,6 @@ fun Expr.Const.asInt(): Int = when (this) {
  */
 data class Requirement(
     val captures: Set<FieldRef>,    // Fields this guard MAY read (must be from DAG predecessors)
-//    val deferred: Set<FieldRef>,    // Captures that are hidden (deferred)
     val condition: Expr             // boolean; see "Guard scheduling"
 )
 

@@ -1,73 +1,59 @@
 module Game;
 
-type <java> "java.lang.Integer" from "rt.jar" as choice;
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol ThreeWayLottery(role Server, role Issuer, role Alice, role Bob){
     connect Server to Issuer;
-    Broadcast() from Server to Alice, Bob;
     connect Server to Alice;
-    Broadcast() from Server to Issuer, Bob;
     connect Server to Bob;
-    Broadcast() from Server to Issuer, Alice;
-    Public_c(choice) from Issuer to Server;
-    Broadcast_c(choice) from Server to Alice, Bob;
-    Public_c(choice) from Alice to Server;
-    Broadcast_c(choice) from Server to Issuer, Bob;
-    Public_c(choice) from Bob to Server;
-    Broadcast_c(choice) from Server to Issuer, Alice;
-    Withdraw() from Bob to Server;
-    Withdraw() from Issuer to Server;
-    Withdraw() from Alice to Server;
+    Hidden_c(hidden) from Issuer to Server;
+    Hidden_c(hidden) from Alice to Server;
+    Hidden_c(hidden) from Bob to Server;
+    Reveal_c(int) from Issuer to Server;
+    Broadcast_c(int) from Server to Alice, Bob;
+    Reveal_c(int) from Alice to Server;
+    Broadcast_c(int) from Server to Issuer, Bob;
+    Reveal_c(int) from Bob to Server;
+    Broadcast_c(int) from Server to Issuer, Alice;
 }
 
 
 local protocol ThreeWayLottery_Issuer(role Server, role Issuer){
     accept Server;
-    Broadcast() from Server;
-    Broadcast() from Server;
-    Public_c(choice) to Server;
-    Broadcast_c(choice) from Server;
-    Broadcast_c(choice) from Server;
-    Withdraw() to Server;
+    Hidden_c(hidden) to Server;
+    Reveal_c(int) to Server;
+    Broadcast_c(int) from Server;
+    Broadcast_c(int) from Server;
 }
 
 
 local protocol ThreeWayLottery_Alice(role Server, role Alice){
-    Broadcast() from Server;
     accept Server;
-    Broadcast() from Server;
-    Broadcast_c(choice) from Server;
-    Public_c(choice) to Server;
-    Broadcast_c(choice) from Server;
-    Withdraw() to Server;
+    Hidden_c(hidden) to Server;
+    Broadcast_c(int) from Server;
+    Reveal_c(int) to Server;
+    Broadcast_c(int) from Server;
 }
 
 
 local protocol ThreeWayLottery_Bob(role Server, role Bob){
-    Broadcast() from Server;
-    Broadcast() from Server;
     accept Server;
-    Broadcast_c(choice) from Server;
-    Broadcast_c(choice) from Server;
-    Public_c(choice) to Server;
-    Withdraw() to Server;
+    Hidden_c(hidden) to Server;
+    Broadcast_c(int) from Server;
+    Broadcast_c(int) from Server;
+    Reveal_c(int) to Server;
 }
 
 
 local protocol ThreeWayLottery_Server(role Server, role Issuer, role Alice, role Bob){
-    Broadcast() to Alice, Bob;
-    Broadcast() to Issuer, Bob;
-    Broadcast() to Issuer, Alice;
-    Public_c(choice) from Issuer;
-    Broadcast_c(choice) to Alice, Bob;
-    Public_c(choice) from Alice;
-    Broadcast_c(choice) to Issuer, Bob;
-    Public_c(choice) from Bob;
-    Broadcast_c(choice) to Issuer, Alice;
-    Withdraw() from Bob;
-    Withdraw() from Issuer;
-    Withdraw() from Alice;
+    Hidden_c(hidden) from Issuer;
+    Hidden_c(hidden) from Alice;
+    Hidden_c(hidden) from Bob;
+    Reveal_c(int) from Issuer;
+    Broadcast_c(int) to Alice, Bob;
+    Reveal_c(int) from Alice;
+    Broadcast_c(int) to Issuer, Bob;
+    Reveal_c(int) from Bob;
+    Broadcast_c(int) to Issuer, Alice;
 }

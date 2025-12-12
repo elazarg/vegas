@@ -10,6 +10,7 @@ import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
+import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -71,6 +72,10 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "ln", "lightning") { prog ->
                 val ir = compileToIR(prog)
                 generateLightningProtocol(ir)
+            },
+            TestCase(example, "scr", "scribble") { prog ->
+                val ir = compileToIR(prog)
+                genScribbleFromIR(ir)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -253,12 +258,12 @@ private fun computeDiff(expected: String, actual: String): String {
 
     val maxLines = maxOf(expectedLines.size, actualLines.size)
     for (i in 0 until maxLines) {
-        val e = expectedLines.getOrNull(i) ?: ""
-        val a = actualLines.getOrNull(i) ?: ""
-        if (e != a) {
+        val expectedLine = expectedLines.getOrNull(i) ?: ""
+        val actualLine = actualLines.getOrNull(i) ?: ""
+        if (expectedLine != actualLine) {
             diff.appendLine("Line ${i + 1}:")
-            if (e.isNotEmpty()) diff.appendLine("  - $e")
-            if (a.isNotEmpty()) diff.appendLine("  + $a")
+            if (expectedLine.isNotEmpty()) diff.appendLine("  - $expectedLine")
+            if (actualLine.isNotEmpty()) diff.appendLine("  + $actualLine")
         }
     }
     return if (diff.isEmpty()) "No differences" else diff.toString()

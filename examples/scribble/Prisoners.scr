@@ -2,47 +2,40 @@ module Game;
 
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol Prisoners(role Server, role A, role B){
     connect Server to A;
-    Broadcast() from Server to B;
     connect Server to B;
-    Broadcast() from Server to A;
-    Public_c(bool) from A to Server;
+    Hidden_c(hidden) from A to Server;
+    Hidden_c(hidden) from B to Server;
+    Reveal_c(bool) from A to Server;
     Broadcast_c(bool) from Server to B;
-    Public_c(bool) from B to Server;
+    Reveal_c(bool) from B to Server;
     Broadcast_c(bool) from Server to A;
-    Withdraw() from A to Server;
-    Withdraw() from B to Server;
 }
 
 
 local protocol Prisoners_A(role Server, role A){
     accept Server;
-    Broadcast() from Server;
-    Public_c(bool) to Server;
+    Hidden_c(hidden) to Server;
+    Reveal_c(bool) to Server;
     Broadcast_c(bool) from Server;
-    Withdraw() to Server;
 }
 
 
 local protocol Prisoners_B(role Server, role B){
-    Broadcast() from Server;
     accept Server;
+    Hidden_c(hidden) to Server;
     Broadcast_c(bool) from Server;
-    Public_c(bool) to Server;
-    Withdraw() to Server;
+    Reveal_c(bool) to Server;
 }
 
 
 local protocol Prisoners_Server(role Server, role A, role B){
-    Broadcast() to B;
-    Broadcast() to A;
-    Public_c(bool) from A;
+    Hidden_c(hidden) from A;
+    Hidden_c(hidden) from B;
+    Reveal_c(bool) from A;
     Broadcast_c(bool) to B;
-    Public_c(bool) from B;
+    Reveal_c(bool) from B;
     Broadcast_c(bool) to A;
-    Withdraw() from A;
-    Withdraw() from B;
 }

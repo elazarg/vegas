@@ -1,11 +1,11 @@
 package vegas.backend.scribble
 
-import vegas.FieldRef
 import vegas.RoleId
 import vegas.ir.GameIR
-import vegas.frontend.Phase
-import vegas.ir.Signature
 import vegas.ir.Type
+import vegas.ir.ActionDag
+import vegas.ir.ActionMeta
+import vegas.ir.Visibility
 
 fun genScribbleFromIR(g: GameIR): String {
     val protocol = generateScribbleFromIR(g)
@@ -18,7 +18,7 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
         "bool" to "Boolean"
     )
 
-    val actions = phasesToScribble(g)
+    val actions = dagToScribble(g.dag, g.roles)
 
     return Sast.Protocol(
         name = g.name,
@@ -28,101 +28,55 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
     )
 }
 
-// ========== Phase to Scribble Actions ==========
-
-private fun phasesToScribble(g: GameIR): List<Sast.Action> {
-    throw NotImplementedError("Scribble backend not yet migrated to ActionDag")
-}
-
-private fun phaseToScribble(
-    phase: Phase,
-    phaseIdx: Int,
-    history: Map<FieldRef, List<ParamOccurrence>>,
-    allRoles: Set<RoleId>
-): List<Sast.Action> {
-    // Process signatures in consistent order (matches AST sortedBy rankOrder)
-    return phase.actions.entries
-        .flatMap { (role, sig) ->
-            signatureToScribble(role, sig, phaseIdx, history, allRoles)
-        }
-        .sortedBy { rankOrder(it) }
-}
-
-private fun signatureToScribble(
-    role: RoleId,
-    sig: Signature,
-    phaseIdx: Int,
-    history: Map<FieldRef, List<ParamOccurrence>>,
-    allRoles: Set<RoleId>
-): List<Sast.Action> {
-    val actions = mutableListOf<Sast.Action>()
-
-    // Determine if this is a reveal
-    val isReveal = sig.parameters.any { param ->
-        val occurrences = history[FieldRef(role, param.name)] ?: emptyList()
-        val priorCommit = occurrences.any { it.phase < phaseIdx && !it.visible }
-        priorCommit && param.visible
+private fun dagToScribble(dag: ActionDag, allRoles: Set<RoleId>): List<Sast.Action> {
+    // Use topological sort to ensure dependencies are respected (e.g. commit-reveal ordering)
+    return dag.topo().flatMap { id ->
+        actionToScribble(dag.meta(id), allRoles)
     }
+}
 
-    // Connect action for joins
-    if (sig.join != null) {
+private fun actionToScribble(meta: ActionMeta, allRoles: Set<RoleId>): List<Sast.Action> {
+    val actions = mutableListOf<Sast.Action>()
+    val role = meta.struct.owner
+
+    // 1. Connect (Join)
+    if (meta.spec.join != null) {
         actions.add(Sast.Action.Connect(role))
     }
 
-    // Send actions
-    if (isReveal) {
-        // Reveal: send all parameters as "Reveal"
-        val params = sig.parameters.map { param ->
+    // 2. Send action
+    // Map visibility to Scribble label
+    val label = when (meta.kind) {
+        Visibility.COMMIT -> "Hidden"
+        Visibility.REVEAL -> "Reveal"
+        Visibility.PUBLIC -> "Public"
+    }
+
+    val params = meta.spec.params.map { param ->
+        val typeStr = if (meta.kind == Visibility.COMMIT) "hidden" else scribbleTypeOf(param.type)
+        param.name.name to typeStr
+    }
+
+    // Always generate a Send action if there are parameters or if it's a commit (implying hidden info)
+    // Or even if empty? Scribble actions usually have content or just signal.
+    // If params is empty, we still send the label (e.g. reveal without params? maybe not possible in Vegas)
+    if (params.isNotEmpty()) {
+        actions.add(Sast.Action.Send(label, params, role, setOf(SERVER)))
+    }
+
+    // 3. Broadcast (if visible)
+    if (meta.kind == Visibility.REVEAL || meta.kind == Visibility.PUBLIC) {
+        val broadcastParams = meta.spec.params.map { param ->
             param.name.name to scribbleTypeOf(param.type)
         }
-        actions.add(Sast.Action.Send("Reveal", params, role, setOf(SERVER)))
-    } else {
-        // Regular: split hidden/public
-        val (hidden, public) = sig.parameters.partition { !it.visible }
-
-        if (hidden.isNotEmpty()) {
-            val params = hidden.map { param ->
-                param.name.name to "hidden"
-            }
-            actions.add(Sast.Action.Send("Hidden", params, role, setOf(SERVER)))
-        }
-
-        if (public.isNotEmpty()) {
-            val params = public.map { param ->
-                param.name.name to scribbleTypeOf(param.type)
-            }
-            actions.add(Sast.Action.Send("Public", params, role, setOf(SERVER)))
+        val targets = allRoles - role
+        if (broadcastParams.isNotEmpty() && targets.isNotEmpty()) {
+             actions.add(Sast.Action.Send("Broadcast", broadcastParams, SERVER, targets))
         }
     }
 
-    // Broadcast non-hidden parameters
-    val broadcastParams = sig.parameters
-        .filter { it.visible }
-        .map { param -> param.name.name to scribbleTypeOf(param.type) }
-
-    actions.add(Sast.Action.Send("Broadcast", broadcastParams, SERVER, allRoles - role))
-
     return actions
 }
-
-// ========== Parameter History Tracking ==========
-
-private data class ParamOccurrence(val phase: Int, val visible: Boolean)
-
-private fun buildParamHistory(g: GameIR): Map<FieldRef, List<ParamOccurrence>> {
-    throw NotImplementedError("Scribble backend not yet migrated to ActionDag")
-}
-
-// ========== Utilities ==========
-
-private fun rankOrder(action: Sast.Action): Int =
-    if (action is Sast.Action.Send) {
-        when (action.label) {
-            "Hidden" -> 1
-            "Reveal" -> 2
-            else -> 3
-        }
-    } else 0
 
 private fun scribbleTypeOf(t: Type): String = when (t) {
     Type.IntType -> "int"

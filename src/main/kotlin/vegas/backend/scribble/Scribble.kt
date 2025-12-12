@@ -28,7 +28,7 @@ val SERVER = RoleId("Server")
 
 fun Sast.Protocol.prettyPrintAll(): String {
     val typedecls = types.map { """type <java> "java.lang.${it.value}" from "rt.jar" as ${it.key};""" }.join("\n")
-    val items = listOf("module GameIR;", typedecls, prettyPrint()) + (roles + SERVER).map { prettyPrint(it) }
+    val items = listOf("module Game;", typedecls, prettyPrint()) + (roles + SERVER).map { prettyPrint(it) }
     return items.join("\n\n")
 }
 
