@@ -10,6 +10,7 @@ import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
+import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -71,6 +72,10 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "ln", "lightning") { prog ->
                 val ir = compileToIR(prog)
                 generateLightningProtocol(ir)
+            },
+            TestCase(example, "scr", "scribble") { prog ->
+                val ir = compileToIR(prog)
+                genScribbleFromIR(ir)
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }

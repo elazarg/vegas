@@ -1,23 +1,18 @@
-module Game;
+module GameIR;
 
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol Trivial1(role Server, role A){
     connect Server to A;
-    Broadcast() from Server to ;
-    Withdraw() from A to Server;
 }
 
 
 local protocol Trivial1_A(role Server, role A){
     accept Server;
-    Withdraw() to Server;
 }
 
 
 local protocol Trivial1_Server(role Server, role A){
-    Broadcast() to ;
-    Withdraw() from A;
+;
 }

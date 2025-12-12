@@ -1,67 +1,50 @@
-module Game;
+module GameIR;
 
-type <java> "java.lang.Integer" from "rt.jar" as door;
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol MontyHall(role Server, role Host, role Guest){
     connect Server to Host;
-    Broadcast() from Server to Guest;
     connect Server to Guest;
-    Broadcast() from Server to Host;
     Hidden_car(hidden) from Host to Server;
-    Broadcast() from Server to Guest;
-    Public_d(door) from Guest to Server;
-    Broadcast_d(door) from Server to Host;
-    Public_goat(door) from Host to Server;
-    Broadcast_goat(door) from Server to Guest;
+    Public_d(int) from Guest to Server;
+    Broadcast_d(int) from Server to Host;
+    Public_goat(int) from Host to Server;
+    Broadcast_goat(int) from Server to Guest;
     Public_switch(bool) from Guest to Server;
     Broadcast_switch(bool) from Server to Host;
-    Reveal_car(door) from Host to Server;
-    Broadcast_car(door) from Server to Guest;
-    Withdraw() from Guest to Server;
-    Withdraw() from Host to Server;
+    Reveal_car(int) from Host to Server;
+    Broadcast_car(int) from Server to Guest;
 }
 
 
 local protocol MontyHall_Host(role Server, role Host){
     accept Server;
-    Broadcast() from Server;
     Hidden_car(hidden) to Server;
-    Broadcast_d(door) from Server;
-    Public_goat(door) to Server;
+    Broadcast_d(int) from Server;
+    Public_goat(int) to Server;
     Broadcast_switch(bool) from Server;
-    Reveal_car(door) to Server;
-    Withdraw() to Server;
+    Reveal_car(int) to Server;
 }
 
 
 local protocol MontyHall_Guest(role Server, role Guest){
-    Broadcast() from Server;
     accept Server;
-    Broadcast() from Server;
-    Public_d(door) to Server;
-    Broadcast_goat(door) from Server;
+    Public_d(int) to Server;
+    Broadcast_goat(int) from Server;
     Public_switch(bool) to Server;
-    Broadcast_car(door) from Server;
-    Withdraw() to Server;
+    Broadcast_car(int) from Server;
 }
 
 
 local protocol MontyHall_Server(role Server, role Host, role Guest){
-    Broadcast() to Guest;
-    Broadcast() to Host;
     Hidden_car(hidden) from Host;
-    Broadcast() to Guest;
-    Public_d(door) from Guest;
-    Broadcast_d(door) to Host;
-    Public_goat(door) from Host;
-    Broadcast_goat(door) to Guest;
+    Public_d(int) from Guest;
+    Broadcast_d(int) to Host;
+    Public_goat(int) from Host;
+    Broadcast_goat(int) to Guest;
     Public_switch(bool) from Guest;
     Broadcast_switch(bool) to Host;
-    Reveal_car(door) from Host;
-    Broadcast_car(door) to Guest;
-    Withdraw() from Guest;
-    Withdraw() from Host;
+    Reveal_car(int) from Host;
+    Broadcast_car(int) to Guest;
 }

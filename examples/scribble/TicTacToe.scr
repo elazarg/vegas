@@ -1,87 +1,71 @@
-module Game;
+module GameIR;
 
-type <java> "java.lang.Integer" from "rt.jar" as d;
-type <java> "java.lang.Integer" from "rt.jar" as d1;
-type <java> "java.lang.Integer" from "rt.jar" as d2;
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol TicTacToe(role Server, role X, role O){
     connect Server to X;
-    Broadcast() from Server to O;
     connect Server to O;
-    Broadcast() from Server to X;
-    Public_c1(d1) from X to Server;
-    Broadcast_c1(d1) from Server to O;
-    Public_c1(d2) from O to Server;
-    Broadcast_c1(d2) from Server to X;
-    Public_c2(d) from X to Server;
-    Broadcast_c2(d) from Server to O;
-    Public_c2(d) from O to Server;
-    Broadcast_c2(d) from Server to X;
-    Public_c3(d) from X to Server;
-    Broadcast_c3(d) from Server to O;
-    Public_c3(d) from O to Server;
-    Broadcast_c3(d) from Server to X;
-    Public_c4(d) from X to Server;
-    Broadcast_c4(d) from Server to O;
-    Public_c4(d) from O to Server;
-    Broadcast_c4(d) from Server to X;
-    Withdraw() from X to Server;
-    Withdraw() from O to Server;
+    Public_c1(int) from X to Server;
+    Broadcast_c1(int) from Server to O;
+    Public_c1(int) from O to Server;
+    Broadcast_c1(int) from Server to X;
+    Public_c2(int) from X to Server;
+    Broadcast_c2(int) from Server to O;
+    Public_c2(int) from O to Server;
+    Broadcast_c2(int) from Server to X;
+    Public_c3(int) from X to Server;
+    Broadcast_c3(int) from Server to O;
+    Public_c3(int) from O to Server;
+    Broadcast_c3(int) from Server to X;
+    Public_c4(int) from X to Server;
+    Broadcast_c4(int) from Server to O;
+    Public_c4(int) from O to Server;
+    Broadcast_c4(int) from Server to X;
 }
 
 
 local protocol TicTacToe_X(role Server, role X){
     accept Server;
-    Broadcast() from Server;
-    Public_c1(d1) to Server;
-    Broadcast_c1(d2) from Server;
-    Public_c2(d) to Server;
-    Broadcast_c2(d) from Server;
-    Public_c3(d) to Server;
-    Broadcast_c3(d) from Server;
-    Public_c4(d) to Server;
-    Broadcast_c4(d) from Server;
-    Withdraw() to Server;
+    Public_c1(int) to Server;
+    Broadcast_c1(int) from Server;
+    Public_c2(int) to Server;
+    Broadcast_c2(int) from Server;
+    Public_c3(int) to Server;
+    Broadcast_c3(int) from Server;
+    Public_c4(int) to Server;
+    Broadcast_c4(int) from Server;
 }
 
 
 local protocol TicTacToe_O(role Server, role O){
-    Broadcast() from Server;
     accept Server;
-    Broadcast_c1(d1) from Server;
-    Public_c1(d2) to Server;
-    Broadcast_c2(d) from Server;
-    Public_c2(d) to Server;
-    Broadcast_c3(d) from Server;
-    Public_c3(d) to Server;
-    Broadcast_c4(d) from Server;
-    Public_c4(d) to Server;
-    Withdraw() to Server;
+    Broadcast_c1(int) from Server;
+    Public_c1(int) to Server;
+    Broadcast_c2(int) from Server;
+    Public_c2(int) to Server;
+    Broadcast_c3(int) from Server;
+    Public_c3(int) to Server;
+    Broadcast_c4(int) from Server;
+    Public_c4(int) to Server;
 }
 
 
 local protocol TicTacToe_Server(role Server, role X, role O){
-    Broadcast() to O;
-    Broadcast() to X;
-    Public_c1(d1) from X;
-    Broadcast_c1(d1) to O;
-    Public_c1(d2) from O;
-    Broadcast_c1(d2) to X;
-    Public_c2(d) from X;
-    Broadcast_c2(d) to O;
-    Public_c2(d) from O;
-    Broadcast_c2(d) to X;
-    Public_c3(d) from X;
-    Broadcast_c3(d) to O;
-    Public_c3(d) from O;
-    Broadcast_c3(d) to X;
-    Public_c4(d) from X;
-    Broadcast_c4(d) to O;
-    Public_c4(d) from O;
-    Broadcast_c4(d) to X;
-    Withdraw() from X;
-    Withdraw() from O;
+    Public_c1(int) from X;
+    Broadcast_c1(int) to O;
+    Public_c1(int) from O;
+    Broadcast_c1(int) to X;
+    Public_c2(int) from X;
+    Broadcast_c2(int) to O;
+    Public_c2(int) from O;
+    Broadcast_c2(int) to X;
+    Public_c3(int) from X;
+    Broadcast_c3(int) to O;
+    Public_c3(int) from O;
+    Broadcast_c3(int) to X;
+    Public_c4(int) from X;
+    Broadcast_c4(int) to O;
+    Public_c4(int) from O;
+    Broadcast_c4(int) to X;
 }

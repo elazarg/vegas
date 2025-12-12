@@ -1,8 +1,7 @@
-module Game;
+module GameIR;
 
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol Puzzle(role Server, role Q, role A){
     connect Server to Q;
@@ -11,8 +10,6 @@ explicit global protocol Puzzle(role Server, role Q, role A){
     connect Server to A;
     Public_p_q(int, int) from A to Server;
     Broadcast_p_q(int, int) from Server to Q;
-    Withdraw() from Q to Server;
-    Withdraw() from A to Server;
 }
 
 
@@ -20,7 +17,6 @@ local protocol Puzzle_Q(role Server, role Q){
     accept Server;
     Public_x(int) to Server;
     Broadcast_p_q(int, int) from Server;
-    Withdraw() to Server;
 }
 
 
@@ -28,7 +24,6 @@ local protocol Puzzle_A(role Server, role A){
     Broadcast_x(int) from Server;
     accept Server;
     Public_p_q(int, int) to Server;
-    Withdraw() to Server;
 }
 
 
@@ -37,6 +32,4 @@ local protocol Puzzle_Server(role Server, role Q, role A){
     Broadcast_x(int) to A;
     Public_p_q(int, int) from A;
     Broadcast_p_q(int, int) to Q;
-    Withdraw() from Q;
-    Withdraw() from A;
 }

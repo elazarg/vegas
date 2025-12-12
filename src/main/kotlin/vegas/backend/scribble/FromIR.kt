@@ -29,11 +29,8 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
 }
 
 private fun dagToScribble(dag: ActionDag, allRoles: Set<RoleId>): List<Sast.Action> {
-    // Linearize the DAG deterministically: by step index, then by role name
-    val sortedActions = dag.topo()
-        .sortedWith(compareBy({ it.second }, { it.first.name }))
-
-    return sortedActions.flatMap { id ->
+    // Use topological sort to ensure dependencies are respected (e.g. commit-reveal ordering)
+    return dag.topo().flatMap { id ->
         actionToScribble(dag.meta(id), allRoles)
     }
 }
@@ -72,8 +69,9 @@ private fun actionToScribble(meta: ActionMeta, allRoles: Set<RoleId>): List<Sast
         val broadcastParams = meta.spec.params.map { param ->
             param.name.name to scribbleTypeOf(param.type)
         }
-        if (broadcastParams.isNotEmpty()) {
-             actions.add(Sast.Action.Send("Broadcast", broadcastParams, SERVER, allRoles - role))
+        val targets = allRoles - role
+        if (broadcastParams.isNotEmpty() && targets.isNotEmpty()) {
+             actions.add(Sast.Action.Send("Broadcast", broadcastParams, SERVER, targets))
         }
     }
 

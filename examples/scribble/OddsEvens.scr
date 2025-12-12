@@ -1,48 +1,41 @@
-module Game;
+module GameIR;
 
 type <java> "java.lang.Integer" from "rt.jar" as int;
 type <java> "java.lang.Boolean" from "rt.jar" as bool;
-type <java> "java.lang.Integer" from "rt.jar" as hidden;
 
 explicit global protocol OddsEvens(role Server, role Odd, role Even){
     connect Server to Odd;
     connect Server to Even;
-    Broadcast() from Server to Even;
-    Broadcast() from Server to Odd;
-    Public_c(bool) from Odd to Server;
+    Hidden_c(hidden) from Odd to Server;
+    Hidden_c(hidden) from Even to Server;
+    Reveal_c(bool) from Odd to Server;
     Broadcast_c(bool) from Server to Even;
-    Public_c(bool) from Even to Server;
+    Reveal_c(bool) from Even to Server;
     Broadcast_c(bool) from Server to Odd;
-    Withdraw() from Even to Server;
-    Withdraw() from Odd to Server;
 }
 
 
 local protocol OddsEvens_Odd(role Server, role Odd){
     accept Server;
-    Broadcast() from Server;
-    Public_c(bool) to Server;
+    Hidden_c(hidden) to Server;
+    Reveal_c(bool) to Server;
     Broadcast_c(bool) from Server;
-    Withdraw() to Server;
 }
 
 
 local protocol OddsEvens_Even(role Server, role Even){
     accept Server;
-    Broadcast() from Server;
+    Hidden_c(hidden) to Server;
     Broadcast_c(bool) from Server;
-    Public_c(bool) to Server;
-    Withdraw() to Server;
+    Reveal_c(bool) to Server;
 }
 
 
 local protocol OddsEvens_Server(role Server, role Odd, role Even){
-    Broadcast() to Even;
-    Broadcast() to Odd;
-    Public_c(bool) from Odd;
+    Hidden_c(hidden) from Odd;
+    Hidden_c(hidden) from Even;
+    Reveal_c(bool) from Odd;
     Broadcast_c(bool) to Even;
-    Public_c(bool) from Even;
+    Reveal_c(bool) from Even;
     Broadcast_c(bool) to Odd;
-    Withdraw() from Even;
-    Withdraw() from Odd;
 }
