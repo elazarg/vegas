@@ -31,8 +31,8 @@ From a single Vegas specification, the tool generates:
 type door = {0, 1, 2}
 
 // Players join with deposits
-join Host() $ 100;
-join Guest() $ 100;
+join Host() $ 20;
+join Guest() $ 20;
 
 // Host hides the car (compiler generates commitment)
 yield Host(car: hidden door);
@@ -40,7 +40,6 @@ yield Host(car: hidden door);
 // Guest makes a public choice
 yield Guest(d: door);
 
-// Host reveals a goat (constrained by game rules)
 yield Host(goat: door) where Host.goat != Guest.d;
 
 // Guest decides whether to switch
@@ -51,10 +50,11 @@ reveal Host(car: door) where Host.goat != Host.car;
 
 // Payouts calculated based on game state
 withdraw (Host.car != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 20 : -20;  Host -> 0 }
-     : (Host.car == null)
-     ? { Guest -> 20;   Host -> -100 } // Host timed out/bailed
-     : { Guest -> -100; Host -> 0 }    // Guest timed out/bailed
+     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+         Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
+     : (Host.car == null)  // Host quit
+     ? { Guest -> 40;   Host -> 0 }
+     : { Guest -> 0; Host -> 40 }  // Guest quit
 ````
 
 ## Building and Running
@@ -77,9 +77,9 @@ kotlin -cp .:antlr-runtime.jar vegas.MainKt
 
 This will process example files and generate outputs in:
 
-  - `examples/gambit/` - Extensive form game files (.efg)
-  - `examples/solidity/` - Smart contract implementations (.sol)
-  - `examples/graphviz/` - Visualizations of the action dependency DAG
+- `examples/gambit/` - Extensive form game files (.efg)
+- `examples/solidity/` - Smart contract implementations (.sol)
+- `examples/graphviz/` - Visualizations of the action dependency DAG
 
 ## Output Formats
 
@@ -87,13 +87,13 @@ This will process example files and generate outputs in:
 
 Generates Ethereum smart contracts that implement:
 
-  - **DAG-Based Scheduling**: Actions are gated by `depends` modifiers, allowing non-conflicting actions to occur in any order.
-  - **Bail-Out Logic**: If a player stops responding, they are marked as "bailed" after a timeout. Dependent actions can then proceed (treating the missing values as `null`), preventing the game from freezing permanently.
-  - **Cryptographic Security**: Commitments and reveals are generated automatically for hidden information and "risk partners" (concurrent moves).
+- **DAG-Based Scheduling**: Actions are gated by `depends` modifiers, allowing non-conflicting actions to occur in any order.
+- **Bail-Out Logic**: If a player stops responding, they are marked as "bailed" after a timeout. Dependent actions can then proceed (treating the missing values as `null`), preventing the game from freezing permanently.
+- **Cryptographic Security**: Commitments and reveals are generated automatically for hidden information and "risk partners" (concurrent moves).
 
 ### Gambit EFG
 
 Generates extensive form game representations that map the DAG structure to information sets, correctly modeling:
 
-  - **Simultaneity**: Actions that can execute concurrently in the DAG are modeled as simultaneous moves in the game tree.
-  - **Information Sets**: Players only "know" information that has been explicitly revealed or is public in the DAG history.
+- **Simultaneity**: Actions that can execute concurrently in the DAG are modeled as simultaneous moves in the game tree.
+- **Information Sets**: Players only "know" information that has been explicitly revealed or is public in the DAG history.
