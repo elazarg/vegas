@@ -1,7 +1,6 @@
 package vegas
 
-import vegas.backend.scribble.prettyPrintAll
-import vegas.backend.scribble.generateScribble
+import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.smt.generateSMT
 import vegas.backend.evm.compileToEvm
@@ -93,7 +92,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val ir = compileToIR(inlined)  // Compile inlined program to IR
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
     if (outputs.efg) writeFile(outEfg.toString()) { generateExtensiveFormGame(ir) }
-    if (outputs.scr) writeFile(outScr.toString()) { generateScribble(program).prettyPrintAll() }
+    if (outputs.scr) writeFile(outScr.toString()) { genScribbleFromIR(ir) }
 
     // EVM backends use common IR
     val evmIr = if (outputs.sol || outputs.vyper) compileToEvm(ir) else null
