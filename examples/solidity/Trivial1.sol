@@ -40,8 +40,8 @@ contract Trivial1 {
     
     modifier action(Role role, uint256 actionId) {
         require((!actionDone[role][actionId]), "already done");
-        _;
         actionDone[role][actionId] = true;
+        _;
         actionTimestamp[role][actionId] = block.timestamp;
         lastTs = block.timestamp;
     }
