@@ -85,11 +85,11 @@ This matches the way Vegas already works with commit/reveal and `where` clauses,
 We keep ActionIds simple and IR-oriented:
 
 ```kotlin
-typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - original IR phase, not semantic phase)
+typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - source sequence number)
 ```
 
 * `RoleId` = logical participant.
-* `Int` = original phase index in IR (even though we are moving away from phase *semantics*, the index is a useful stable identifier).
+* `Int` = original step index in IR (a stable identifier from the source definition).
 
 This can be refined later (e.g. adding a local action index) without changing the DAG API.
 
@@ -205,16 +205,16 @@ We derive `ActionDag` from `GameIR`:
 
 1. **Collect nodes:**
 
-    * For each phase index `p` and each role `r` that has an action in that phase, create `ActionId(r, p)`.
+    * For each source index `i` and each role `r` that has an action at that index, create `ActionId(r, i)`.
 
 2. **Infer dependencies:**
 
-   For each action `A = (r, p)`:
+   For each action `A = (r, i)`:
 
     * **Data dependencies (guard captures):**
       For each `fieldRef` appearing in `requires.captures` or `where`:
 
-        * find the latest prior action that writes `fieldRef` (by phase index);
+        * find the latest prior action that writes `fieldRef` (by index);
         * add an edge from that action to `A`;
         * if the field is COMMIT/REVEAL, ensure the REVEAL is also a predecessor of `A`.
 
@@ -224,7 +224,7 @@ We derive `ActionDag` from `GameIR`:
 
 3. **Build metadata:**
 
-   For every `ActionId(r, p)`:
+   For every `ActionId(r, i)`:
 
     * `role = r`
     * `writes = set of FieldRef` derived from the action’s signature / IR.
@@ -254,7 +254,7 @@ We derive `ActionDag` from `GameIR`:
 
 ### 5.1 Solidity Backend: DAG-Based Scheduling
 
-**Goal:** No phase variable, no barrier synchronization. Dependencies expressed as per-action preconditions.
+**Goal:** No global state variable for execution steps, no barrier synchronization. Dependencies expressed as per-action preconditions.
 
 **File:** `src/main/kotlin/vegas/backend/evm/GameToEvmIR.kt`
 
@@ -265,7 +265,7 @@ Outline:
    ```kotlin
    private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
        dag.topo()
-          // Stable deterministic ordering: by phase index, then role name
+          // Stable deterministic ordering: by index, then role name
           // (arbitrary but consistent across compilations)
           .sortedWith(compareBy({ it.second }, { it.first.name }))
           .mapIndexed { idx, id -> id to idx }
@@ -286,7 +286,7 @@ Outline:
     * Generate Solidity function:
 
       ```solidity
-      function move_Role_phase(...) 
+      function move_Role_seq(...)
           external
           by(Role)
           notDone(ACTION_FOO)
@@ -299,7 +299,7 @@ Outline:
       }
       ```
 
-    * Payload logic is derived from the old phase-based backend:
+    * Payload logic includes:
 
         * commit (store hashes),
         * reveal (check hashes, enforce where clauses),
