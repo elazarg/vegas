@@ -1,7 +1,19 @@
-join A() $ 1;
-join B() $ 1;
+// Simple matching game: A wins if choices differ, B wins if they match
+// Distribution semantics with quit punishment (pot = 12 wei, deposits = 6 each)
+//
+// Payoff structure:
+// - Fair play: Winner gets 9, loser gets 3 (both recover 50% of deposit)
+//   * Winner utility: +3, Loser utility: -3
+// - Quit punishment: Quitter gets 1 (loses 83% of deposit, utility -5)
+//   * Non-quitter gets 11 (utility +5)
+// - Both quit: Split evenly (6 each, no change)
+join A() $ 6;
+join B() $ 6;
 yield A(c: hidden bool);
 yield B(c: bool);
 reveal A(c: bool);
-withdraw { A -> (A.c != B.c || B.c == null) ? 1 : -1 ;
-           B -> (A.c == B.c || A.c == null) ? 1 : -1 }
+withdraw (A.c == null && B.c == null) ? {A -> 6; B -> 6}  // Both quit
+       : (A.c == null) ? {A -> 1; B -> 11}  // A quit (punished)
+       : (B.c == null) ? {A -> 11; B -> 1}  // B quit (punished)
+       : { A -> (A.c != B.c) ? 9 : 3 ;      // Fair play: winner gets 9, loser gets 3
+           B -> (A.c == B.c) ? 9 : 3 }

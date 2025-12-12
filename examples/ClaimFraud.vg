@@ -1,4 +1,5 @@
 // Claim fraud inspection: claimant may lie, world accident, inspector may investigate and catch fraud.
+// Distribution semantics: pot (300 wei) allocated based on fraud detection and investigation
 macro isFraud(accident: bool, inflate: bool, claim: bool): bool =
     (claim && (!accident || inflate));
 
@@ -11,16 +12,23 @@ yield Inspector(invest: bool);
 
 withdraw {
     Claimant ->
-        !Claimant.claim ? 0
+        !Claimant.claim ? 100
+        : Inspector.invest ?
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 70 : 120)
         :
-        Inspector.invest ?
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? -10 : 10)
-        :
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 10 : 10);
+            120;
 
     Inspector ->
-        !Inspector.invest ?
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? -5 : 0)
+        !Claimant.claim ? 100
+        : !Inspector.invest ?
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 100)
         :
-            (-1 + (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 5 : 0));
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 130 : 90);
+
+    World ->
+        !Claimant.claim ? 100
+        : !Inspector.invest ?
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 80)
+        :
+            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 100 : 90);
 }

@@ -72,7 +72,7 @@ contract Bet {
     
     function move_Race_0() public payable by(Role.None) action(Role.Race, 0) {
         require((!done_Race), "already joined");
-        require((msg.value == 100), "bad stake");
+        require((msg.value == 10), "bad stake");
         roles[msg.sender] = Role.Race;
         address_Race = msg.sender;
         done_Race = true;
@@ -81,7 +81,7 @@ contract Bet {
     function move_Gambler_1(int256 _bet) public payable by(Role.None) action(Role.Gambler, 1) depends(Role.Race, 0) {
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         require((!done_Gambler), "already joined");
-        require((msg.value == 100), "bad stake");
+        require((msg.value == 10), "bad stake");
         roles[msg.sender] = Role.Gambler;
         address_Gambler = msg.sender;
         done_Gambler = true;
@@ -98,7 +98,7 @@ contract Bet {
     function withdraw_Gambler() public by(Role.Gambler) action(Role.Gambler, 3) depends(Role.Race, 2) {
         require((!claimed_Gambler), "already claimed");
         claimed_Gambler = true;
-        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 100 : 0);
+        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 20 : 0);
         if (payout > 0) {
             (bool ok, ) = payable(address_Gambler).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -108,7 +108,7 @@ contract Bet {
     function withdraw_Race() public by(Role.Race) action(Role.Race, 4) depends(Role.Race, 2) {
         require((!claimed_Race), "already claimed");
         claimed_Race = true;
-        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 0 : 100);
+        int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 0 : 20);
         if (payout > 0) {
             (bool ok, ) = payable(address_Race).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

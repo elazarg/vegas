@@ -13,18 +13,18 @@ import java.io.File
 
 class LightningBackendTest : FreeSpec({
 
-    fun compileExample(filename: String, roleA: String, roleB: String, pot: Long = 1000): String {
+    fun compileExample(filename: String): String {
         val file = File("examples/$filename")
         if (!file.exists()) error("Example file not found: $filename")
 
         val program = parseFile(file.path).copy(name = file.nameWithoutExtension)
         val ir = compileToIR(program)
-        return generateLightningProtocol(ir, roleA, roleB, pot)
+        return generateLightningProtocol(ir)
     }
 
-    fun compileCode(code: String, name: String = "TestGame", roleA: String, roleB: String, pot: Long = 1000): String {
+    fun compileCode(code: String, name: String = "TestGame"): String {
         val ir = compileToIR(parseCode(code).copy(name = name))
-        return generateLightningProtocol(ir, roleA, roleB, pot)
+        return generateLightningProtocol(ir)
     }
 
     "Lightning Backend: Basic Constraints" - {
@@ -36,10 +36,10 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.x<->B.y) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B")
+            val output = compileCode(code)
             output shouldContain "LIGHTNING_PROTOCOL"
             output shouldContain "ROLES: A=A, B=B"
-            output shouldContain "POT: 1000"
+            output shouldContain "POT: 20"
             output shouldContain "ABORT_BALANCE:"
         }
 
@@ -52,7 +52,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (B.accept) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
             output shouldContain "LIGHTNING_PROTOCOL"
         }
 
@@ -65,7 +65,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.choice <-> B.choice) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
             output shouldContain "LIGHTNING_PROTOCOL"
             // Should have states for: join, commit A, commit B, reveal A, reveal B, terminal
             output shouldContain "STATE"
@@ -73,14 +73,14 @@ class LightningBackendTest : FreeSpec({
 
         "Rejects: 3 players" {
             val ex = shouldThrow<CompilationException> {
-                compileExample("ThreeWayLottery.vg", roleA = "Alice", roleB = "Bob")
+                compileExample("ThreeWayLottery.vg")
             }
             ex.message shouldContain "requires exactly 2 strategic roles"
         }
 
         "Rejects: 1 strategic player with random role" {
             val ex = shouldThrow<CompilationException> {
-                compileExample("Bet.vg", roleA = "Gambler", roleB = "Race")
+                compileExample("Bet.vg")
             }
             ex.message shouldContain "requires exactly 2 strategic roles"
         }
@@ -95,78 +95,9 @@ class LightningBackendTest : FreeSpec({
             """.trimIndent()
 
             val ex = shouldThrow<CompilationException> {
-                compileCode(code, roleA = "Alice", roleB = "Bob")
+                compileCode(code)
             }
             ex.message shouldContain "Unsupported system moves"
-        }
-    }
-
-    "Lightning Backend: Winner-Takes-All Enforcement" - {
-
-        "Rejects: Both players win (utility semantics)" {
-            val code = """
-                join A() $ 10;
-                join B() $ 10;
-                withdraw { A -> 10; B -> 10 }
-            """.trimIndent()
-
-            val ex = shouldThrow<CompilationException> {
-                compileCode(code, roleA = "A", roleB = "B")
-            }
-            ex.message shouldContain "Non-Winner-Takes-All payoff detected"
-            ex.message shouldContain "A=10, B=10"
-        }
-
-        "Rejects: Both players lose" {
-            val code = """
-                join A() $ 10;
-                join B() $ 10;
-                withdraw { A -> -10; B -> -10 }
-            """.trimIndent()
-
-            val ex = shouldThrow<CompilationException> {
-                compileCode(code, roleA = "A", roleB = "B")
-            }
-            ex.message shouldContain "Ambiguous payoff"
-            ex.message shouldContain "A=-10, B=-10"
-        }
-
-        "Accepts but shouldn't: Partial payoffs (utility semantics)" {
-            // This game uses utility semantics (A gains 5, B gains 0) which technically
-            // satisfies WTA (one positive, one non-positive) but doesn't distribute the full pot.
-            // TODO: After enforcing distribution semantics, this should be rejected.
-            val code = """
-                join A() $ 10;
-                join B() $ 10;
-                withdraw { A -> 5; B -> 0 }
-            """.trimIndent()
-
-            val output = compileCode(code, roleA = "A", roleB = "B")
-            output shouldContain "LIGHTNING_PROTOCOL"
-            // Currently passes WTA check (A>0, B<=0) but wastes funds (only 5 distributed from 20 pot)
-        }
-
-        "Accepts: Strict WTA (one positive, one zero)" {
-            val code = """
-                join Winner() $ 50;
-                join Loser() $ 50;
-                withdraw { Winner -> 100; Loser -> 0 }
-            """.trimIndent()
-
-            val output = compileCode(code, roleA = "Winner", roleB = "Loser", pot = 100)
-            output shouldContain "LIGHTNING_PROTOCOL"
-        }
-
-        "Accepts: Strict WTA with quit handling" {
-            val code = """
-                join A() $ 50;
-                join B() $ 50;
-                yield A(play: bool);
-                withdraw (A.play) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
-            """.trimIndent()
-
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
-            output shouldContain "ABORT_BALANCE:"
         }
     }
 
@@ -181,7 +112,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.move && B.response) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
 
             // When A is active (before A moves), if A quits, B should win
             output shouldContain "TURN: A"
@@ -197,7 +128,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.a1 && B.b1) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
             output shouldContain "STATE"
         }
     }
@@ -212,8 +143,8 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.x) ? { A -> 20; B -> 0 } : { A -> 0; B -> 20 }
             """.trimIndent()
 
-            val output1 = compileCode(code, roleA = "A", roleB = "B")
-            val output2 = compileCode(code, roleA = "A", roleB = "B")
+            val output1 = compileCode(code)
+            val output2 = compileCode(code)
 
             output1 shouldBe output2
         }
@@ -226,7 +157,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (Alice.a <-> Bob.b) ? { Alice -> 100; Bob -> 0 } : { Alice -> 0; Bob -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "Alice", roleB = "Bob", pot = 100)
+            val output = compileCode(code)
 
             // After commit phase, Alice should move first (lexicographically before Bob)
             // This tests the canonical ordering in Compiler.kt
@@ -240,7 +171,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw { A -> 100; B -> 0 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
             output shouldContain "ROOT:"
         }
 
@@ -253,7 +184,7 @@ class LightningBackendTest : FreeSpec({
                 withdraw (A.x && B.y) ? { A -> 100; B -> 0 } : { A -> 0; B -> 100 }
             """.trimIndent()
 
-            val output = compileCode(code, roleA = "A", roleB = "B", pot = 100)
+            val output = compileCode(code)
             output shouldContain "TRANSITIONS:"
         }
     }

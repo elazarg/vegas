@@ -1,2 +1,4 @@
-join A();
-withdraw { A -> 0}
+// Trivial single-player game with no moves
+// Distribution semantics: player gets back their deposit
+join A() $ 10;
+withdraw { A -> 10 }

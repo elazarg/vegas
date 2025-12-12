@@ -35,13 +35,13 @@
 (assert (=> action_Bob_6_done Bob_c_done))
 
 (declare-const Bob_outcome Int)
-(assert (= Bob_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) (- 10) (ite (not Issuer_c_done) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) 20 (- 10)))))))
+(assert (= Bob_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 0) 6 (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 1) 24 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 34 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 2 (ite (not Issuer_c_done) 17 12)))))))))
 
 (declare-const Issuer_outcome Int)
-(assert (= Issuer_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) 20 (ite (not Issuer_c_done) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) (- 10) (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) (- 10) 20))))))
+(assert (= Issuer_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 0) 6 (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 1) 6 24)) (ite (and (not Alice_c_done) (not Bob_c_done)) 34 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 2 12)))))))))
 
 (declare-const Alice_outcome Int)
-(assert (= Alice_outcome (ite (or (not Alice_c_done) (not Bob_c_done)) (- 10) (ite (not Issuer_c_done) 20 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (+ (+ Issuer_c Alice_c) Bob_c)) 20 (ite (= (* (div (+ (+ Issuer_c Alice_c) Bob_c) 3) 3) (- (+ (+ Issuer_c Alice_c) Bob_c) 1)) (- 10) (- 10)))))))
+(assert (= Alice_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 0) 24 (ite (= (mod (+ (+ Issuer_c Alice_c) Bob_c) 3) 1) 6 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 34 (ite (not Alice_c_done) 2 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 17 12)))))))))
 
 (check-sat)
 (get-model)

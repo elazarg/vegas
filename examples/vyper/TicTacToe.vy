@@ -292,7 +292,7 @@ def withdraw_X():
         assert self.actionDone[Role.O][9], "dependency not satisfied"
     assert (not self.claimed_X), "already claimed"
     self.claimed_X = True
-    payout: int256 = 0
+    payout: int256 = 100
     if payout > 0:
         success: bool = raw_call(self.address_X, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
@@ -311,7 +311,7 @@ def withdraw_O():
         assert self.actionDone[Role.O][9], "dependency not satisfied"
     assert (not self.claimed_O), "already claimed"
     self.claimed_O = True
-    payout: int256 = 0
+    payout: int256 = 100
     if payout > 0:
         success: bool = raw_call(self.address_O, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

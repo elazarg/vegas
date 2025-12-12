@@ -1,0 +1,79 @@
+LIGHTNING_PROTOCOL "OddsEvensShort"
+ROLES: A=Even, B=Odd
+POT: 200 sat
+ROOT: 0
+STATES:
+  STATE 0 [TURN: Even]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 2 via Play(role=Even, delta={Even.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(Even, 3)))
+      -> 1 via Play(role=Even, delta={Even.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(Even, 3)))
+  
+  STATE 1 [TURN: Odd]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 4 via Play(role=Odd, delta={Odd.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(Odd, 1)))
+      -> 3 via Play(role=Odd, delta={Odd.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(Odd, 1)))
+  
+  STATE 2 [TURN: Odd]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 6 via Play(role=Odd, delta={Odd.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(Odd, 1)))
+      -> 5 via Play(role=Odd, delta={Odd.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(Odd, 1)))
+  
+  STATE 3 [TURN: Even]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 7 via Play(role=Even, delta={Even.c=BoolVal(v=true)}, tag=Action(actionId=(Even, 4)))
+  
+  STATE 4 [TURN: Even]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 8 via Play(role=Even, delta={Even.c=BoolVal(v=true)}, tag=Action(actionId=(Even, 4)))
+  
+  STATE 5 [TURN: Even]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 9 via Play(role=Even, delta={Even.c=BoolVal(v=false)}, tag=Action(actionId=(Even, 4)))
+  
+  STATE 6 [TURN: Even]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS:
+      -> 10 via Play(role=Even, delta={Even.c=BoolVal(v=false)}, tag=Action(actionId=(Even, 4)))
+  
+  STATE 7 [TURN: Odd]
+    ABORT_BALANCE: A=180, B=20
+    TRANSITIONS:
+      -> 11 via Play(role=Odd, delta={Odd.c=BoolVal(v=true)}, tag=Action(actionId=(Odd, 2)))
+  
+  STATE 8 [TURN: Odd]
+    ABORT_BALANCE: A=180, B=20
+    TRANSITIONS:
+      -> 12 via Play(role=Odd, delta={Odd.c=BoolVal(v=false)}, tag=Action(actionId=(Odd, 2)))
+  
+  STATE 9 [TURN: Odd]
+    ABORT_BALANCE: A=180, B=20
+    TRANSITIONS:
+      -> 13 via Play(role=Odd, delta={Odd.c=BoolVal(v=true)}, tag=Action(actionId=(Odd, 2)))
+  
+  STATE 10 [TURN: Odd]
+    ABORT_BALANCE: A=180, B=20
+    TRANSITIONS:
+      -> 14 via Play(role=Odd, delta={Odd.c=BoolVal(v=false)}, tag=Action(actionId=(Odd, 2)))
+  
+  STATE 11 [TERMINAL]
+    ABORT_BALANCE: A=126, B=74
+    TRANSITIONS: <NONE>
+  
+  STATE 12 [TERMINAL]
+    ABORT_BALANCE: A=74, B=126
+    TRANSITIONS: <NONE>
+  
+  STATE 13 [TERMINAL]
+    ABORT_BALANCE: A=74, B=126
+    TRANSITIONS: <NONE>
+  
+  STATE 14 [TERMINAL]
+    ABORT_BALANCE: A=126, B=74
+    TRANSITIONS: <NONE>
+  

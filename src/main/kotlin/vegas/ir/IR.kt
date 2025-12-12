@@ -26,6 +26,7 @@ sealed class Expr {
     data class Sub(val l: Expr, val r: Expr) : Expr()
     data class Mul(val l: Expr, val r: Expr) : Expr()
     data class Div(val l: Expr, val r: Expr) : Expr()
+    data class Mod(val l: Expr, val r: Expr) : Expr()
     data class Neg(val x: Expr) : Expr()
 
     // comparisons

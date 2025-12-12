@@ -69,10 +69,10 @@
 (assert (=> action_O_9_done O_c4_done))
 
 (declare-const X_outcome Int)
-(assert (= X_outcome 0))
+(assert (= X_outcome 100))
 
 (declare-const O_outcome Int)
-(assert (= O_outcome 0))
+(assert (= O_outcome 100))
 
 (check-sat)
 (get-model)

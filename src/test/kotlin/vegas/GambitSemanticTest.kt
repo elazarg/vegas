@@ -18,6 +18,7 @@ const val BAIL_PERSISTENCE = """
 // Test 1.2: Abandonment persists - once a player quits, they are locked out
 // Alice has two sequential actions
 // If Alice quits on first action, second and third should only offer "Quit"
+// NOTE: withdraw shows outcomes (distributions), EFG shows utilities (outcome - deposit)
 
 join Alice() $ 100;
 join Bob() $ 100;
@@ -133,6 +134,7 @@ const val SIMUL_MIXED = """
 // Test 5.1: Simultaneous actions with mixed quit/non-quit
 // Both players act simultaneously, can quit or not
 // Should have all 4 outcome combinations
+// NOTE: withdraw shows outcomes (distributions), EFG shows utilities (outcome - deposit)
 
 join Alice() $ 100;
 join Bob() $ 100;
@@ -140,11 +142,11 @@ join Bob() $ 100;
 // Both act simultaneously
 yield Alice(x: bool) Bob(y: bool);
 
-// Payoffs for all combinations:
-// Both commit: 10, 10
-// Alice commits, Bob quits: -5, 0
-// Alice quits, Bob commits: 0, -5
-// Both quit: 0, 0
+// Outcome distributions (EFG utilities = outcome - deposit):
+// Both commit: 10, 10 (utilities: -90, -90)
+// Alice commits, Bob quits: -5, 0 (utilities: -105, -100)
+// Alice quits, Bob commits: 0, -5 (utilities: -100, -105)
+// Both quit: 0, 0 (utilities: -100, -100)
 
 withdraw (Alice.x != null && Bob.y != null)
     ? { Alice -> 10; Bob -> 10 }
@@ -355,11 +357,11 @@ class GambitSemanticTest : FreeSpec({
             // Some node where Alice can only quit
             aliceNodes.any { it.actions.toSet() == setOf("Quit") } shouldBe true
 
-            // Terminals with abandonment penalties
-            efg shouldContain "{ -100"
+            // Terminals with abandonment penalties (outcome -100, deposit 100 → utility -200)
+            efg shouldContain "{ -200"
 
-            // Terminals where both players cooperate
-            efg shouldContain "{ 10 10 }"
+            // Terminals where both players cooperate (outcome 10, deposit 100 → utility -90)
+            efg shouldContain "{ -90 -90 }"
         }
 
         "abandonment persists along paths (once Alice quits on x, she is locked out)" {
@@ -468,8 +470,8 @@ class GambitSemanticTest : FreeSpec({
             // Bob (player 2) can quit
             decisionNodesForPlayer(efg, 2).any { "Quit" in it.actions } shouldBe true
 
-            // abandonment-related terminals exist
-            efg shouldContain "{ 0 0 }"
+            // abandonment-related terminals exist (both quit: 0-100, 0-100 = -100, -100)
+            efg shouldContain "{ -100 -100 }"
         }
 
         "Public Abandonment - observers distinguish abandonment from hidden commit" {
@@ -495,11 +497,11 @@ class GambitSemanticTest : FreeSpec({
 
             val efg = compileGame(SIMUL_MIXED)
 
-            // Should have terminals for all combinations:
-            efg shouldContain "{ 10 10 }"   // Both commit
-            efg shouldContain "{ -5 0 }"    // Alice commits, Bob quits
-            efg shouldContain "{ 0 -5 }"    // Alice quits, Bob commits
-            efg shouldContain "{ 0 0 }"     // Both quit
+            // Should have terminals for all combinations (utilities = outcome - deposit):
+            efg shouldContain "{ -90 -90 }"   // Both commit (10-100, 10-100)
+            efg shouldContain "{ -105 -100 }" // Alice commits, Bob quits (-5-100, 0-100)
+            efg shouldContain "{ -100 -105 }" // Alice quits, Bob commits (0-100, -5-100)
+            efg shouldContain "{ -100 -100 }" // Both quit (0-100, 0-100)
         }
 
         "payoffs handle undefined values gracefully" {

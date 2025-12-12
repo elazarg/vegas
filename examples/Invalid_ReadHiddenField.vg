@@ -1,4 +1,6 @@
 // Invalid: B tries to read A's hidden field before it is revealed
+// This is a test case for invalid code that should be rejected by the compiler
+// Distribution semantics: pot (200 wei) - but this code is invalid
 
 type bit = {0, 1}
 

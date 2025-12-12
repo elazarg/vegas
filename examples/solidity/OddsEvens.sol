@@ -118,7 +118,7 @@ contract OddsEvens {
     function withdraw_Even() public by(Role.Even) action(Role.Even, 6) depends(Role.Odd, 3) depends(Role.Even, 5) {
         require((!claimed_Even), "already claimed");
         claimed_Even = true;
-        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 10 : (-10)) : (((!done_Even_c) && done_Odd_c) ? (-100) : (-100)));
+        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 126 : 74) : (((!done_Even_c) && done_Odd_c) ? 20 : ((done_Even_c && (!done_Odd_c)) ? 180 : 100)));
         if (payout > 0) {
             (bool ok, ) = payable(address_Even).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -128,7 +128,7 @@ contract OddsEvens {
     function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 7) depends(Role.Odd, 3) depends(Role.Even, 5) {
         require((!claimed_Odd), "already claimed");
         claimed_Odd = true;
-        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? (-10) : 10) : (((!done_Even_c) && done_Odd_c) ? 10 : (-100)));
+        int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 74 : 126) : (((!done_Even_c) && done_Odd_c) ? 180 : ((done_Even_c && (!done_Odd_c)) ? 20 : 100)));
         if (payout > 0) {
             (bool ok, ) = payable(address_Odd).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

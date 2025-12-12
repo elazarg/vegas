@@ -22,8 +22,9 @@ public class VegasParser extends Parser {
 		T__17=18, T__18=19, T__19=20, T__20=21, T__21=22, T__22=23, T__23=24, 
 		T__24=25, T__25=26, T__26=27, T__27=28, T__28=29, T__29=30, T__30=31, 
 		T__31=32, T__32=33, T__33=34, T__34=35, T__35=36, T__36=37, T__37=38, 
-		T__38=39, T__39=40, T__40=41, T__41=42, T__42=43, ROLE_ID=44, LOWER_ID=45, 
-		INT=46, ADDRESS=47, STRING=48, BlockComment=49, LineComment=50, WS=51;
+		T__38=39, T__39=40, T__40=41, T__41=42, T__42=43, T__43=44, ROLE_ID=45, 
+		LOWER_ID=46, INT=47, ADDRESS=48, STRING=49, BlockComment=50, LineComment=51, 
+		WS=52;
 	public static final int
 		RULE_program = 0, RULE_typeDec = 1, RULE_macroDec = 2, RULE_paramDec = 3, 
 		RULE_typeExp = 4, RULE_ext = 5, RULE_query = 6, RULE_outcome = 7, RULE_item = 8, 
@@ -41,9 +42,9 @@ public class VegasParser extends Parser {
 			null, "'type'", "'='", "'macro'", "'('", "','", "')'", "':'", "';'", 
 			"'{'", "'}'", "'..'", "'join'", "'yield'", "'reveal'", "'random'", "'withdraw'", 
 			"'$'", "'where'", "'?'", "'let'", "'in'", "'->'", "'.'", "'-'", "'!'", 
-			"'*'", "'/'", "'+'", "'!='", "'=='", "'null'", "'<'", "'<='", "'>='", 
-			"'>'", "'<->'", "'<-!->'", "'&&'", "'||'", "'true'", "'false'", "'let!'", 
-			"'hidden'"
+			"'*'", "'/'", "'%'", "'+'", "'!='", "'=='", "'null'", "'<'", "'<='", 
+			"'>='", "'>'", "'<->'", "'<-!->'", "'&&'", "'||'", "'true'", "'false'", 
+			"'let!'", "'hidden'"
 		};
 	}
 	private static final String[] _LITERAL_NAMES = makeLiteralNames();
@@ -52,7 +53,7 @@ public class VegasParser extends Parser {
 			null, null, null, null, null, null, null, null, null, null, null, null, 
 			null, null, null, null, null, null, null, null, null, null, null, null, 
 			null, null, null, null, null, null, null, null, null, null, null, null, 
-			null, null, null, null, null, null, null, null, "ROLE_ID", "LOWER_ID", 
+			null, null, null, null, null, null, null, null, null, "ROLE_ID", "LOWER_ID", 
 			"INT", "ADDRESS", "STRING", "BlockComment", "LineComment", "WS"
 		};
 	}
@@ -1303,7 +1304,7 @@ public class VegasParser extends Parser {
 				setState(174);
 				_errHandler.sync(this);
 				_la = _input.LA(1);
-				if ((((_la) & ~0x3f) == 0 && ((1L << _la) & 271579422392336L) != 0)) {
+				if ((((_la) & ~0x3f) == 0 && ((1L << _la) & 543158794453008L) != 0)) {
 					{
 					setState(166);
 					((CallExpContext)_localctx).exp = exp(0);
@@ -1359,7 +1360,7 @@ public class VegasParser extends Parser {
 				_prevctx = _localctx;
 				setState(180);
 				_la = _input.LA(1);
-				if ( !(_la==T__39 || _la==T__40) ) {
+				if ( !(_la==T__40 || _la==T__41) ) {
 				_errHandler.recoverInline(this);
 				}
 				else {
@@ -1402,7 +1403,7 @@ public class VegasParser extends Parser {
 				_ctx = _localctx;
 				_prevctx = _localctx;
 				setState(184);
-				match(T__41);
+				match(T__42);
 				setState(185);
 				((LetExpContext)_localctx).dec = varDec();
 				setState(186);
@@ -1438,7 +1439,7 @@ public class VegasParser extends Parser {
 						setState(194);
 						((BinOpMultExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !(_la==T__25 || _la==T__26) ) {
+						if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 469762048L) != 0)) ) {
 							((BinOpMultExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1460,7 +1461,7 @@ public class VegasParser extends Parser {
 						setState(197);
 						((BinOpAddExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !(_la==T__23 || _la==T__27) ) {
+						if ( !(_la==T__23 || _la==T__28) ) {
 							((BinOpAddExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1482,7 +1483,7 @@ public class VegasParser extends Parser {
 						setState(200);
 						((BinOpCompExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 64424509440L) != 0)) ) {
+						if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 128849018880L) != 0)) ) {
 							((BinOpCompExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1504,7 +1505,7 @@ public class VegasParser extends Parser {
 						setState(203);
 						((BinOpEqExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 207769042944L) != 0)) ) {
+						if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 415538085888L) != 0)) ) {
 							((BinOpEqExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1526,7 +1527,7 @@ public class VegasParser extends Parser {
 						setState(206);
 						((BinOpBoolExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !(_la==T__37 || _la==T__38) ) {
+						if ( !(_la==T__38 || _la==T__39) ) {
 							((BinOpBoolExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1564,7 +1565,7 @@ public class VegasParser extends Parser {
 						setState(215);
 						((UndefExpContext)_localctx).op = _input.LT(1);
 						_la = _input.LA(1);
-						if ( !(_la==T__28 || _la==T__29) ) {
+						if ( !(_la==T__29 || _la==T__30) ) {
 							((UndefExpContext)_localctx).op = (Token)_errHandler.recoverInline(this);
 						}
 						else {
@@ -1573,7 +1574,7 @@ public class VegasParser extends Parser {
 							consume();
 						}
 						setState(216);
-						match(T__30);
+						match(T__31);
 						}
 						break;
 					}
@@ -1632,10 +1633,10 @@ public class VegasParser extends Parser {
 			setState(225);
 			_errHandler.sync(this);
 			_la = _input.LA(1);
-			if (_la==T__42) {
+			if (_la==T__43) {
 				{
 				setState(224);
-				((VarDecContext)_localctx).hidden = match(T__42);
+				((VarDecContext)_localctx).hidden = match(T__43);
 				}
 			}
 
@@ -1787,7 +1788,7 @@ public class VegasParser extends Parser {
 	}
 
 	public static final String _serializedATN =
-		"\u0004\u00013\u00ec\u0002\u0000\u0007\u0000\u0002\u0001\u0007\u0001\u0002"+
+		"\u0004\u00014\u00ec\u0002\u0000\u0007\u0000\u0002\u0001\u0007\u0001\u0002"+
 		"\u0002\u0007\u0002\u0002\u0003\u0007\u0003\u0002\u0004\u0007\u0004\u0002"+
 		"\u0005\u0007\u0005\u0002\u0006\u0007\u0006\u0002\u0007\u0007\u0007\u0002"+
 		"\b\u0007\b\u0002\t\u0007\t\u0002\n\u0007\n\u0002\u000b\u0007\u000b\u0002"+
@@ -1823,8 +1824,8 @@ public class VegasParser extends Parser {
 		"\u0001\u000b\u0001\f\u0001\f\u0001\r\u0001\r\u0001\r\u0000\u0001\u0012"+
 		"\u000e\u0000\u0002\u0004\u0006\b\n\f\u000e\u0010\u0012\u0014\u0016\u0018"+
 		"\u001a\u0000\t\u0001\u0000\f\u000f\u0001\u0000\u0018\u0019\u0001\u0000"+
-		"()\u0001\u0000\u001a\u001b\u0002\u0000\u0018\u0018\u001c\u001c\u0001\u0000"+
-		" #\u0002\u0000\u001d\u001e$%\u0001\u0000&\'\u0001\u0000\u001d\u001e\u0103"+
+		")*\u0001\u0000\u001a\u001c\u0002\u0000\u0018\u0018\u001d\u001d\u0001\u0000"+
+		"!$\u0002\u0000\u001e\u001f%&\u0001\u0000\'(\u0001\u0000\u001e\u001f\u0103"+
 		"\u0000 \u0001\u0000\u0000\u0000\u0002&\u0001\u0000\u0000\u0000\u0004+"+
 		"\u0001\u0000\u0000\u0000\u0006@\u0001\u0000\u0000\u0000\bT\u0001\u0000"+
 		"\u0000\u0000\na\u0001\u0000\u0000\u0000\fc\u0001\u0000\u0000\u0000\u000e"+
@@ -1848,12 +1849,12 @@ public class VegasParser extends Parser {
 		"\u0002\u0000\u0000<>\u0003\u0012\t\u0000=?\u0005\b\u0000\u0000>=\u0001"+
 		"\u0000\u0000\u0000>?\u0001\u0000\u0000\u0000?\u0005\u0001\u0000\u0000"+
 		"\u0000@A\u0003\u0018\f\u0000AB\u0005\u0007\u0000\u0000BC\u0003\b\u0004"+
-		"\u0000C\u0007\u0001\u0000\u0000\u0000DE\u0005\t\u0000\u0000EJ\u0005.\u0000"+
-		"\u0000FG\u0005\u0005\u0000\u0000GI\u0005.\u0000\u0000HF\u0001\u0000\u0000"+
+		"\u0000C\u0007\u0001\u0000\u0000\u0000DE\u0005\t\u0000\u0000EJ\u0005/\u0000"+
+		"\u0000FG\u0005\u0005\u0000\u0000GI\u0005/\u0000\u0000HF\u0001\u0000\u0000"+
 		"\u0000IL\u0001\u0000\u0000\u0000JH\u0001\u0000\u0000\u0000JK\u0001\u0000"+
 		"\u0000\u0000KM\u0001\u0000\u0000\u0000LJ\u0001\u0000\u0000\u0000MU\u0005"+
-		"\n\u0000\u0000NO\u0005\t\u0000\u0000OP\u0005.\u0000\u0000PQ\u0005\u000b"+
-		"\u0000\u0000QR\u0005.\u0000\u0000RU\u0005\n\u0000\u0000SU\u0003\u0016"+
+		"\n\u0000\u0000NO\u0005\t\u0000\u0000OP\u0005/\u0000\u0000PQ\u0005\u000b"+
+		"\u0000\u0000QR\u0005/\u0000\u0000RU\u0005\n\u0000\u0000SU\u0003\u0016"+
 		"\u000b\u0000TD\u0001\u0000\u0000\u0000TN\u0001\u0000\u0000\u0000TS\u0001"+
 		"\u0000\u0000\u0000U\t\u0001\u0000\u0000\u0000VX\u0007\u0000\u0000\u0000"+
 		"WY\u0003\f\u0006\u0000XW\u0001\u0000\u0000\u0000YZ\u0001\u0000\u0000\u0000"+
@@ -1867,7 +1868,7 @@ public class VegasParser extends Parser {
 		"\u0000kn\u0001\u0000\u0000\u0000lj\u0001\u0000\u0000\u0000me\u0001\u0000"+
 		"\u0000\u0000mn\u0001\u0000\u0000\u0000no\u0001\u0000\u0000\u0000oq\u0005"+
 		"\u0006\u0000\u0000pd\u0001\u0000\u0000\u0000pq\u0001\u0000\u0000\u0000"+
-		"qt\u0001\u0000\u0000\u0000rs\u0005\u0011\u0000\u0000su\u0005.\u0000\u0000"+
+		"qt\u0001\u0000\u0000\u0000rs\u0005\u0011\u0000\u0000su\u0005/\u0000\u0000"+
 		"tr\u0001\u0000\u0000\u0000tu\u0001\u0000\u0000\u0000ux\u0001\u0000\u0000"+
 		"\u0000vw\u0005\u0012\u0000\u0000wy\u0003\u0012\t\u0000xv\u0001\u0000\u0000"+
 		"\u0000xy\u0001\u0000\u0000\u0000y\r\u0001\u0000\u0000\u0000z{\u0003\u0012"+
@@ -1902,8 +1903,8 @@ public class VegasParser extends Parser {
 		"\u0000\u00af\u00b0\u0001\u0000\u0000\u0000\u00b0\u00b1\u0005\u0006\u0000"+
 		"\u0000\u00b1\u00c0\u0001\u0000\u0000\u0000\u00b2\u00b3\u0007\u0001\u0000"+
 		"\u0000\u00b3\u00c0\u0003\u0012\t\r\u00b4\u00c0\u0007\u0002\u0000\u0000"+
-		"\u00b5\u00c0\u0003\u0018\f\u0000\u00b6\u00c0\u0005.\u0000\u0000\u00b7"+
-		"\u00c0\u0005/\u0000\u0000\u00b8\u00b9\u0005*\u0000\u0000\u00b9\u00ba\u0003"+
+		"\u00b5\u00c0\u0003\u0018\f\u0000\u00b6\u00c0\u0005/\u0000\u0000\u00b7"+
+		"\u00c0\u00050\u0000\u0000\u00b8\u00b9\u0005+\u0000\u0000\u00b9\u00ba\u0003"+
 		"\u0014\n\u0000\u00ba\u00bb\u0005\u0002\u0000\u0000\u00bb\u00bc\u0003\u0012"+
 		"\t\u0000\u00bc\u00bd\u0005\u0015\u0000\u0000\u00bd\u00be\u0003\u0012\t"+
 		"\u0001\u00be\u00c0\u0001\u0000\u0000\u0000\u00bf\u009b\u0001\u0000\u0000"+
@@ -1921,21 +1922,21 @@ public class VegasParser extends Parser {
 		"\t\b\u00d0\u00d1\n\u0006\u0000\u0000\u00d1\u00d2\u0005\u0013\u0000\u0000"+
 		"\u00d2\u00d3\u0003\u0012\t\u0000\u00d3\u00d4\u0005\u0007\u0000\u0000\u00d4"+
 		"\u00d5\u0003\u0012\t\u0006\u00d5\u00da\u0001\u0000\u0000\u0000\u00d6\u00d7"+
-		"\n\n\u0000\u0000\u00d7\u00d8\u0007\b\u0000\u0000\u00d8\u00da\u0005\u001f"+
-		"\u0000\u0000\u00d9\u00c1\u0001\u0000\u0000\u0000\u00d9\u00c4\u0001\u0000"+
-		"\u0000\u0000\u00d9\u00c7\u0001\u0000\u0000\u0000\u00d9\u00ca\u0001\u0000"+
-		"\u0000\u0000\u00d9\u00cd\u0001\u0000\u0000\u0000\u00d9\u00d0\u0001\u0000"+
-		"\u0000\u0000\u00d9\u00d6\u0001\u0000\u0000\u0000\u00da\u00dd\u0001\u0000"+
-		"\u0000\u0000\u00db\u00d9\u0001\u0000\u0000\u0000\u00db\u00dc\u0001\u0000"+
-		"\u0000\u0000\u00dc\u0013\u0001\u0000\u0000\u0000\u00dd\u00db\u0001\u0000"+
-		"\u0000\u0000\u00de\u00df\u0003\u0018\f\u0000\u00df\u00e1\u0005\u0007\u0000"+
-		"\u0000\u00e0\u00e2\u0005+\u0000\u0000\u00e1\u00e0\u0001\u0000\u0000\u0000"+
-		"\u00e1\u00e2\u0001\u0000\u0000\u0000\u00e2\u00e3\u0001\u0000\u0000\u0000"+
-		"\u00e3\u00e4\u0003\b\u0004\u0000\u00e4\u0015\u0001\u0000\u0000\u0000\u00e5"+
-		"\u00e6\u0005-\u0000\u0000\u00e6\u0017\u0001\u0000\u0000\u0000\u00e7\u00e8"+
-		"\u0005-\u0000\u0000\u00e8\u0019\u0001\u0000\u0000\u0000\u00e9\u00ea\u0005"+
-		",\u0000\u0000\u00ea\u001b\u0001\u0000\u0000\u0000\u0017\u001e 36>JTZa"+
-		"jmptx\u008f\u0093\u0099\u00ab\u00ae\u00bf\u00d9\u00db\u00e1";
+		"\n\n\u0000\u0000\u00d7\u00d8\u0007\b\u0000\u0000\u00d8\u00da\u0005 \u0000"+
+		"\u0000\u00d9\u00c1\u0001\u0000\u0000\u0000\u00d9\u00c4\u0001\u0000\u0000"+
+		"\u0000\u00d9\u00c7\u0001\u0000\u0000\u0000\u00d9\u00ca\u0001\u0000\u0000"+
+		"\u0000\u00d9\u00cd\u0001\u0000\u0000\u0000\u00d9\u00d0\u0001\u0000\u0000"+
+		"\u0000\u00d9\u00d6\u0001\u0000\u0000\u0000\u00da\u00dd\u0001\u0000\u0000"+
+		"\u0000\u00db\u00d9\u0001\u0000\u0000\u0000\u00db\u00dc\u0001\u0000\u0000"+
+		"\u0000\u00dc\u0013\u0001\u0000\u0000\u0000\u00dd\u00db\u0001\u0000\u0000"+
+		"\u0000\u00de\u00df\u0003\u0018\f\u0000\u00df\u00e1\u0005\u0007\u0000\u0000"+
+		"\u00e0\u00e2\u0005,\u0000\u0000\u00e1\u00e0\u0001\u0000\u0000\u0000\u00e1"+
+		"\u00e2\u0001\u0000\u0000\u0000\u00e2\u00e3\u0001\u0000\u0000\u0000\u00e3"+
+		"\u00e4\u0003\b\u0004\u0000\u00e4\u0015\u0001\u0000\u0000\u0000\u00e5\u00e6"+
+		"\u0005.\u0000\u0000\u00e6\u0017\u0001\u0000\u0000\u0000\u00e7\u00e8\u0005"+
+		".\u0000\u0000\u00e8\u0019\u0001\u0000\u0000\u0000\u00e9\u00ea\u0005-\u0000"+
+		"\u0000\u00ea\u001b\u0001\u0000\u0000\u0000\u0017\u001e 36>JTZajmptx\u008f"+
+		"\u0093\u0099\u00ab\u00ae\u00bf\u00d9\u00db\u00e1";
 	public static final ATN _ATN =
 		new ATNDeserializer().deserialize(_serializedATN.toCharArray());
 	static {

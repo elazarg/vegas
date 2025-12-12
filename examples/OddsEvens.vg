@@ -1,6 +1,20 @@
+// Odds and Evens: players choose true/false, Even wins if choices match
+// Distribution semantics with quit punishment (pot = 200 wei, deposits = 100 each)
+//
+// Payoff structure:
+// - Fair play (both commit): Winner gets 126, loser gets 74
+//   * Both players recover most of deposit (126-100=+26 or 74-100=-26)
+//   * Losing is -26 utility, but you get 74% of deposit back
+// - Quit punishment: Quitter gets only 20 (loses 80% of deposit)
+//   * Much worse than losing fairly (-80 utility vs -26 utility)
+//   * Non-quitter gets 180 (full compensation)
+// - Both quit: Split pot evenly (100 each, no gain/loss)
+//
+// This makes quitting distinguishable from losing, fixing information set issues.
 join Odd() $ 100 Even() $ 100;
 yield Odd(c: bool) Even(c: bool);
 withdraw (Even.c != null && Odd.c != null) ?
-     { Even -> ((Even.c <-> Odd.c) ? 10 : -10); Odd -> ((Even.c <-> Odd.c) ? -10 : 10) }
-: (Even.c == null && Odd.c != null) ? { Even -> -100; Odd -> 10 }
-: { Even -> -100; Odd -> -100 }
+     { Even -> ((Even.c <-> Odd.c) ? 126 : 74); Odd -> ((Even.c <-> Odd.c) ? 74 : 126) }
+: (Even.c == null && Odd.c != null) ? { Even -> 20; Odd -> 180 }  // Even quit (punished)
+: (Even.c != null && Odd.c == null) ? { Even -> 180; Odd -> 20 }  // Odd quit (punished)
+: { Even -> 100; Odd -> 100 }  // Both quit, split pot

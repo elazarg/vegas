@@ -20,7 +20,7 @@
 (assert (= Q_outcome 0))
 
 (declare-const A_outcome Int)
-(assert (= A_outcome 50))
+(assert (= A_outcome 100))
 
 (check-sat)
 (get-model)

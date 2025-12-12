@@ -1,10 +1,11 @@
 // Privacy-noise game: querier asks; owner chooses noisy or accurate response at different costs/benefits.
+// Distribution semantics: pot (200 wei) - accurate data costs owner more privacy
 join Owner() $ 100 Querier() $ 100;
 
 yield Querier(query: bool);
 yield Owner(noise: bool) where Querier.query;
 
 withdraw {
-    Querier -> (!Querier.query ? 0 : (Owner.noise ? 1 : 5));
-    Owner   -> (!Querier.query ? 0 : (Owner.noise ? -1 : -3));
+    Querier -> (!Querier.query ? 100 : (Owner.noise ? 110 : 150));
+    Owner   -> (!Querier.query ? 100 : (Owner.noise ? 90 : 50));
 }

@@ -1,4 +1,5 @@
 // Spin-the-Dial: dial rotation parity game on Z4.
+// Distribution semantics: winner gets 120, loser gets 80
 type move = {0 .. 3}
 
 macro even(x: int): bool =
@@ -9,6 +10,6 @@ join P1() $ 100 P2() $ 100;
 yield P1(a: move) P2(b: move);
 
 withdraw {
-    P1 -> (even(P1.a + P2.b) ?  1 : -1);
-    P2 -> (even(P1.a + P2.b) ? -1 :  1);
+    P1 -> (even(P1.a + P2.b) ? 120 : 80);
+    P2 -> (even(P1.a + P2.b) ? 80 : 120);
 }

@@ -163,7 +163,7 @@ contract TicTacToe {
     function withdraw_X() public by(Role.X) action(Role.X, 10) depends(Role.O, 9) {
         require((!claimed_X), "already claimed");
         claimed_X = true;
-        int256 payout = 0;
+        int256 payout = 100;
         if (payout > 0) {
             (bool ok, ) = payable(address_X).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -173,7 +173,7 @@ contract TicTacToe {
     function withdraw_O() public by(Role.O) action(Role.O, 11) depends(Role.O, 9) {
         require((!claimed_O), "already claimed");
         claimed_O = true;
-        int256 payout = 0;
+        int256 payout = 100;
         if (payout > 0) {
             (bool ok, ) = payable(address_O).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

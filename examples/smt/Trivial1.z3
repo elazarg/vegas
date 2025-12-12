@@ -2,7 +2,7 @@
 (assert (=> action_A_0_done (and true true)))
 
 (declare-const A_outcome Int)
-(assert (= A_outcome 0))
+(assert (= A_outcome 10))
 
 (check-sat)
 (get-model)

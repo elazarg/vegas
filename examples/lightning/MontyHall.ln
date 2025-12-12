@@ -1,0 +1,459 @@
+LIGHTNING_PROTOCOL "MontyHall"
+ROLES: A=Guest, B=Host
+POT: 40 sat
+ROOT: 0
+STATES:
+  STATE 0 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 1 via Play(role=Host, delta={Host.car=Hidden(inner=IntVal(v=0))}, tag=Action(actionId=(Host, 2)))
+      -> 2 via Play(role=Host, delta={Host.car=Hidden(inner=IntVal(v=1))}, tag=Action(actionId=(Host, 2)))
+      -> 3 via Play(role=Host, delta={Host.car=Hidden(inner=IntVal(v=2))}, tag=Action(actionId=(Host, 2)))
+  
+  STATE 1 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 4 via Play(role=Guest, delta={Guest.d=IntVal(v=0)}, tag=Action(actionId=(Guest, 3)))
+      -> 5 via Play(role=Guest, delta={Guest.d=IntVal(v=1)}, tag=Action(actionId=(Guest, 3)))
+      -> 6 via Play(role=Guest, delta={Guest.d=IntVal(v=2)}, tag=Action(actionId=(Guest, 3)))
+  
+  STATE 2 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 7 via Play(role=Guest, delta={Guest.d=IntVal(v=0)}, tag=Action(actionId=(Guest, 3)))
+      -> 8 via Play(role=Guest, delta={Guest.d=IntVal(v=1)}, tag=Action(actionId=(Guest, 3)))
+      -> 9 via Play(role=Guest, delta={Guest.d=IntVal(v=2)}, tag=Action(actionId=(Guest, 3)))
+  
+  STATE 3 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 10 via Play(role=Guest, delta={Guest.d=IntVal(v=0)}, tag=Action(actionId=(Guest, 3)))
+      -> 11 via Play(role=Guest, delta={Guest.d=IntVal(v=1)}, tag=Action(actionId=(Guest, 3)))
+      -> 12 via Play(role=Guest, delta={Guest.d=IntVal(v=2)}, tag=Action(actionId=(Guest, 3)))
+  
+  STATE 4 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 13 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+      -> 14 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 5 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 15 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 16 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 6 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 17 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 18 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 7 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 19 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+      -> 20 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 8 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 21 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 22 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 9 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 23 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 24 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 10 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 25 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+      -> 26 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 11 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 27 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 28 via Play(role=Host, delta={Host.goat=IntVal(v=2)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 12 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 29 via Play(role=Host, delta={Host.goat=IntVal(v=0)}, tag=Action(actionId=(Host, 4)))
+      -> 30 via Play(role=Host, delta={Host.goat=IntVal(v=1)}, tag=Action(actionId=(Host, 4)))
+  
+  STATE 13 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 32 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 31 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 14 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 34 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 33 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 15 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 36 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 35 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 16 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 38 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 37 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 17 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 40 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 39 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 18 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 42 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 41 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 19 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 44 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 43 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 20 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 46 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 45 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 21 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 48 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 47 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 22 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 50 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 49 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 23 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 52 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 51 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 24 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 54 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 53 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 25 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 56 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 55 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 26 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 58 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 57 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 27 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 60 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 59 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 28 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 62 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 61 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 29 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 64 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 63 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 30 [TURN: Guest]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 66 via Play(role=Guest, delta={Guest.switch=BoolVal(v=false)}, tag=Action(actionId=(Guest, 5)))
+      -> 65 via Play(role=Guest, delta={Guest.switch=BoolVal(v=true)}, tag=Action(actionId=(Guest, 5)))
+  
+  STATE 31 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 67 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 32 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 68 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 33 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 69 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 34 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 70 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 35 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 36 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 37 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 71 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 38 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 72 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 39 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 40 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 41 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 73 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 42 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 74 via Play(role=Host, delta={Host.car=IntVal(v=0)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 43 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 44 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 45 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 75 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 46 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 76 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 47 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 77 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 48 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 78 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 49 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 79 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 50 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 80 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 51 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 81 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 52 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 82 via Play(role=Host, delta={Host.car=IntVal(v=1)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 53 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 54 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 55 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 83 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 56 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 84 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 57 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 58 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 59 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 85 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 60 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 86 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 61 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 62 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 63 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 87 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 64 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 88 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 65 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 89 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 66 [TURN: Host]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS:
+      -> 90 via Play(role=Host, delta={Host.car=IntVal(v=2)}, tag=Action(actionId=(Host, 6)))
+  
+  STATE 67 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 68 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 69 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 70 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 71 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 72 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 73 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 74 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 75 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 76 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 77 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 78 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 79 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 80 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 81 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 82 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 83 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 84 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 85 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 86 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 87 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 88 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 89 [TERMINAL]
+    ABORT_BALANCE: A=0, B=40
+    TRANSITIONS: <NONE>
+  
+  STATE 90 [TERMINAL]
+    ABORT_BALANCE: A=40, B=0
+    TRANSITIONS: <NONE>
+  

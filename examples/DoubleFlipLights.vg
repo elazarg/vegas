@@ -1,4 +1,5 @@
 // Double-Flip Lights: two lights, flipping buttons, parity decides winner.
+// Distribution semantics: winner gets 120, loser gets 80
 type move = {0, 1, 2, 3}
 
 macro flip1(m: move): bool =
@@ -15,6 +16,6 @@ join P1() $ 100 P2() $ 100;
 yield P1(m: move) P2(m: move);
 
 withdraw {
-    P1 -> (xor(flip1(P1.m), flip1(P2.m)) == xor(flip2(P1.m), flip2(P2.m)) ? 1 : -1);
-    P2 -> (xor(flip1(P1.m), flip1(P2.m)) != xor(flip2(P1.m), flip2(P2.m)) ? 1 : -1);
+    P1 -> (xor(flip1(P1.m), flip1(P2.m)) == xor(flip2(P1.m), flip2(P2.m)) ? 120 : 80);
+    P2 -> (xor(flip1(P1.m), flip1(P2.m)) != xor(flip2(P1.m), flip2(P2.m)) ? 120 : 80);
 }

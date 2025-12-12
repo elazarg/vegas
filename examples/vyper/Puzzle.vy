@@ -100,7 +100,7 @@ def withdraw_A():
         assert self.actionDone[Role.A][1], "dependency not satisfied"
     assert (not self.claimed_A), "already claimed"
     self.claimed_A = True
-    payout: int256 = 50
+    payout: int256 = 100
     if payout > 0:
         success: bool = raw_call(self.address_A, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"

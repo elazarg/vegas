@@ -1,0 +1,79 @@
+LIGHTNING_PROTOCOL "Prisoners"
+ROLES: A=A, B=B
+POT: 200 sat
+ROOT: 0
+STATES:
+  STATE 0 [TURN: A]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 2 via Play(role=A, delta={A.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(A, 3)))
+      -> 1 via Play(role=A, delta={A.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(A, 3)))
+  
+  STATE 1 [TURN: B]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 4 via Play(role=B, delta={B.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(B, 5)))
+      -> 3 via Play(role=B, delta={B.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(B, 5)))
+  
+  STATE 2 [TURN: B]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 6 via Play(role=B, delta={B.c=Hidden(inner=BoolVal(v=false))}, tag=Action(actionId=(B, 5)))
+      -> 5 via Play(role=B, delta={B.c=Hidden(inner=BoolVal(v=true))}, tag=Action(actionId=(B, 5)))
+  
+  STATE 3 [TURN: A]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 7 via Play(role=A, delta={A.c=BoolVal(v=true)}, tag=Action(actionId=(A, 4)))
+  
+  STATE 4 [TURN: A]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 8 via Play(role=A, delta={A.c=BoolVal(v=true)}, tag=Action(actionId=(A, 4)))
+  
+  STATE 5 [TURN: A]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 9 via Play(role=A, delta={A.c=BoolVal(v=false)}, tag=Action(actionId=(A, 4)))
+  
+  STATE 6 [TURN: A]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS:
+      -> 10 via Play(role=A, delta={A.c=BoolVal(v=false)}, tag=Action(actionId=(A, 4)))
+  
+  STATE 7 [TURN: B]
+    ABORT_BALANCE: A=200, B=0
+    TRANSITIONS:
+      -> 11 via Play(role=B, delta={B.c=BoolVal(v=true)}, tag=Action(actionId=(B, 6)))
+  
+  STATE 8 [TURN: B]
+    ABORT_BALANCE: A=200, B=0
+    TRANSITIONS:
+      -> 12 via Play(role=B, delta={B.c=BoolVal(v=false)}, tag=Action(actionId=(B, 6)))
+  
+  STATE 9 [TURN: B]
+    ABORT_BALANCE: A=200, B=0
+    TRANSITIONS:
+      -> 13 via Play(role=B, delta={B.c=BoolVal(v=true)}, tag=Action(actionId=(B, 6)))
+  
+  STATE 10 [TURN: B]
+    ABORT_BALANCE: A=200, B=0
+    TRANSITIONS:
+      -> 14 via Play(role=B, delta={B.c=BoolVal(v=false)}, tag=Action(actionId=(B, 6)))
+  
+  STATE 11 [TERMINAL]
+    ABORT_BALANCE: A=100, B=100
+    TRANSITIONS: <NONE>
+  
+  STATE 12 [TERMINAL]
+    ABORT_BALANCE: A=0, B=200
+    TRANSITIONS: <NONE>
+  
+  STATE 13 [TERMINAL]
+    ABORT_BALANCE: A=200, B=0
+    TRANSITIONS: <NONE>
+  
+  STATE 14 [TERMINAL]
+    ABORT_BALANCE: A=90, B=110
+    TRANSITIONS: <NONE>
+  

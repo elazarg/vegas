@@ -89,7 +89,7 @@ contract ThreeWayLottery {
     
     function move_Issuer_0() public payable by(Role.None) action(Role.Issuer, 0) {
         require((!done_Issuer), "already joined");
-        require((msg.value == 10), "bad stake");
+        require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Issuer;
         address_Issuer = msg.sender;
         done_Issuer = true;
@@ -97,7 +97,7 @@ contract ThreeWayLottery {
     
     function move_Alice_1() public payable by(Role.None) action(Role.Alice, 1) depends(Role.Issuer, 0) {
         require((!done_Alice), "already joined");
-        require((msg.value == 10), "bad stake");
+        require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Alice;
         address_Alice = msg.sender;
         done_Alice = true;
@@ -105,7 +105,7 @@ contract ThreeWayLottery {
     
     function move_Bob_2() public payable by(Role.None) action(Role.Bob, 2) depends(Role.Alice, 1) {
         require((!done_Bob), "already joined");
-        require((msg.value == 10), "bad stake");
+        require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Bob;
         address_Bob = msg.sender;
         done_Bob = true;
@@ -150,7 +150,7 @@ contract ThreeWayLottery {
     function withdraw_Bob() public by(Role.Bob) action(Role.Bob, 9) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
         require((!claimed_Bob), "already claimed");
         claimed_Bob = true;
-        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? (-10) : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == ((Issuer_c + Alice_c) + Bob_c)) ? (-10) : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == (((Issuer_c + Alice_c) + Bob_c) - 1)) ? 20 : (-10)))));
+        int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 24 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 34 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 2 : ((!done_Issuer_c) ? 17 : 12)))))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Bob).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -160,7 +160,7 @@ contract ThreeWayLottery {
     function withdraw_Issuer() public by(Role.Issuer) action(Role.Issuer, 10) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
         require((!claimed_Issuer), "already claimed");
         claimed_Issuer = true;
-        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? 20 : ((!done_Issuer_c) ? (-10) : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == ((Issuer_c + Alice_c) + Bob_c)) ? (-10) : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == (((Issuer_c + Alice_c) + Bob_c) - 1)) ? (-10) : 20))));
+        int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 24)) : (((!done_Alice_c) && (!done_Bob_c)) ? 34 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 2 : 12)))))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Issuer).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -170,7 +170,7 @@ contract ThreeWayLottery {
     function withdraw_Alice() public by(Role.Alice) action(Role.Alice, 11) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
         require((!claimed_Alice), "already claimed");
         claimed_Alice = true;
-        int256 payout = (((!done_Alice_c) || (!done_Bob_c)) ? (-10) : ((!done_Issuer_c) ? 20 : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == ((Issuer_c + Alice_c) + Bob_c)) ? 20 : ((((((Issuer_c + Alice_c) + Bob_c) / 3) * 3) == (((Issuer_c + Alice_c) + Bob_c) - 1)) ? (-10) : (-10)))));
+        int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 24 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 34 : ((!done_Alice_c) ? 2 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 17 : 12)))))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Alice).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

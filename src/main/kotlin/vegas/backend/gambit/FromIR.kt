@@ -318,9 +318,12 @@ internal class TreeUnroller(
     }
 
     private fun computePayoffs(config: Configuration): Map<RoleId, Expr.Const> {
-        return ir.payoffs.mapValues { (_, expr) ->
-            eval({ config.history.get(it) }, expr).toOutcome()
+        fun computeUtility(role: RoleId, expr: Expr): Expr.Const.IntVal {
+            val deposit: Expr.Const.IntVal = ir.dag.deposit(role)
+            val outcome: Expr.Const.IntVal = eval({ config.history.get(it) }, expr).toOutcome()
+            return Expr.Const.IntVal(outcome.v - deposit.v)
         }
+        return ir.payoffs.mapValues { (role, expr) -> computeUtility(role, expr) }
     }
 }
 

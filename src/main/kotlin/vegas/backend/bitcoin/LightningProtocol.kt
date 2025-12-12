@@ -16,14 +16,16 @@ import vegas.semantics.Label
  *    - Each protocol state has exactly one active player, with remaining players acting in
  *      subsequent states within the same logical frontier.
  *
- * 3. **Winner-Takes-All (WTA):**
- *    - Payoffs are interpreted by sign: Positive (>0) means WIN, Non-Positive (<=0) means LOSS.
- *    - Every terminal state must result in exactly one Winner and one Loser.
- *    - Magnitudes are ignored; ties are rejected.
+ * 3. **Distribution Semantics:**
+ *    - At every terminal / abort outcome, the game's payoffs for roleA and roleB are interpreted
+ *      as *withdrawal amounts* from a fixed Lightning pot `totalPot`.
+ *    - Withdrawals must be non-negative and their sum must not exceed `totalPot`.
+ *    - The backend does NOT enforce winner-takes-all; arbitrary deterministic splits are allowed.
  *
  * 4. **Deterministic Abort:**
  *    - Every strategic state must have an explicit `Quit` move for the active player.
- *    - Quitting must lead deterministically (via `FinalizeFrontier`) to a Terminal state.
+ *    - Quitting must lead deterministically (via `FinalizeFrontier` and cascading quits) to a
+ *      terminal state whose withdrawals define `abortBalance`.
  *
  * 5. **System Moves:**
  *    - Only `Label.FinalizeFrontier` is supported. Games with `Chance` or other internal steps are rejected.
@@ -47,15 +49,17 @@ internal data class ProtocolState(
 
     /**
      * The channel distribution required to safely be in this state.
-     * - **Terminal:** The actual game result.
-     * - **Strategic:** The result if `activePlayer` forfeits (Quits) right now.
-     * - **Forced Abort:** The result of the pending forced quit.
+     *
+     * Semantics:
+     * - **Terminal:** The final withdrawal amounts for roleA and roleB.
+     * - **Strategic:** The amounts that will apply if `activePlayer` forfeits (Quits) right now.
+     * - **Forced Abort:** The amounts after simulating pending forced quits.
      */
     val abortBalance: BalanceSplit,
 
     /**
      * The player who must provide the next input.
-     * Null if and only if this is a Terminal state (or a state where the game is effectively over).
+     * Null if and only if this is a terminal / forced-abort state (no further strategic actions).
      */
     val activePlayer: RoleId?,
 

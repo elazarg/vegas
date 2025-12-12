@@ -1,10 +1,15 @@
+// Prisoner's Dilemma adapted to distribution semantics (pot=200 wei)
+// NOTE: Distribution semantics changes the game structure!
+// In classic PD, both-defect is worse than both-cooperate (but defection still dominates).
+// With fixed pot distribution, we can't make both players worse off simultaneously.
+// This version preserves the Nash equilibrium (both defect) but changes payoffs.
 join A() $ 100;
 join B() $ 100;
 yield A(c: bool) B(c: bool); // true means cooperate
 withdraw (A.c != null && B.c != null)
-?(  (A.c && B.c )   ? { A -> -2; B -> -2 }
-    : (A.c && !B.c) ? { A ->  0; B -> -3 }
-    : (!A.c && B.c) ? { A -> -3; B ->  0 }
-    :                 { A -> -1; B -> -1 }
-):(A.c == null) ? { A -> -100; B -> 10 }
-:{ A -> 10; B -> -100 }
+?(  (A.c && B.c )   ? { A -> 100; B -> 100 }  // Both cooperate: split evenly
+    : (A.c && !B.c) ? { A -> 0; B -> 200 }    // A cooperates, B defects: B gets all
+    : (!A.c && B.c) ? { A -> 200; B -> 0 }    // A defects, B cooperates: A gets all
+    :                 { A -> 90; B -> 110 }   // Both defect: slight advantage to B
+):(A.c == null) ? { A -> 0; B -> 200 }        // A quit, B wins
+:{ A -> 200; B -> 0 }                          // B quit, A wins

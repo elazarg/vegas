@@ -1,4 +1,5 @@
 // Entry-fee auction: bidders decide to enter and bid; highest bid wins, entry fee is charged if entered.
+// Distribution semantics: pot (300 wei) - entry fee 10, winning bid*8 goes to Seller
 type bid = {0 .. 10}
 
 macro winningBid(e1: bool, b1: bid, e2: bool, b2: bid): bid =
@@ -15,16 +16,16 @@ yield B1(b: bid) where B1.enter;
 yield B2(b: bid) where B2.enter;
 
 withdraw {
-    Seller ->
-        (B1.enter ? 1 : 0) +
-        (B2.enter ? 1 : 0) +
-        winningBid(B1.enter, B1.b, B2.enter, B2.b);
+    Seller -> 100
+        + (B1.enter ? 10 : 0)
+        + (B2.enter ? 10 : 0)
+        + winningBid(B1.enter, B1.b, B2.enter, B2.b) * 8;
 
     B1 ->
-        !B1.enter ? 0 :
-        ((!B2.enter || B1.b >= B2.b) ? (10 - B1.b - 1) : -1);
+        !B1.enter ? 100
+        : ((!B2.enter || B1.b >= B2.b) ? (100 - 10 - B1.b * 8) : (100 - 10));
 
     B2 ->
-        !B2.enter ? 0 :
-        ((!B1.enter || B2.b > B1.b) ? (10 - B2.b - 1) : -1);
+        !B2.enter ? 100
+        : ((!B1.enter || B2.b > B1.b) ? (100 - 10 - B2.b * 8) : (100 - 10));
 }

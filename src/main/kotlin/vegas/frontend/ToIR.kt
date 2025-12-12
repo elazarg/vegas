@@ -81,6 +81,10 @@ private fun assertNoLetInExpr(expr: Expr, context: String) {
             assertNoLetInExpr(expr.l, context)
             assertNoLetInExpr(expr.r, context)
         }
+        is Expr.Mod -> {
+            assertNoLetInExpr(expr.l, context)
+            assertNoLetInExpr(expr.r, context)
+        }
         is Expr.Neg -> {
             assertNoLetInExpr(expr.x, context)
         }
@@ -477,6 +481,7 @@ private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr
                 "-" -> Expr.Sub(l, r)
                 "*" -> Expr.Mul(l, r)
                 "/" -> Expr.Div(l, r)
+                "%" -> Expr.Mod(l, r)
 
                 // Comparison
                 "==" -> Expr.Eq(l, r)
