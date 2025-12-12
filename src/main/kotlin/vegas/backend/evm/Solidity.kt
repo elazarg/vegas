@@ -131,7 +131,6 @@ private fun StringBuilder.renderAction(a: EvmAction) {
         add("by(${roleEnumName}.${a.invokedBy})")
         add("action(Role.${a.actionId.first}, ${a.actionId.second})")
         a.dependencies.forEach { dep -> add("depends(Role.${dep.first}, ${dep.second})") }
-        if (a.isTerminal) add("at_final_phase") // Rare, usually payoffs are separate
     }.joinToString(" ")
 
     append("function ${a.name}($inputs) $visibility$mutability $modifiers")

@@ -129,7 +129,6 @@ private fun StringBuilder.renderAction(a: EvmAction) {
             appendLine("    assert self.actionDone[$depRole][$depIdx], \"dependency not satisfied\"")
         }
 
-        // Terminal Check (inline 'at_final_phase' modifier)
         if (a.isTerminal) {
             appendLine("assert self.actionDone[FINAL_ACTION], \"game not over\"")
             appendLine("assert not self.payoffs_distributed, \"payoffs already sent\"")

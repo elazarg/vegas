@@ -22,7 +22,7 @@ Vegas is a **protocol DSL** that compiles to:
 
 For a fixed Vegas program:
 
-> Vegas program → IR → `DependencyDag<ActionId>` →
+> Vegas program → IR → `ActionDag` (Dependency DAG) →
 > (a) Solidity contract,
 > (b) EFG (Gambit),
 > (c) optional SMT/DQBF encodings.
@@ -85,25 +85,24 @@ This matches the way Vegas already works with commit/reveal and `where` clauses,
 We keep ActionIds simple and IR-oriented:
 
 ```kotlin
-typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - original IR phase, not semantic phase)
+typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - source sequence number)
 ```
 
 * `RoleId` = logical participant.
-* `Int` = original phase index in IR (even though we are moving away from phase *semantics*, the index is a useful stable identifier).
+* `Int` = original step index in IR (a stable identifier from the source definition).
 
 This can be refined later (e.g. adding a local action index) without changing the DAG API.
 
-### 3.2 ActionMetadata
+### 3.2 ActionMeta and ActionStruct
 
-Metadata describes **who**, **what**, and **how visible**:
+Metadata describes **who**, **what**, and **how visible**. In the implementation (`ActionDag.kt`), this is split into `ActionMeta` (container) and `ActionStruct` (structural visibility):
 
 ```kotlin
-data class ActionMetadata(
-    val role: RoleId,
+data class ActionStruct(
+    val owner: RoleId,
     val writes: Set<FieldRef>,            // fields produced/updated
     val visibility: Map<FieldRef, Visibility>,
     val guardReads: Set<FieldRef>         // fields read in guards/where
-    // NOTE: placeholder: later we may add explicit Prop bundles here
 )
 
 enum class Visibility {
@@ -127,51 +126,36 @@ Interpretation:
 
 This is the **property-bundle hook**: the semantics of “what becomes true” is driven by `writes`, `visibility`, and the IR’s `where` clauses.
 
-### 3.3 DependencyDag
+### 3.3 ActionDag (Dependency DAG)
 
-`DependencyDag` wraps a generic `Dag<T>` with metadata:
+`ActionDag` wraps a generic `Dag<ActionId>` with metadata and reachability info:
 
 ```kotlin
-class DependencyDag<T : Any> private constructor(
-    private val underlying: Dag<T>,
-    private val meta: Map<T, ActionMetadata>
-) : Dag<T> by underlying {
+class ActionDag private constructor(
+    private val dag: Dag<ActionId>,
+    private val payloads: Map<ActionId, ActionMeta>,
+    private val reach: Reachability<ActionId>
+) : Dag<ActionId> by dag {
 
-    fun metadata(action: T): ActionMetadata = meta[action]!!
+    fun meta(id: ActionId): ActionMeta = payloads.getValue(id)
 
-    fun owner(action: T): RoleId = metadata(action).role
-    fun writes(action: T): Set<FieldRef> = metadata(action).writes
-    fun visibility(action: T): Map<FieldRef, Visibility> = metadata(action).visibility
-    fun guardReads(action: T): Set<FieldRef> = metadata(action).guardReads
+    fun owner(id: ActionId): RoleId = meta(id).struct.owner
+    fun writes(id: ActionId): Set<FieldRef> = meta(id).struct.writes
+    fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = meta(id).struct.visibility
+    // ...
 
     /** Convenience: can these actions run without ordering constraints? */
-    fun canExecuteConcurrently(a: T, b: T): Boolean =
-        !Algo.reaches(a, b, ::prerequisitesOf) &&
-        !Algo.reaches(b, a, ::prerequisitesOf)
+    fun canExecuteConcurrently(a: ActionId, b: ActionId): Boolean =
+        !reach.comparable(a, b) // Implementation uses precomputed reachability
 
     companion object {
-        fun <T : Any> from(
-            nodes: Set<T>,
-            prerequisitesOf: (T) -> Set<T>,
-            metadata: (T) -> ActionMetadata
-        ): DependencyDag<T>? {
-            val dag = ExplicitDag.from(nodes, prerequisitesOf, checkAcyclic = true)
-                ?: return null
-            val metaMap = nodes.associateWith(metadata)
-
-            if (!isValidVisibilityStructure(dag, metaMap)) return null
-
-            return DependencyDag(dag, metaMap)
-        }
-
-        private fun <T : Any> isValidVisibilityStructure(
-            dag: Dag<T>,
-            meta: Map<T, ActionMetadata>
-        ): Boolean {
-            // See invariants in §3.4
-            // Implementation is straightforward: walk edges, check ordering & reads
-            return checkCommitRevealOrdering(dag, meta) &&
-                   checkVisibilityOnReads(dag, meta)
+        fun fromGraph(
+            nodes: Set<ActionId>,
+            deps: Map<ActionId, Set<ActionId>>,
+            payloads: Map<ActionId, ActionMeta>,
+        ): ActionDag? {
+            // Checks acyclicity and visibility invariants
+            // Returns null if invalid
         }
     }
 }
@@ -180,11 +164,11 @@ class DependencyDag<T : Any> private constructor(
 This means:
 
 * All DAG algorithms (`topo`, `prerequisitesOf`, `dependentsOf`, slicing) remain reusable.
-* Additional constraints (commit–reveal ordering, visibility) are centralized in `from(…)`.
+* Additional constraints (commit–reveal ordering, visibility) are centralized in `fromGraph(…)`.
 
 ### 3.4 DAG Invariants
 
-Any `DependencyDag` must satisfy:
+Any `ActionDag` must satisfy:
 
 1. **Acyclicity:**
 
@@ -217,20 +201,20 @@ These invariants model the all-or-nothing, on-chain commit–reveal pattern.
 
 **File:** `src/main/kotlin/vegas/ir/ActionDag.kt`
 
-We derive `DependencyDag<ActionId>` from `GameIR`:
+We derive `ActionDag` from `GameIR`:
 
 1. **Collect nodes:**
 
-    * For each phase index `p` and each role `r` that has an action in that phase, create `ActionId(r, p)`.
+    * For each source index `i` and each role `r` that has an action at that index, create `ActionId(r, i)`.
 
 2. **Infer dependencies:**
 
-   For each action `A = (r, p)`:
+   For each action `A = (r, i)`:
 
     * **Data dependencies (guard captures):**
       For each `fieldRef` appearing in `requires.captures` or `where`:
 
-        * find the latest prior action that writes `fieldRef` (by phase index);
+        * find the latest prior action that writes `fieldRef` (by index);
         * add an edge from that action to `A`;
         * if the field is COMMIT/REVEAL, ensure the REVEAL is also a predecessor of `A`.
 
@@ -240,7 +224,7 @@ We derive `DependencyDag<ActionId>` from `GameIR`:
 
 3. **Build metadata:**
 
-   For every `ActionId(r, p)`:
+   For every `ActionId(r, i)`:
 
     * `role = r`
     * `writes = set of FieldRef` derived from the action’s signature / IR.
@@ -250,16 +234,16 @@ We derive `DependencyDag<ActionId>` from `GameIR`:
 4. **Construct DAG:**
 
    ```kotlin
-   return DependencyDag.from(
+   return ActionDag.fromGraph(
        nodes = actions,
-       prerequisitesOf = { dependencies[it].orEmpty() },
-       metadata = ::buildMetadata
+       deps = dependencies,
+       payloads = payloads
    )
    ```
 
 5. **Failure behavior:**
 
-    * If acyclicity or visibility invariants fail, `from` returns `null`.
+    * If acyclicity or visibility invariants fail, `fromGraph` returns `null`.
     * The type checker should surface this as a **static error**:
 
         * “Invalid dependency structure (cycle or visibility violation).”
@@ -270,18 +254,18 @@ We derive `DependencyDag<ActionId>` from `GameIR`:
 
 ### 5.1 Solidity Backend: DAG-Based Scheduling
 
-**Goal:** No phase variable, no barrier synchronization. Dependencies expressed as per-action preconditions.
+**Goal:** No global state variable for execution steps, no barrier synchronization. Dependencies expressed as per-action preconditions.
 
-**File (new):** `vegas/backend/solidity/DagBasedFromIR.kt`
+**File:** `src/main/kotlin/vegas/backend/evm/GameToEvmIR.kt`
 
 Outline:
 
 1. **Linearize DAG (deterministic IDs):**
 
    ```kotlin
-   fun linearizeDag(dag: DependencyDag<ActionId>): Map<ActionId, Int> =
-       dag.nodes
-          // Stable deterministic ordering: by phase index, then role name
+   private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
+       dag.topo()
+          // Stable deterministic ordering: by index, then role name
           // (arbitrary but consistent across compilations)
           .sortedWith(compareBy({ it.second }, { it.first.name }))
           .mapIndexed { idx, id -> id to idx }
@@ -302,7 +286,7 @@ Outline:
     * Generate Solidity function:
 
       ```solidity
-      function move_Role_phase(...) 
+      function move_Role_seq(...)
           external
           by(Role)
           notDone(ACTION_FOO)
@@ -315,7 +299,7 @@ Outline:
       }
       ```
 
-    * Payload logic is derived from the old phase-based backend:
+    * Payload logic includes:
 
         * commit (store hashes),
         * reveal (check hashes, enforce where clauses),
@@ -368,43 +352,17 @@ Outline:
 **Implementation sketch:**
 
 ```kotlin
-class DagGameTreeBuilder(ir: GameIR, dag: DependencyDag<ActionId>) {
+class DagGameTreeBuilder(ir: GameIR, dag: ActionDag) {
     fun build(): GameTree {
         val frontier = FrontierMachine(dag)
         return buildFromFrontier(frontier, State.empty())
     }
-
-    private fun buildFromFrontier(frontier: FrontierMachine<ActionId>, state: State): GameTree {
-        if (frontier.isComplete()) return Terminal(evaluatePayoffs(state))
-
-        val enabled = frontier.enabled()
-        val byRole = enabled.groupBy { dag.owner(it) }
-
-        // For each role, compute known fields from transitive predecessors
-        val (role, actions) = byRole.entries.first()
-        val knownFields = computeKnownFields(actions, dag)
-        val infoset = state.restrictTo(knownFields)
-
-        // Build choice node...
-    }
-
-    private fun computeKnownFields(actions: List<ActionId>, dag: DependencyDag<ActionId>): Set<FieldRef> {
-        // Get ALL predecessors (transitive closure), not just immediate
-        val allPreds = actions.flatMap { action ->
-            Algo.ancestorsOf(setOf(action), dag.nodes, dag::prerequisitesOf)
-        }.toSet()
-
-        // Fields are known if revealed by any predecessor
-        return allPreds.flatMap { pred ->
-            dag.visibility(pred).filterValues { it != Visibility.COMMIT }.keys
-        }.toSet()
-    }
-}
+    // ...
 ```
 
 Implementation uses:
 
-* `DependencyDag.guardReads` and `visibility`,
+* `ActionDag` metadata (guardReads and visibility),
 * `Algo.ancestorsOf` for transitive closure of known fields,
 * plus current state to determine what each role knows at each node.
 
@@ -415,17 +373,17 @@ Mapping:
 * Each action’s decision variable depends only on predecessor variables in the DAG.
 * DQBF style: `∃x(deps_x) ...` where `deps_x` = fields in `guardReads` / causal ancestors.
 
-This is future work but structurally supported by `DependencyDag`.
+This is future work but structurally supported by `ActionDag`.
 
 ---
 
 ## 6. Testing Strategy (Important!)
 
-DAG is core infrastructure and **must** be well-tested. Current status: this is **not** done yet; this section defines the minimal required tests.
+DAG is core infrastructure and **must** be well-tested.
 
 ### 6.1 Unit Tests for DAG Construction
 
-**File:** `src/test/kotlin/vegas/DagTest.kt`
+**Files:** `src/test/kotlin/vegas/ActionDagCoreTest.kt`, `src/test/kotlin/vegas/ActionDagFromIrTest.kt`
 
 Tests:
 
@@ -433,7 +391,7 @@ Tests:
 
     * For each example game (`MontyHall.vg`, `OddsEvens.vg`, `Prisoners.vg`, …):
 
-        * parse → IR → `buildDependencyDag(ir)`,
+        * parse → IR → `compileToIR(ast).dag`,
         * assert non-null,
         * assert `dag.nodes` non-empty.
 
@@ -442,18 +400,18 @@ Tests:
     * For each example with commits/reveals:
 
         * find actions whose `visibility[f] == COMMIT` and `== REVEAL`,
-        * assert `Algo.reaches(commit, reveal, dag::prerequisitesOf)` (transitive reachability, not just immediate prerequisites).
+        * assert `dag.reaches(commit, reveal)` (transitive reachability).
 
 3. **Visibility on reads:**
 
     * Introduce a small invalid IR where an action reads a hidden field before reveal:
 
-        * ensure `buildDependencyDag` returns `null` or fails with a clear error.
+        * ensure DAG construction returns `null` or fails with a clear error.
 
 4. **Cycle detection:**
 
-    * Construct a synthetic `GameIR` where A depends on B and B depends on A.
-    * Ensure DAG construction fails (null) and type checker surfaces a cycle error.
+    * Construct a synthetic graph where A depends on B and B depends on A.
+    * Ensure DAG construction fails.
 
 5. **Concurrent-execution detection:**
 
@@ -470,11 +428,11 @@ Tests:
 
 ### 6.2 Solidity Integration Tests
 
-**File:** `src/test/kotlin/vegas/SolidityDagTest.kt`
+**File:** `src/test/kotlin/vegas/GoldenMasterTest.kt`
 
 For each example game:
 
-1. Build IR → DAG → Solidity (Dag-based backend).
+1. Build IR → DAG → Solidity.
 
 2. Assert:
 
@@ -489,7 +447,7 @@ For each example game:
 
 ### 6.3 Gambit/EFG Tests
 
-**File:** `src/test/kotlin/vegas/GambitDagTest.kt`
+**File:** `src/test/kotlin/vegas/GambitSemanticTest.kt`
 
 * For small examples, generate EFG via DAG backend and check:
 
@@ -513,7 +471,7 @@ These are **axes**, not yet implemented. This doc keeps the current design compa
 1. **Richer property layer:**
 
     * Today: properties live implicitly in IR `where`/guards.
-    * Future: `Prop(expr, kind: GUARD | ASSERTION | ORACLE_BACKED)` inside `ActionMetadata`.
+    * Future: `Prop(expr, kind: GUARD | ASSERTION | ORACLE_BACKED)` inside `ActionMeta`.
 
 2. **Crypto / oracle modeling:**
 
@@ -539,7 +497,7 @@ These are **axes**, not yet implemented. This doc keeps the current design compa
 
 ## 8. Summary
 
-* Vegas’ **core semantic object** is a `DependencyDag<ActionId>` annotated with `ActionMetadata` (role, writes, visibility, reads).
+* Vegas’ **core semantic object** is `ActionDag` (a `Dag<ActionId>`) annotated with `ActionMeta` (role, writes, visibility, reads).
 * We are **already intensional** at value level: actions choose concrete values that matter later.
 * We deliberately stay **extensional** at proof-object level: we track **which facts are established**, not how proofs are structured.
 * The **property-bundle view** (what each node makes true and visible) is the main lever for expressing:

@@ -46,8 +46,10 @@
 
 #### Test Environment
 
-- **Java Version**: Project uses Java 25
-  - Ensure `JAVA_HOME` is set to your JDK installation (e.g., `export JAVA_HOME=/path/to/jdk-25`)
+- **Java Version**: Project uses Java 25 (User Environment) / Java 21 (Agent Environment)
+  - Default build target is 25.
+  - Agents: Run `mvn test -Djava.version=21` to override if needed.
+  - Ensure `JAVA_HOME` is set to your JDK installation.
 - **Maven**: Must be available in system PATH
   - If Maven is not in PATH, either add it or use the full path to the `mvn` executable
   - Basic command: `mvn test`
