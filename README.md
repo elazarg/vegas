@@ -31,8 +31,8 @@ From a single Vegas specification, the tool generates:
 type door = {0, 1, 2}
 
 // Players join with deposits
-join Host() $ 100;
-join Guest() $ 100;
+join Host() $ 20;
+join Guest() $ 20;
 
 // Host hides the car (compiler generates commitment)
 yield Host(car: hidden door);
@@ -40,7 +40,6 @@ yield Host(car: hidden door);
 // Guest makes a public choice
 yield Guest(d: door);
 
-// Host reveals a goat (constrained by game rules)
 yield Host(goat: door) where Host.goat != Guest.d;
 
 // Guest decides whether to switch
@@ -51,10 +50,11 @@ reveal Host(car: door) where Host.goat != Host.car;
 
 // Payouts calculated based on game state
 withdraw (Host.car != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 20 : -20;  Host -> 0 }
-     : (Host.car == null)
-     ? { Guest -> 20;   Host -> -100 } // Host timed out/bailed
-     : { Guest -> -100; Host -> 0 }    // Guest timed out/bailed
+     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+         Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
+     : (Host.car == null)  // Host quit
+     ? { Guest -> 40;   Host -> 0 }
+     : { Guest -> 0; Host -> 40 }  // Guest quit
 ````
 
 ## Building and Running
