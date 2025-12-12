@@ -46,8 +46,8 @@
 
 #### Test Environment
 
-- **Java Version**: Project uses Java 25
-  - Ensure `JAVA_HOME` is set to your JDK installation (e.g., `export JAVA_HOME=/path/to/jdk-25`)
+- **Java Version**: Project uses Java 21
+  - Ensure `JAVA_HOME` is set to your JDK installation (e.g., `export JAVA_HOME=/path/to/jdk-21`)
 - **Maven**: Must be available in system PATH
   - If Maven is not in PATH, either add it or use the full path to the `mvn` executable
   - Basic command: `mvn test`
