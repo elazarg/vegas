@@ -39,6 +39,12 @@ data class EvmContract(
 
     // Initialization logic (e.g. setting initial timestamps)
     val initialization: List<EvmStmt>,
+
+    // Internal helpers (e.g. timeout checks)
+    val helpers: List<EvmFunction> = emptyList(),
+
+    // Global modifiers (e.g. depends, action)
+    val modifiers: List<EvmModifier> = emptyList(),
 )
 
 /**
@@ -66,7 +72,33 @@ data class EvmAction(
     // Contains ONLY the logic for this move (guards, storage updates, emits).
     // Generic logic (like checking 'actionDone' bitmaps) is implied by the
     // structural constraints above and injected by the renderer.
+
+    // Declarative modifiers (Solidity)
+    val modifiers: List<EvmExpr.Call> = emptyList(),
+    // Equivalent inline checks (Vyper / generic)
+    val checks: List<EvmStmt> = emptyList(),
+
     val guards: List<EvmExpr>,
+    val body: List<EvmStmt>,
+
+    // Post-action updates (Vyper / generic)
+    val updates: List<EvmStmt> = emptyList()
+)
+
+/**
+ * General purpose function (for helpers, internal logic).
+ */
+data class EvmFunction(
+    val name: String,
+    val inputs: List<EvmParam>,
+    val visibility: String = "internal", // internal, private, public
+    val mutability: String = "",         // view, pure
+    val body: List<EvmStmt>
+)
+
+data class EvmModifier(
+    val name: String,
+    val params: List<EvmParam>,
     val body: List<EvmStmt>
 )
 
@@ -119,8 +151,13 @@ sealed class EvmStmt {
     // Hard stop
     data class Revert(val message: String) : EvmStmt()
 
+    data class If(val condition: EvmExpr, val body: List<EvmStmt>, val elseBody: List<EvmStmt> = emptyList()) : EvmStmt()
+
     // Pass (No-op), useful for empty bodies in Vyper
     object Pass : EvmStmt()
+
+    // Modifier placeholder '_;' (Solidity only)
+    object Placeholder : EvmStmt()
 
     data class SendEth(val to: EvmExpr, val amount: EvmExpr) : EvmStmt()
 }

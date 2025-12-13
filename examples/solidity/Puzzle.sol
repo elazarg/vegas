@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract Puzzle {
     enum Role { None, Q, A }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Q_0 = 0;
     uint256 constant public ACTION_A_1 = 1;
     mapping(address => Role) public roles;
@@ -26,52 +28,49 @@ contract Puzzle {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Q_0(int256 _x) public payable by(Role.None) action(Role.Q, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+    
+
+    function move_Q_0(int256 _x) public payable by(Role.Q) action(Role.Q, 0) {
         require((!done_Q), "already joined");
         require((msg.value == 50), "bad stake");
         roles[msg.sender] = Role.Q;
@@ -81,7 +80,7 @@ contract Puzzle {
         done_Q_x = true;
     }
     
-    function move_A_1(int256 _p, int256 _q) public by(Role.None) action(Role.A, 1) depends(Role.Q, 0) {
+    function move_A_1(int256 _p, int256 _q) public by(Role.A) action(Role.A, 1) depends(Role.Q, 0) {
         require(((((_p * _q) == Q_x) && (_p != 1)) && (_q != 1)), "domain");
         require((!done_A), "already joined");
         roles[msg.sender] = Role.A;
@@ -93,7 +92,7 @@ contract Puzzle {
         done_A_q = true;
     }
     
-    function withdraw_Q() public by(Role.Q) action(Role.Q, 2) depends(Role.A, 1) {
+    function withdraw_Q() public {
         require((!claimed_Q), "already claimed");
         claimed_Q = true;
         int256 payout = 0;
@@ -103,7 +102,7 @@ contract Puzzle {
         }
     }
     
-    function withdraw_A() public by(Role.A) action(Role.A, 3) depends(Role.A, 1) {
+    function withdraw_A() public {
         require((!claimed_A), "already claimed");
         claimed_A = true;
         int256 payout = 100;

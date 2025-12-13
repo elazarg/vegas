@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract TicTacToe {
     enum Role { None, X, O }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_X_0 = 0;
     uint256 constant public ACTION_O_1 = 1;
     uint256 constant public ACTION_X_2 = 2;
@@ -44,52 +46,49 @@ contract TicTacToe {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_X_0() public payable by(Role.None) action(Role.X, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+
+    
+    function move_X_0() public payable by(Role.X) action(Role.X, 0) {
         require((!done_X), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.X;
@@ -97,7 +96,7 @@ contract TicTacToe {
         done_X = true;
     }
     
-    function move_O_1() public payable by(Role.None) action(Role.O, 1) depends(Role.X, 0) {
+    function move_O_1() public payable by(Role.O) action(Role.O, 1) depends(Role.X, 0) {
         require((!done_O), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.O;
@@ -160,7 +159,7 @@ contract TicTacToe {
         done_O_c4 = true;
     }
     
-    function withdraw_X() public by(Role.X) action(Role.X, 10) depends(Role.O, 9) {
+    function withdraw_X() public {
         require((!claimed_X), "already claimed");
         claimed_X = true;
         int256 payout = 100;
@@ -170,7 +169,7 @@ contract TicTacToe {
         }
     }
     
-    function withdraw_O() public by(Role.O) action(Role.O, 11) depends(Role.O, 9) {
+    function withdraw_O() public {
         require((!claimed_O), "already claimed");
         claimed_O = true;
         int256 payout = 100;
