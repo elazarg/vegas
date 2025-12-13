@@ -97,14 +97,20 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     appendLine("def ${a.name}($inputs):")
 
     indent {
+        // Inline Checks
+        a.checks.forEach { renderStmt(it) }
+
         // Domain guards and where clauses
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
 
-        // Render Body (including injected policy logic)
-        if (a.body.isEmpty()) appendLine("pass")
+        // Render Body
+        if (a.body.isEmpty() && a.checks.isEmpty() && a.guards.isEmpty() && a.updates.isEmpty()) appendLine("pass")
         else a.body.forEach { renderStmt(it) }
+
+        // Post Updates
+        a.updates.forEach { renderStmt(it) }
     }
     appendLine()
 }
@@ -180,6 +186,7 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
                 }
             }
         }
+        is Placeholder -> {} // Should not appear in Vyper logic
         is Pass -> appendLine("pass")
         is SendEth -> {
             // Store payout in local variable to avoid evaluating twice

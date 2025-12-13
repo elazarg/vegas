@@ -46,6 +46,7 @@ def move_Q_0(_x: int256):
     _check_timestamp(Role.Q)
     assert (not self.bailed[Role.Q]), "you bailed"
     assert (not self.actionDone[Role.Q][0]), "already done"
+    self.actionDone[Role.Q][0] = True
     assert (not self.done_Q), "already joined"
     assert (msg.value == 50), "bad stake"
     self.roles[msg.sender] = Role.Q
@@ -53,7 +54,6 @@ def move_Q_0(_x: int256):
     self.done_Q = True
     self.Q_x = _x
     self.done_Q_x = True
-    self.actionDone[Role.Q][0] = True
     self.actionTimestamp[Role.Q][0] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -63,6 +63,7 @@ def move_A_1(_p: int256, _q: int256):
     _check_timestamp(Role.A)
     assert (not self.bailed[Role.A]), "you bailed"
     assert (not self.actionDone[Role.A][1]), "already done"
+    self.actionDone[Role.A][1] = True
     _check_timestamp(Role.Q)
     if (not self.bailed[Role.Q]):
         assert self.actionDone[Role.Q][0], "dependency not satisfied"
@@ -75,7 +76,6 @@ def move_A_1(_p: int256, _q: int256):
     self.done_A_p = True
     self.A_q = _q
     self.done_A_q = True
-    self.actionDone[Role.A][1] = True
     self.actionTimestamp[Role.A][1] = block.timestamp
     self.lastTs = block.timestamp
 

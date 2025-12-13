@@ -43,7 +43,11 @@ fun generateSolidity(contract: EvmContract): String {
             contract.helpers.forEach { renderFunction(it) }
             if (contract.helpers.isNotEmpty()) appendLine()
 
-            // 7. Game Actions
+            // 7. Modifiers
+            contract.modifiers.forEach { renderModifier(it) }
+            if (contract.modifiers.isNotEmpty()) appendLine()
+
+            // 8. Game Actions
             contract.actions.forEach { renderAction(it) }
         }
     }
@@ -88,13 +92,32 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     val inputs = a.inputs.joinToString(", ") { "${renderType(it.type)} ${renderExpr(Var(it.name))}" }
     val visibility = "public" // Actions are always public entry points
     val mutability = if (a.payable) " payable" else ""
+    val mods = if (a.modifiers.isNotEmpty()) " " + a.modifiers.joinToString(" ") { renderExpr(it) } else ""
 
-    append("function ${a.name}($inputs) $visibility$mutability")
+    append("function ${a.name}($inputs) $visibility$mutability$mods")
     block {
+        // If using modifiers, skip explicit checks (assuming modifiers cover them)
+        if (a.modifiers.isEmpty()) {
+            a.checks.forEach { renderStmt(it) }
+        }
+
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
         a.body.forEach { renderStmt(it) }
+
+        if (a.modifiers.isEmpty()) {
+            a.updates.forEach { renderStmt(it) }
+        }
+    }
+    appendLine()
+}
+
+private fun StringBuilder.renderModifier(m: EvmModifier) {
+    val params = m.params.joinToString(", ") { "${renderType(it.type)} ${it.name.name}" }
+    append("modifier ${m.name}($params)")
+    block {
+        m.body.forEach { renderStmt(it) }
     }
     appendLine()
 }
@@ -145,6 +168,7 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
                 }
             }
         }
+        is Placeholder -> appendLine("_;")
         is Pass -> {} // No-op in Solidity
         is SendEth -> {
             // Only send if positive

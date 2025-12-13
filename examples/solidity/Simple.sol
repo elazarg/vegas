@@ -47,97 +47,62 @@ contract Simple {
         }
     }
     
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
     
-    function move_A_0() public payable {
-        require((roles[msg.sender] == Role.A), "bad role");
-        _check_timestamp(Role.A);
-        require((!bailed[Role.A]), "you bailed");
-        require((!actionDone[Role.A][0]), "already done");
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+
+
+    function move_A_0() public payable by(Role.A) action(Role.A, 0) {
         require((!done_A), "already joined");
         require((msg.value == 6), "bad stake");
         roles[msg.sender] = Role.A;
         address_A = msg.sender;
         done_A = true;
-        actionDone[Role.A][0] = true;
-        actionTimestamp[Role.A][0] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_B_1() public payable {
-        require((roles[msg.sender] == Role.B), "bad role");
-        _check_timestamp(Role.B);
-        require((!bailed[Role.B]), "you bailed");
-        require((!actionDone[Role.B][1]), "already done");
-        _check_timestamp(Role.A);
-        if ((!bailed[Role.A]))
-         {
-            require(actionDone[Role.A][0], "dependency not satisfied");
-        }
+    function move_B_1() public payable by(Role.B) action(Role.B, 1) depends(Role.A, 0) {
         require((!done_B), "already joined");
         require((msg.value == 6), "bad stake");
         roles[msg.sender] = Role.B;
         address_B = msg.sender;
         done_B = true;
-        actionDone[Role.B][1] = true;
-        actionTimestamp[Role.B][1] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_A_2(bytes32 _hidden_c) public {
-        require((roles[msg.sender] == Role.A), "bad role");
-        _check_timestamp(Role.A);
-        require((!bailed[Role.A]), "you bailed");
-        require((!actionDone[Role.A][2]), "already done");
-        _check_timestamp(Role.B);
-        if ((!bailed[Role.B]))
-         {
-            require(actionDone[Role.B][1], "dependency not satisfied");
-        }
+    function move_A_2(bytes32 _hidden_c) public by(Role.A) action(Role.A, 2) depends(Role.B, 1) {
         A_c_hidden = _hidden_c;
         done_A_c_hidden = true;
-        actionDone[Role.A][2] = true;
-        actionTimestamp[Role.A][2] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_B_3(bool _c) public {
-        require((roles[msg.sender] == Role.B), "bad role");
-        _check_timestamp(Role.B);
-        require((!bailed[Role.B]), "you bailed");
-        require((!actionDone[Role.B][3]), "already done");
-        _check_timestamp(Role.A);
-        if ((!bailed[Role.A]))
-         {
-            require(actionDone[Role.A][2], "dependency not satisfied");
-        }
+    function move_B_3(bool _c) public by(Role.B) action(Role.B, 3) depends(Role.A, 2) {
         B_c = _c;
         done_B_c = true;
-        actionDone[Role.B][3] = true;
-        actionTimestamp[Role.B][3] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_A_4(bool _c, uint256 _salt) public {
-        require((roles[msg.sender] == Role.A), "bad role");
-        _check_timestamp(Role.A);
-        require((!bailed[Role.A]), "you bailed");
-        require((!actionDone[Role.A][4]), "already done");
-        _check_timestamp(Role.A);
-        if ((!bailed[Role.A]))
-         {
-            require(actionDone[Role.A][2], "dependency not satisfied");
-        }
-        _check_timestamp(Role.B);
-        if ((!bailed[Role.B]))
-         {
-            require(actionDone[Role.B][3], "dependency not satisfied");
-        }
+    function move_A_4(bool _c, uint256 _salt) public by(Role.A) action(Role.A, 4) depends(Role.A, 2) depends(Role.B, 3) {
         require((keccak256(abi.encodePacked(_c, _salt)) == A_c_hidden), "reveal failed for c");
         A_c = _c;
         done_A_c = true;
-        actionDone[Role.A][4] = true;
-        actionTimestamp[Role.A][4] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
     function withdraw_A() public {

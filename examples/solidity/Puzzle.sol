@@ -44,12 +44,33 @@ contract Puzzle {
         }
     }
     
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
     
-    function move_Q_0(int256 _x) public payable {
-        require((roles[msg.sender] == Role.Q), "bad role");
-        _check_timestamp(Role.Q);
-        require((!bailed[Role.Q]), "you bailed");
-        require((!actionDone[Role.Q][0]), "already done");
+
+    function move_Q_0(int256 _x) public payable by(Role.Q) action(Role.Q, 0) {
         require((!done_Q), "already joined");
         require((msg.value == 50), "bad stake");
         roles[msg.sender] = Role.Q;
@@ -57,21 +78,9 @@ contract Puzzle {
         done_Q = true;
         Q_x = _x;
         done_Q_x = true;
-        actionDone[Role.Q][0] = true;
-        actionTimestamp[Role.Q][0] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_A_1(int256 _p, int256 _q) public {
-        require((roles[msg.sender] == Role.A), "bad role");
-        _check_timestamp(Role.A);
-        require((!bailed[Role.A]), "you bailed");
-        require((!actionDone[Role.A][1]), "already done");
-        _check_timestamp(Role.Q);
-        if ((!bailed[Role.Q]))
-         {
-            require(actionDone[Role.Q][0], "dependency not satisfied");
-        }
+    function move_A_1(int256 _p, int256 _q) public by(Role.A) action(Role.A, 1) depends(Role.Q, 0) {
         require(((((_p * _q) == Q_x) && (_p != 1)) && (_q != 1)), "domain");
         require((!done_A), "already joined");
         roles[msg.sender] = Role.A;
@@ -81,9 +90,6 @@ contract Puzzle {
         done_A_p = true;
         A_q = _q;
         done_A_q = true;
-        actionDone[Role.A][1] = true;
-        actionTimestamp[Role.A][1] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
     function withdraw_Q() public {

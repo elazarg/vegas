@@ -21,19 +21,26 @@ interface EvmQuitPolicy : QuitPolicy {
     fun helpers(): List<EvmFunction>
 
     /**
+     * Returns modifier definitions for Solidity (e.g. 'depends', 'action').
+     */
+    fun solidityModifiersDefinition(): List<EvmModifier>
+
+    /**
      * Generates the logic to run at the start of an action.
-     * This typically includes:
-     * - Verifying the invoker (msg.sender)
-     * - Checking if the action is already done
-     * - Checking dependencies (Policy specific)
-     * - Checking for timeouts/bailouts (Policy specific)
+     * Used by backends that don't support modifiers (Vyper) or if modifiers are disabled.
      *
      * @param role The role performing the action.
      * @param actionId The action ID.
      * @param dependencies The list of actions this action depends on.
      * @return Statements to inject at the beginning of the action body.
      */
-    fun preActionLogic(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmStmt>
+    fun preActionChecks(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmStmt>
+
+    /**
+     * Returns the modifier calls to apply to this action (Solidity).
+     * e.g. `[Call("depends", ...), Call("action", ...)]`
+     */
+    fun actionModifiers(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmExpr.Call>
 
     /**
      * Generates the logic to run at the end of an action.

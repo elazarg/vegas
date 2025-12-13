@@ -50,6 +50,7 @@ def move_Odd_0(_hidden_c: bytes32):
     _check_timestamp(Role.Odd)
     assert (not self.bailed[Role.Odd]), "you bailed"
     assert (not self.actionDone[Role.Odd][1]), "already done"
+    self.actionDone[Role.Odd][1] = True
     assert (not self.done_Odd), "already joined"
     assert (msg.value == 100), "bad stake"
     self.roles[msg.sender] = Role.Odd
@@ -57,7 +58,6 @@ def move_Odd_0(_hidden_c: bytes32):
     self.done_Odd = True
     self.Odd_c_hidden = _hidden_c
     self.done_Odd_c_hidden = True
-    self.actionDone[Role.Odd][1] = True
     self.actionTimestamp[Role.Odd][1] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -68,6 +68,7 @@ def move_Even_2(_hidden_c: bytes32):
     _check_timestamp(Role.Even)
     assert (not self.bailed[Role.Even]), "you bailed"
     assert (not self.actionDone[Role.Even][3]), "already done"
+    self.actionDone[Role.Even][3] = True
     assert (not self.done_Even), "already joined"
     assert (msg.value == 100), "bad stake"
     self.roles[msg.sender] = Role.Even
@@ -75,7 +76,6 @@ def move_Even_2(_hidden_c: bytes32):
     self.done_Even = True
     self.Even_c_hidden = _hidden_c
     self.done_Even_c_hidden = True
-    self.actionDone[Role.Even][3] = True
     self.actionTimestamp[Role.Even][3] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -85,6 +85,7 @@ def move_Odd_1(_c: bool, _salt: uint256):
     _check_timestamp(Role.Odd)
     assert (not self.bailed[Role.Odd]), "you bailed"
     assert (not self.actionDone[Role.Odd][2]), "already done"
+    self.actionDone[Role.Odd][2] = True
     _check_timestamp(Role.Odd)
     if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][1], "dependency not satisfied"
@@ -94,7 +95,6 @@ def move_Odd_1(_c: bool, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Odd_c_hidden), "reveal failed for c"
     self.Odd_c = _c
     self.done_Odd_c = True
-    self.actionDone[Role.Odd][2] = True
     self.actionTimestamp[Role.Odd][2] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -104,6 +104,7 @@ def move_Even_3(_c: bool, _salt: uint256):
     _check_timestamp(Role.Even)
     assert (not self.bailed[Role.Even]), "you bailed"
     assert (not self.actionDone[Role.Even][4]), "already done"
+    self.actionDone[Role.Even][4] = True
     _check_timestamp(Role.Odd)
     if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][1], "dependency not satisfied"
@@ -113,7 +114,6 @@ def move_Even_3(_c: bool, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Even_c_hidden), "reveal failed for c"
     self.Even_c = _c
     self.done_Even_c = True
-    self.actionDone[Role.Even][4] = True
     self.actionTimestamp[Role.Even][4] = block.timestamp
     self.lastTs = block.timestamp
 

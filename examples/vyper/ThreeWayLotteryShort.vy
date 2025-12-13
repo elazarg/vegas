@@ -60,6 +60,7 @@ def move_Issuer_0(_hidden_c: bytes32):
     _check_timestamp(Role.Issuer)
     assert (not self.bailed[Role.Issuer]), "you bailed"
     assert (not self.actionDone[Role.Issuer][1]), "already done"
+    self.actionDone[Role.Issuer][1] = True
     assert (not self.done_Issuer), "already joined"
     assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Issuer
@@ -67,7 +68,6 @@ def move_Issuer_0(_hidden_c: bytes32):
     self.done_Issuer = True
     self.Issuer_c_hidden = _hidden_c
     self.done_Issuer_c_hidden = True
-    self.actionDone[Role.Issuer][1] = True
     self.actionTimestamp[Role.Issuer][1] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -78,6 +78,7 @@ def move_Alice_2(_hidden_c: bytes32):
     _check_timestamp(Role.Alice)
     assert (not self.bailed[Role.Alice]), "you bailed"
     assert (not self.actionDone[Role.Alice][3]), "already done"
+    self.actionDone[Role.Alice][3] = True
     assert (not self.done_Alice), "already joined"
     assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Alice
@@ -85,7 +86,6 @@ def move_Alice_2(_hidden_c: bytes32):
     self.done_Alice = True
     self.Alice_c_hidden = _hidden_c
     self.done_Alice_c_hidden = True
-    self.actionDone[Role.Alice][3] = True
     self.actionTimestamp[Role.Alice][3] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -96,6 +96,7 @@ def move_Bob_4(_hidden_c: bytes32):
     _check_timestamp(Role.Bob)
     assert (not self.bailed[Role.Bob]), "you bailed"
     assert (not self.actionDone[Role.Bob][5]), "already done"
+    self.actionDone[Role.Bob][5] = True
     assert (not self.done_Bob), "already joined"
     assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Bob
@@ -103,7 +104,6 @@ def move_Bob_4(_hidden_c: bytes32):
     self.done_Bob = True
     self.Bob_c_hidden = _hidden_c
     self.done_Bob_c_hidden = True
-    self.actionDone[Role.Bob][5] = True
     self.actionTimestamp[Role.Bob][5] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -113,6 +113,7 @@ def move_Issuer_1(_c: int256, _salt: uint256):
     _check_timestamp(Role.Issuer)
     assert (not self.bailed[Role.Issuer]), "you bailed"
     assert (not self.actionDone[Role.Issuer][2]), "already done"
+    self.actionDone[Role.Issuer][2] = True
     _check_timestamp(Role.Issuer)
     if (not self.bailed[Role.Issuer]):
         assert self.actionDone[Role.Issuer][1], "dependency not satisfied"
@@ -126,7 +127,6 @@ def move_Issuer_1(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Issuer_c_hidden), "reveal failed for c"
     self.Issuer_c = _c
     self.done_Issuer_c = True
-    self.actionDone[Role.Issuer][2] = True
     self.actionTimestamp[Role.Issuer][2] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -136,6 +136,7 @@ def move_Alice_3(_c: int256, _salt: uint256):
     _check_timestamp(Role.Alice)
     assert (not self.bailed[Role.Alice]), "you bailed"
     assert (not self.actionDone[Role.Alice][4]), "already done"
+    self.actionDone[Role.Alice][4] = True
     _check_timestamp(Role.Issuer)
     if (not self.bailed[Role.Issuer]):
         assert self.actionDone[Role.Issuer][1], "dependency not satisfied"
@@ -149,7 +150,6 @@ def move_Alice_3(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Alice_c_hidden), "reveal failed for c"
     self.Alice_c = _c
     self.done_Alice_c = True
-    self.actionDone[Role.Alice][4] = True
     self.actionTimestamp[Role.Alice][4] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -159,6 +159,7 @@ def move_Bob_5(_c: int256, _salt: uint256):
     _check_timestamp(Role.Bob)
     assert (not self.bailed[Role.Bob]), "you bailed"
     assert (not self.actionDone[Role.Bob][6]), "already done"
+    self.actionDone[Role.Bob][6] = True
     _check_timestamp(Role.Issuer)
     if (not self.bailed[Role.Issuer]):
         assert self.actionDone[Role.Issuer][1], "dependency not satisfied"
@@ -172,7 +173,6 @@ def move_Bob_5(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Bob_c_hidden), "reveal failed for c"
     self.Bob_c = _c
     self.done_Bob_c = True
-    self.actionDone[Role.Bob][6] = True
     self.actionTimestamp[Role.Bob][6] = block.timestamp
     self.lastTs = block.timestamp
 

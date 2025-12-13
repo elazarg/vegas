@@ -50,145 +50,68 @@ contract OddsEvens {
         }
     }
     
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+
     
-    function move_Odd_1() public payable {
-        require((roles[msg.sender] == Role.Odd), "bad role");
-        _check_timestamp(Role.Odd);
-        require((!bailed[Role.Odd]), "you bailed");
-        require((!actionDone[Role.Odd][0]), "already done");
+    function move_Odd_1() public payable by(Role.Odd) action(Role.Odd, 0) {
         require((!done_Odd), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Odd;
         address_Odd = msg.sender;
         done_Odd = true;
-        actionDone[Role.Odd][0] = true;
-        actionTimestamp[Role.Odd][0] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_Even_0() public payable {
-        require((roles[msg.sender] == Role.Even), "bad role");
-        _check_timestamp(Role.Even);
-        require((!bailed[Role.Even]), "you bailed");
-        require((!actionDone[Role.Even][0]), "already done");
+    function move_Even_0() public payable by(Role.Even) action(Role.Even, 0) {
         require((!done_Even), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Even;
         address_Even = msg.sender;
         done_Even = true;
-        actionDone[Role.Even][0] = true;
-        actionTimestamp[Role.Even][0] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_Odd_2(bytes32 _hidden_c) public {
-        require((roles[msg.sender] == Role.Odd), "bad role");
-        _check_timestamp(Role.Odd);
-        require((!bailed[Role.Odd]), "you bailed");
-        require((!actionDone[Role.Odd][2]), "already done");
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][0], "dependency not satisfied");
-        }
+    function move_Odd_2(bytes32 _hidden_c) public by(Role.Odd) action(Role.Odd, 2) depends(Role.Even, 0) depends(Role.Odd, 0) {
         Odd_c_hidden = _hidden_c;
         done_Odd_c_hidden = true;
-        actionDone[Role.Odd][2] = true;
-        actionTimestamp[Role.Odd][2] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_Even_4(bytes32 _hidden_c) public {
-        require((roles[msg.sender] == Role.Even), "bad role");
-        _check_timestamp(Role.Even);
-        require((!bailed[Role.Even]), "you bailed");
-        require((!actionDone[Role.Even][4]), "already done");
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][0], "dependency not satisfied");
-        }
+    function move_Even_4(bytes32 _hidden_c) public by(Role.Even) action(Role.Even, 4) depends(Role.Even, 0) depends(Role.Odd, 0) {
         Even_c_hidden = _hidden_c;
         done_Even_c_hidden = true;
-        actionDone[Role.Even][4] = true;
-        actionTimestamp[Role.Even][4] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_Odd_3(bool _c, uint256 _salt) public {
-        require((roles[msg.sender] == Role.Odd), "bad role");
-        _check_timestamp(Role.Odd);
-        require((!bailed[Role.Odd]), "you bailed");
-        require((!actionDone[Role.Odd][3]), "already done");
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][2], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][4], "dependency not satisfied");
-        }
+    function move_Odd_3(bool _c, uint256 _salt) public by(Role.Odd) action(Role.Odd, 3) depends(Role.Even, 0) depends(Role.Odd, 0) depends(Role.Odd, 2) depends(Role.Even, 4) {
         require((keccak256(abi.encodePacked(_c, _salt)) == Odd_c_hidden), "reveal failed for c");
         Odd_c = _c;
         done_Odd_c = true;
-        actionDone[Role.Odd][3] = true;
-        actionTimestamp[Role.Odd][3] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
-    function move_Even_5(bool _c, uint256 _salt) public {
-        require((roles[msg.sender] == Role.Even), "bad role");
-        _check_timestamp(Role.Even);
-        require((!bailed[Role.Even]), "you bailed");
-        require((!actionDone[Role.Even][5]), "already done");
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][0], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Odd);
-        if ((!bailed[Role.Odd]))
-         {
-            require(actionDone[Role.Odd][2], "dependency not satisfied");
-        }
-        _check_timestamp(Role.Even);
-        if ((!bailed[Role.Even]))
-         {
-            require(actionDone[Role.Even][4], "dependency not satisfied");
-        }
+    function move_Even_5(bool _c, uint256 _salt) public by(Role.Even) action(Role.Even, 5) depends(Role.Even, 0) depends(Role.Odd, 0) depends(Role.Odd, 2) depends(Role.Even, 4) {
         require((keccak256(abi.encodePacked(_c, _salt)) == Even_c_hidden), "reveal failed for c");
         Even_c = _c;
         done_Even_c = true;
-        actionDone[Role.Even][5] = true;
-        actionTimestamp[Role.Even][5] = block.timestamp;
-        lastTs = block.timestamp;
     }
     
     function withdraw_Even() public {

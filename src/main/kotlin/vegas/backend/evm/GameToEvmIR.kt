@@ -41,7 +41,8 @@ fun compileToEvm(game: GameIR): EvmContract {
         events = emptyList(),
         actions = actions,
         initialization = init,
-        helpers = policy.helpers()
+        helpers = policy.helpers(),
+        modifiers = policy.solidityModifiersDefinition()
     )
 }
 
@@ -198,10 +199,7 @@ private fun buildAction(
 
     // 3c. Body Logic
     val body = buildList {
-        // Policy Pre-Action Logic
-        addAll(policy.preActionLogic(meta.struct.owner, id, dependencies))
-
-        // Guards
+        // Guards (moved to body)
         guards.forEach { g ->
             add(Require(g, "domain"))
         }
@@ -269,9 +267,6 @@ private fun buildAction(
             add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
             add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
         }
-
-        // Policy Post-Action Logic
-        addAll(policy.postActionLogic(meta.struct.owner, id))
     }
 
     // Simplistic check for terminality: if it's the last index, or explicitly marked in GameIR?
@@ -287,7 +282,10 @@ private fun buildAction(
         dependencies = dependencies,
         isTerminal = isTerminal,
         guards = emptyList(), // Guards moved to body to control ordering
-        body = body
+        body = body,
+        checks = policy.preActionChecks(meta.struct.owner, id, dependencies),
+        modifiers = policy.actionModifiers(meta.struct.owner, id, dependencies),
+        updates = policy.postActionLogic(meta.struct.owner, id)
     )
 }
 

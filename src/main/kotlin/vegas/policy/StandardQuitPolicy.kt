@@ -65,7 +65,68 @@ class StandardQuitPolicy : EvmQuitPolicy {
         )
     }
 
-    override fun preActionLogic(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmStmt> {
+    override fun solidityModifiersDefinition(): List<EvmModifier> {
+        return listOf(
+            // modifier by(Role role)
+            EvmModifier(
+                name = "by",
+                params = listOf(EvmParam(VarId("role"), EnumType("Role"))),
+                body = listOf(
+                    Require(Binary(BinaryOp.EQ, Index(Member(BuiltIn.Self, "roles"), BuiltIn.MsgSender), Var(VarId("role"))), "bad role"),
+                    ExprStmt(Call("_check_timestamp", listOf(Var(VarId("role"))))),
+                    Require(Unary(UnaryOp.NOT, Index(Member(BuiltIn.Self, "bailed"), Var(VarId("role")))), "you bailed"),
+                    EvmStmt.Placeholder
+                )
+            ),
+            // modifier action(Role role, uint256 actionId)
+            EvmModifier(
+                name = "action",
+                params = listOf(EvmParam(VarId("role"), EnumType("Role")), EvmParam(VarId("actionId"), Uint256)),
+                body = listOf(
+                    Require(Unary(UnaryOp.NOT, Index(Index(Member(BuiltIn.Self, "actionDone"), Var(VarId("role"))), Var(VarId("actionId")))), "already done"),
+                    Assign(Index(Index(Member(BuiltIn.Self, "actionDone"), Var(VarId("role"))), Var(VarId("actionId"))), BoolLit(true)),
+                    EvmStmt.Placeholder,
+                    Assign(Index(Index(Member(BuiltIn.Self, "actionTimestamp"), Var(VarId("role"))), Var(VarId("actionId"))), BuiltIn.Timestamp),
+                    Assign(Member(BuiltIn.Self, "lastTs"), BuiltIn.Timestamp)
+                )
+            ),
+            // modifier depends(Role role, uint256 actionId)
+            EvmModifier(
+                name = "depends",
+                params = listOf(EvmParam(VarId("role"), EnumType("Role")), EvmParam(VarId("actionId"), Uint256)),
+                body = listOf(
+                    ExprStmt(Call("_check_timestamp", listOf(Var(VarId("role"))))),
+                    EvmStmt.If(
+                        Unary(UnaryOp.NOT, Index(Member(BuiltIn.Self, "bailed"), Var(VarId("role")))),
+                        listOf(
+                            Require(Index(Index(Member(BuiltIn.Self, "actionDone"), Var(VarId("role"))), Var(VarId("actionId"))), "dependency not satisfied")
+                        )
+                    ),
+                    EvmStmt.Placeholder
+                )
+            )
+        )
+    }
+
+    override fun actionModifiers(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmExpr.Call> {
+        val calls = mutableListOf<EvmExpr.Call>()
+        val roleEnum = EnumValue("Role", role.name)
+        val actIdx = IntLit(actionId.second)
+
+        // by(role)
+        calls.add(Call("by", listOf(roleEnum)))
+
+        // action(role, id)
+        calls.add(Call("action", listOf(roleEnum, actIdx)))
+
+        // depends(depRole, depId)...
+        for (dep in dependencies) {
+            calls.add(Call("depends", listOf(EnumValue("Role", dep.first.name), IntLit(dep.second))))
+        }
+        return calls
+    }
+
+    override fun preActionChecks(role: RoleId, actionId: ActionId, dependencies: List<ActionId>): List<EvmStmt> {
         val stmts = mutableListOf<EvmStmt>()
         val roleEnum = EnumValue("Role", role.name)
         val actIdx = IntLit(actionId.second)
@@ -91,6 +152,12 @@ class StandardQuitPolicy : EvmQuitPolicy {
         stmts.add(Require(
             Unary(UnaryOp.NOT, Index(Index(Member(BuiltIn.Self, "actionDone"), roleEnum), actIdx)),
             "already done"
+        ))
+
+        // Update Done (Re-entrancy protection, part of 'action' modifier)
+        stmts.add(Assign(
+            Index(Index(Member(BuiltIn.Self, "actionDone"), roleEnum), actIdx),
+            BoolLit(true)
         ))
 
         // 3. Check Dependencies (replaced 'depends' modifier)
@@ -121,11 +188,7 @@ class StandardQuitPolicy : EvmQuitPolicy {
         val roleEnum = EnumValue("Role", role.name)
         val actIdx = IntLit(actionId.second)
 
-        // actionDone[role][id] = true
-        stmts.add(Assign(
-            Index(Index(Member(BuiltIn.Self, "actionDone"), roleEnum), actIdx),
-            BoolLit(true)
-        ))
+        // actionDone set in preActionChecks for Vyper/Inline
 
         // actionTimestamp[role][id] = block.timestamp
         stmts.add(Assign(

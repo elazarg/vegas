@@ -45,12 +45,12 @@ def move_Race_0():
     _check_timestamp(Role.Race)
     assert (not self.bailed[Role.Race]), "you bailed"
     assert (not self.actionDone[Role.Race][0]), "already done"
+    self.actionDone[Role.Race][0] = True
     assert (not self.done_Race), "already joined"
     assert (msg.value == 10), "bad stake"
     self.roles[msg.sender] = Role.Race
     self.address_Race = msg.sender
     self.done_Race = True
-    self.actionDone[Role.Race][0] = True
     self.actionTimestamp[Role.Race][0] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -61,6 +61,7 @@ def move_Gambler_1(_bet: int256):
     _check_timestamp(Role.Gambler)
     assert (not self.bailed[Role.Gambler]), "you bailed"
     assert (not self.actionDone[Role.Gambler][1]), "already done"
+    self.actionDone[Role.Gambler][1] = True
     _check_timestamp(Role.Race)
     if (not self.bailed[Role.Race]):
         assert self.actionDone[Role.Race][0], "dependency not satisfied"
@@ -72,7 +73,6 @@ def move_Gambler_1(_bet: int256):
     self.done_Gambler = True
     self.Gambler_bet = _bet
     self.done_Gambler_bet = True
-    self.actionDone[Role.Gambler][1] = True
     self.actionTimestamp[Role.Gambler][1] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -82,13 +82,13 @@ def move_Race_2(_winner: int256):
     _check_timestamp(Role.Race)
     assert (not self.bailed[Role.Race]), "you bailed"
     assert (not self.actionDone[Role.Race][2]), "already done"
+    self.actionDone[Role.Race][2] = True
     _check_timestamp(Role.Gambler)
     if (not self.bailed[Role.Gambler]):
         assert self.actionDone[Role.Gambler][1], "dependency not satisfied"
     assert (((_winner == 1) or (_winner == 2)) or (_winner == 3)), "domain"
     self.Race_winner = _winner
     self.done_Race_winner = True
-    self.actionDone[Role.Race][2] = True
     self.actionTimestamp[Role.Race][2] = block.timestamp
     self.lastTs = block.timestamp
 

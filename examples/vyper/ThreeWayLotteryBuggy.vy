@@ -63,12 +63,12 @@ def move_Issuer_0():
     _check_timestamp(Role.Issuer)
     assert (not self.bailed[Role.Issuer]), "you bailed"
     assert (not self.actionDone[Role.Issuer][0]), "already done"
+    self.actionDone[Role.Issuer][0] = True
     assert (not self.done_Issuer), "already joined"
     assert (msg.value == 12), "bad stake"
     self.roles[msg.sender] = Role.Issuer
     self.address_Issuer = msg.sender
     self.done_Issuer = True
-    self.actionDone[Role.Issuer][0] = True
     self.actionTimestamp[Role.Issuer][0] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -79,6 +79,7 @@ def move_Alice_1():
     _check_timestamp(Role.Alice)
     assert (not self.bailed[Role.Alice]), "you bailed"
     assert (not self.actionDone[Role.Alice][1]), "already done"
+    self.actionDone[Role.Alice][1] = True
     _check_timestamp(Role.Issuer)
     if (not self.bailed[Role.Issuer]):
         assert self.actionDone[Role.Issuer][0], "dependency not satisfied"
@@ -87,7 +88,6 @@ def move_Alice_1():
     self.roles[msg.sender] = Role.Alice
     self.address_Alice = msg.sender
     self.done_Alice = True
-    self.actionDone[Role.Alice][1] = True
     self.actionTimestamp[Role.Alice][1] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -98,6 +98,7 @@ def move_Bob_2():
     _check_timestamp(Role.Bob)
     assert (not self.bailed[Role.Bob]), "you bailed"
     assert (not self.actionDone[Role.Bob][2]), "already done"
+    self.actionDone[Role.Bob][2] = True
     _check_timestamp(Role.Alice)
     if (not self.bailed[Role.Alice]):
         assert self.actionDone[Role.Alice][1], "dependency not satisfied"
@@ -106,7 +107,6 @@ def move_Bob_2():
     self.roles[msg.sender] = Role.Bob
     self.address_Bob = msg.sender
     self.done_Bob = True
-    self.actionDone[Role.Bob][2] = True
     self.actionTimestamp[Role.Bob][2] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -116,12 +116,12 @@ def move_Issuer_3(_hidden_c: bytes32):
     _check_timestamp(Role.Issuer)
     assert (not self.bailed[Role.Issuer]), "you bailed"
     assert (not self.actionDone[Role.Issuer][4]), "already done"
+    self.actionDone[Role.Issuer][4] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
     self.Issuer_c_hidden = _hidden_c
     self.done_Issuer_c_hidden = True
-    self.actionDone[Role.Issuer][4] = True
     self.actionTimestamp[Role.Issuer][4] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -131,12 +131,12 @@ def move_Alice_5(_hidden_c: bytes32):
     _check_timestamp(Role.Alice)
     assert (not self.bailed[Role.Alice]), "you bailed"
     assert (not self.actionDone[Role.Alice][6]), "already done"
+    self.actionDone[Role.Alice][6] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
     self.Alice_c_hidden = _hidden_c
     self.done_Alice_c_hidden = True
-    self.actionDone[Role.Alice][6] = True
     self.actionTimestamp[Role.Alice][6] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -146,12 +146,12 @@ def move_Bob_7(_hidden_c: bytes32):
     _check_timestamp(Role.Bob)
     assert (not self.bailed[Role.Bob]), "you bailed"
     assert (not self.actionDone[Role.Bob][8]), "already done"
+    self.actionDone[Role.Bob][8] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
     self.Bob_c_hidden = _hidden_c
     self.done_Bob_c_hidden = True
-    self.actionDone[Role.Bob][8] = True
     self.actionTimestamp[Role.Bob][8] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -161,6 +161,7 @@ def move_Issuer_4(_c: int256, _salt: uint256):
     _check_timestamp(Role.Issuer)
     assert (not self.bailed[Role.Issuer]), "you bailed"
     assert (not self.actionDone[Role.Issuer][5]), "already done"
+    self.actionDone[Role.Issuer][5] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
@@ -177,7 +178,6 @@ def move_Issuer_4(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Issuer_c_hidden), "reveal failed for c"
     self.Issuer_c = _c
     self.done_Issuer_c = True
-    self.actionDone[Role.Issuer][5] = True
     self.actionTimestamp[Role.Issuer][5] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -187,6 +187,7 @@ def move_Alice_6(_c: int256, _salt: uint256):
     _check_timestamp(Role.Alice)
     assert (not self.bailed[Role.Alice]), "you bailed"
     assert (not self.actionDone[Role.Alice][7]), "already done"
+    self.actionDone[Role.Alice][7] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
@@ -203,7 +204,6 @@ def move_Alice_6(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Alice_c_hidden), "reveal failed for c"
     self.Alice_c = _c
     self.done_Alice_c = True
-    self.actionDone[Role.Alice][7] = True
     self.actionTimestamp[Role.Alice][7] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -213,6 +213,7 @@ def move_Bob_8(_c: int256, _salt: uint256):
     _check_timestamp(Role.Bob)
     assert (not self.bailed[Role.Bob]), "you bailed"
     assert (not self.actionDone[Role.Bob][9]), "already done"
+    self.actionDone[Role.Bob][9] = True
     _check_timestamp(Role.Bob)
     if (not self.bailed[Role.Bob]):
         assert self.actionDone[Role.Bob][2], "dependency not satisfied"
@@ -229,7 +230,6 @@ def move_Bob_8(_c: int256, _salt: uint256):
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Bob_c_hidden), "reveal failed for c"
     self.Bob_c = _c
     self.done_Bob_c = True
-    self.actionDone[Role.Bob][9] = True
     self.actionTimestamp[Role.Bob][9] = block.timestamp
     self.lastTs = block.timestamp
 

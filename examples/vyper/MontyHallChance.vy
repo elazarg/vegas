@@ -55,12 +55,12 @@ def move_Host_0():
     _check_timestamp(Role.Host)
     assert (not self.bailed[Role.Host]), "you bailed"
     assert (not self.actionDone[Role.Host][0]), "already done"
+    self.actionDone[Role.Host][0] = True
     assert (not self.done_Host), "already joined"
     assert (msg.value == 100), "bad stake"
     self.roles[msg.sender] = Role.Host
     self.address_Host = msg.sender
     self.done_Host = True
-    self.actionDone[Role.Host][0] = True
     self.actionTimestamp[Role.Host][0] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -71,6 +71,7 @@ def move_Guest_1():
     _check_timestamp(Role.Guest)
     assert (not self.bailed[Role.Guest]), "you bailed"
     assert (not self.actionDone[Role.Guest][1]), "already done"
+    self.actionDone[Role.Guest][1] = True
     _check_timestamp(Role.Host)
     if (not self.bailed[Role.Host]):
         assert self.actionDone[Role.Host][0], "dependency not satisfied"
@@ -79,7 +80,6 @@ def move_Guest_1():
     self.roles[msg.sender] = Role.Guest
     self.address_Guest = msg.sender
     self.done_Guest = True
-    self.actionDone[Role.Guest][1] = True
     self.actionTimestamp[Role.Guest][1] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -89,12 +89,12 @@ def move_Host_2(_hidden_car: bytes32):
     _check_timestamp(Role.Host)
     assert (not self.bailed[Role.Host]), "you bailed"
     assert (not self.actionDone[Role.Host][2]), "already done"
+    self.actionDone[Role.Host][2] = True
     _check_timestamp(Role.Guest)
     if (not self.bailed[Role.Guest]):
         assert self.actionDone[Role.Guest][1], "dependency not satisfied"
     self.Host_car_hidden = _hidden_car
     self.done_Host_car_hidden = True
-    self.actionDone[Role.Host][2] = True
     self.actionTimestamp[Role.Host][2] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -104,13 +104,13 @@ def move_Guest_3(_d: int256):
     _check_timestamp(Role.Guest)
     assert (not self.bailed[Role.Guest]), "you bailed"
     assert (not self.actionDone[Role.Guest][3]), "already done"
+    self.actionDone[Role.Guest][3] = True
     _check_timestamp(Role.Host)
     if (not self.bailed[Role.Host]):
         assert self.actionDone[Role.Host][2], "dependency not satisfied"
     assert (((_d == 0) or (_d == 1)) or (_d == 2)), "domain"
     self.Guest_d = _d
     self.done_Guest_d = True
-    self.actionDone[Role.Guest][3] = True
     self.actionTimestamp[Role.Guest][3] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -120,6 +120,7 @@ def move_Host_4(_goat: int256):
     _check_timestamp(Role.Host)
     assert (not self.bailed[Role.Host]), "you bailed"
     assert (not self.actionDone[Role.Host][4]), "already done"
+    self.actionDone[Role.Host][4] = True
     _check_timestamp(Role.Host)
     if (not self.bailed[Role.Host]):
         assert self.actionDone[Role.Host][2], "dependency not satisfied"
@@ -130,7 +131,6 @@ def move_Host_4(_goat: int256):
     assert ((_goat != self.Guest_d) and (_goat != self.Host_car)), "domain"
     self.Host_goat = _goat
     self.done_Host_goat = True
-    self.actionDone[Role.Host][4] = True
     self.actionTimestamp[Role.Host][4] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -140,12 +140,12 @@ def move_Guest_5(_switch: bool):
     _check_timestamp(Role.Guest)
     assert (not self.bailed[Role.Guest]), "you bailed"
     assert (not self.actionDone[Role.Guest][5]), "already done"
+    self.actionDone[Role.Guest][5] = True
     _check_timestamp(Role.Host)
     if (not self.bailed[Role.Host]):
         assert self.actionDone[Role.Host][4], "dependency not satisfied"
     self.Guest_switch = _switch
     self.done_Guest_switch = True
-    self.actionDone[Role.Guest][5] = True
     self.actionTimestamp[Role.Guest][5] = block.timestamp
     self.lastTs = block.timestamp
 
@@ -155,6 +155,7 @@ def move_Host_6(_car: int256, _salt: uint256):
     _check_timestamp(Role.Host)
     assert (not self.bailed[Role.Host]), "you bailed"
     assert (not self.actionDone[Role.Host][6]), "already done"
+    self.actionDone[Role.Host][6] = True
     _check_timestamp(Role.Host)
     if (not self.bailed[Role.Host]):
         assert self.actionDone[Role.Host][2], "dependency not satisfied"
@@ -165,7 +166,6 @@ def move_Host_6(_car: int256, _salt: uint256):
     assert (keccak256(concat(convert(car, bytes32), convert(salt, bytes32))) == self.Host_car_hidden), "reveal failed for car"
     self.Host_car = _car
     self.done_Host_car = True
-    self.actionDone[Role.Host][6] = True
     self.actionTimestamp[Role.Host][6] = block.timestamp
     self.lastTs = block.timestamp
 

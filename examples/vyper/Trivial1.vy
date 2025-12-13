@@ -35,12 +35,12 @@ def move_A_0():
     _check_timestamp(Role.A)
     assert (not self.bailed[Role.A]), "you bailed"
     assert (not self.actionDone[Role.A][0]), "already done"
+    self.actionDone[Role.A][0] = True
     assert (not self.done_A), "already joined"
     assert (msg.value == 10), "bad stake"
     self.roles[msg.sender] = Role.A
     self.address_A = msg.sender
     self.done_A = True
-    self.actionDone[Role.A][0] = True
     self.actionTimestamp[Role.A][0] = block.timestamp
     self.lastTs = block.timestamp
 
