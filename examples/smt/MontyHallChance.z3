@@ -14,36 +14,27 @@
 (declare-const Guest_switch_done Bool)
 
 (declare-const action_Host_0_done Bool)
-(assert (=> action_Host_0_done (and true true)))
-
 (declare-const action_Guest_1_done Bool)
-(assert (=> action_Guest_1_done (and (and true action_Host_0_done) true)))
-
 (declare-const action_Host_2_done Bool)
-(assert (=> action_Host_2_done (and (and true action_Guest_1_done) true)))
-(assert (=> action_Host_2_done Host_car_done))
-
 (declare-const action_Guest_3_done Bool)
-(assert (=> action_Guest_3_done (and (and true action_Host_2_done) true)))
-(assert (=> action_Guest_3_done Guest_d_done))
-
 (declare-const action_Host_4_done Bool)
-(assert (=> action_Host_4_done (and (and (and true action_Guest_3_done) action_Host_2_done) (and (not (= Host_goat Guest_d)) (not (= Host_goat Host_car))))))
-(assert (=> action_Host_4_done Host_goat_done))
-
 (declare-const action_Guest_5_done Bool)
-(assert (=> action_Guest_5_done (and (and true action_Host_4_done) true)))
-(assert (=> action_Guest_5_done Guest_switch_done))
-
 (declare-const action_Host_6_done Bool)
-(assert (=> action_Host_6_done (and (and (and true action_Guest_5_done) action_Host_2_done) true)))
-(assert (=> action_Host_6_done Host_car_done))
-
 (declare-const Guest_outcome Int)
 (assert (= Guest_outcome (ite (and (and Host_car_done Host_goat_done) Guest_switch_done) (ite (= (not (= Guest_d Host_car)) Guest_switch) 120 80) (ite (or (not Host_car_done) (not Host_goat_done)) 200 0))))
-
 (declare-const Host_outcome Int)
 (assert (= Host_outcome (ite (and (and Host_car_done Host_goat_done) Guest_switch_done) (ite (= (not (= Guest_d Host_car)) Guest_switch) 80 120) (ite (or (not Host_car_done) (not Host_goat_done)) 0 200))))
-
+(assert (=> action_Host_0_done (and true true)))
+(assert (=> action_Guest_1_done (and (and true action_Host_0_done) true)))
+(assert (=> action_Host_2_done (and (and true action_Guest_1_done) true)))
+(assert (=> action_Host_2_done Host_car_done))
+(assert (=> action_Guest_3_done (and (and true action_Host_2_done) true)))
+(assert (=> action_Guest_3_done Guest_d_done))
+(assert (=> action_Host_4_done (and (and (and true action_Guest_3_done) action_Host_2_done) (and (not (= Host_goat Guest_d)) (not (= Host_goat Host_car))))))
+(assert (=> action_Host_4_done Host_goat_done))
+(assert (=> action_Guest_5_done (and (and true action_Host_4_done) true)))
+(assert (=> action_Guest_5_done Guest_switch_done))
+(assert (=> action_Host_6_done (and (and (and true action_Guest_5_done) action_Host_2_done) true)))
+(assert (=> action_Host_6_done Host_car_done))
 (check-sat)
 (get-model)
