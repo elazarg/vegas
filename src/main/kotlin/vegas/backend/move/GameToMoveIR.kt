@@ -164,10 +164,6 @@ private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct, platform: 
     val body = buildList {
         val extraInits = platform.extraInstanceInit(ctxVar)
 
-        // let ... extra inits if handled as Let inside platform hook?
-        // No, extraInstanceInit returns Expr.
-        // If it was stateful, we'd need Stmts. For now assuming Expr is enough (e.g. object::new(ctx)).
-
         // Build instance
         val fields = struct.fields.map { field ->
             val value: MoveExpr = extraInits[field.name] ?: when(field.name) {
@@ -179,7 +175,7 @@ private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct, platform: 
                     if (field.type == platform.boolType()) MoveExpr.BoolLit(false)
                     else if (field.type == platform.u64Type()) MoveExpr.U64Lit(0)
                     else if (field.type == platform.addressType()) MoveExpr.AddressLit("0x0")
-                    else if (field.type is MoveType.Vector) MoveExpr.Call("std::vector", "empty", listOf((field.type as MoveType.Vector).param), emptyList())
+                    else if (field.type is MoveType.Vector) MoveExpr.Call("vector", "empty", listOf((field.type as MoveType.Vector).param), emptyList())
                     else error("Unknown field init for ${field.name}")
                 }
             }
@@ -340,12 +336,12 @@ private fun buildActionFunction(
                  val input = MoveExpr.Var(inputParamName(p.name, false))
                  val salt = MoveExpr.Var("salt")
 
-                 add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("std::bcs", "to_bytes", listOf(translateType(p.type, platform)), listOf(
+                 add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("bcs", "to_bytes", listOf(translateType(p.type, platform)), listOf(
                      MoveExpr.Borrow(input, false)
                  ))))
-                 add(MoveStmt.ExprStmt(MoveExpr.Call("std::vector", "append", listOf(MoveType.U8), listOf(
+                 add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
-                     MoveExpr.Call("std::bcs", "to_bytes", listOf(platform.u64Type()), listOf(
+                     MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(
                          MoveExpr.Borrow(salt, false)
                      ))
                  ))))
@@ -418,31 +414,10 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             ))
         }
 
-        // Check pot balance
-        // We need 'balance::value(pot)'
-        // platform interface doesn't have `balanceValue`.
-        // I can assume `sui::balance::value` or add it to platform?
-        // Sui: `sui::balance::value(&pot)`.
-        // Aptos: `coin::value(&coin)` if it's a coin.
-        // I'll assume `sui::balance::value` for now as I am using `platform.balanceType` which returns `sui::balance::Balance`.
-        // So I must call the module corresponding to that type.
-        // Since `balanceType` is flexible, I should probably ask platform for "balance value expr".
-        // But for this MVP, I'll stick to hardcoding `sui::balance::value` BUT with a TODO or realizing `SuiPlatform` defines the type so it matches.
-        // Wait, if I use `SuiPlatform`, `balanceType` is `sui::balance::Balance`.
-        // Calling `sui::balance::value` is correct.
-        // If I implement `AptosPlatform`, I'd return `coin::Coin` and call `coin::value`.
-        // So I should abstract `balanceValue`.
-
-        // I'll hardcode `sui::balance::value` for now but use `platform.balanceType` module/name to derive it? No too magical.
-        // I'll add `fun balanceValue(pot: MoveExpr): MoveExpr` to Platform later if needed.
-        // For now, I'll use `sui::balance::value` since I'm mostly targeting Sui via this refactor,
-        // and future Aptos support will require updating this logic anyway.
-        // OR better: `MoveExpr.Call("sui::balance", "value", ...)`
-
         add(MoveStmt.Assert(
             MoveExpr.BinOp(MoveBinOp.LTE,
                 MoveExpr.Var("total_payout"),
-                MoveExpr.Call("sui::balance", "value", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), false)))
+                MoveExpr.Call("balance", "value", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), false)))
             ),
             109
         ))

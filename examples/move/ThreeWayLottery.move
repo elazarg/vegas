@@ -11,7 +11,7 @@ module threewaylottery::threewaylottery {
     use std::vector;
 
     public struct Instance<phantom Asset> has key {
-        id: sui::object::UID,
+        id: object::UID,
         role_Issuer: address,
         role_Alice: address,
         role_Bob: address,
@@ -23,7 +23,7 @@ module threewaylottery::threewaylottery {
         bailed_Issuer: bool,
         bailed_Alice: bool,
         bailed_Bob: bool,
-        pot: sui::balance::Balance<Asset>,
+        pot: balance::Balance<Asset>,
         finalized: bool,
         claim_amount_Issuer: u64,
         claimed_Issuer: bool,
@@ -54,73 +54,73 @@ module threewaylottery::threewaylottery {
         action_Bob_9_done: bool,
     }
 
-    fun init(ctx: &mut sui::tx_context::TxContext) {
+    fun init(ctx: &mut tx_context::TxContext) {
     }
 
-    public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut sui::tx_context::TxContext) {
-        let instance = Instance<Asset> { id: sui::object::new(ctx), role_Issuer: 0x0, role_Alice: 0x0, role_Bob: 0x0, joined_Issuer: false, joined_Alice: false, joined_Bob: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Issuer: false, bailed_Alice: false, bailed_Bob: false, pot: sui::balance::zero<Asset>(), finalized: false, claim_amount_Issuer: 0, claimed_Issuer: false, claim_amount_Alice: 0, claimed_Alice: false, claim_amount_Bob: 0, claimed_Bob: false, Issuer_c: 0, done_Issuer_c: false, Issuer_c_hidden: std::vector::empty<u8>(), done_Issuer_c_hidden: false, Alice_c: 0, done_Alice_c: false, Alice_c_hidden: std::vector::empty<u8>(), done_Alice_c_hidden: false, Bob_c: 0, done_Bob_c: false, Bob_c_hidden: std::vector::empty<u8>(), done_Bob_c_hidden: false, action_Issuer_0_done: false, action_Alice_1_done: false, action_Bob_2_done: false, action_Issuer_4_done: false, action_Alice_6_done: false, action_Bob_8_done: false, action_Issuer_5_done: false, action_Alice_7_done: false, action_Bob_9_done: false };
-        sui::transfer::share_object<Asset>(instance);
+    public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
+        let instance = Instance<Asset> { id: object::new(ctx), role_Issuer: 0x0, role_Alice: 0x0, role_Bob: 0x0, joined_Issuer: false, joined_Alice: false, joined_Bob: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Issuer: false, bailed_Alice: false, bailed_Bob: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Issuer: 0, claimed_Issuer: false, claim_amount_Alice: 0, claimed_Alice: false, claim_amount_Bob: 0, claimed_Bob: false, Issuer_c: 0, done_Issuer_c: false, Issuer_c_hidden: vector::empty<u8>(), done_Issuer_c_hidden: false, Alice_c: 0, done_Alice_c: false, Alice_c_hidden: vector::empty<u8>(), done_Alice_c_hidden: false, Bob_c: 0, done_Bob_c: false, Bob_c_hidden: vector::empty<u8>(), done_Bob_c_hidden: false, action_Issuer_0_done: false, action_Alice_1_done: false, action_Bob_2_done: false, action_Issuer_4_done: false, action_Alice_6_done: false, action_Bob_8_done: false, action_Issuer_5_done: false, action_Alice_7_done: false, action_Bob_9_done: false };
+        transfer::share_object<Asset>(instance);
     }
 
-    public entry fun join_Issuer<Asset>(instance: &mut Instance<Asset>, payment: sui::coin::Coin<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun join_Issuer<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Issuer, 100);
-        instance.role_Issuer = sui::tx_context::sender(ctx);
+        instance.role_Issuer = tx_context::sender(ctx);
         instance.joined_Issuer = true;
-        sui::balance::join<Asset>(&mut instance.pot, sui::coin::into_balance<Asset>(payment));
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun join_Alice<Asset>(instance: &mut Instance<Asset>, payment: sui::coin::Coin<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun join_Alice<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Alice, 100);
-        instance.role_Alice = sui::tx_context::sender(ctx);
+        instance.role_Alice = tx_context::sender(ctx);
         instance.joined_Alice = true;
-        sui::balance::join<Asset>(&mut instance.pot, sui::coin::into_balance<Asset>(payment));
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun join_Bob<Asset>(instance: &mut Instance<Asset>, payment: sui::coin::Coin<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun join_Bob<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Bob, 100);
-        instance.role_Bob = sui::tx_context::sender(ctx);
+        instance.role_Bob = tx_context::sender(ctx);
         instance.joined_Bob = true;
-        sui::balance::join<Asset>(&mut instance.pot, sui::coin::into_balance<Asset>(payment));
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Issuer_0<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Issuer), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Issuer_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
         };
         assert!(!instance.action_Issuer_0_done, 102);
         instance.action_Issuer_0_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Alice_1<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Alice), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Alice_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
         };
         assert!(!instance.action_Alice_1_done, 102);
         assert!(instance.action_Issuer_0_done, 103);
         instance.action_Alice_1_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Bob_2<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Bob), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Bob_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
         };
         assert!(!instance.action_Bob_2_done, 102);
         assert!(instance.action_Alice_1_done, 103);
         instance.action_Bob_2_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Issuer_3<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, hidden_c: vector<u8>) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Issuer), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Issuer_3<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
+        assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
         };
         assert!(!instance.action_Issuer_4_done, 102);
@@ -128,12 +128,12 @@ module threewaylottery::threewaylottery {
         instance.Issuer_c_hidden = hidden_c;
         instance.done_Issuer_c_hidden = true;
         instance.action_Issuer_4_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Alice_5<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, hidden_c: vector<u8>) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Alice), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Alice_5<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
+        assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
         };
         assert!(!instance.action_Alice_6_done, 102);
@@ -141,12 +141,12 @@ module threewaylottery::threewaylottery {
         instance.Alice_c_hidden = hidden_c;
         instance.done_Alice_c_hidden = true;
         instance.action_Alice_6_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Bob_7<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, hidden_c: vector<u8>) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Bob), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Bob_7<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
+        assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
         };
         assert!(!instance.action_Bob_8_done, 102);
@@ -154,12 +154,12 @@ module threewaylottery::threewaylottery {
         instance.Bob_c_hidden = hidden_c;
         instance.done_Bob_c_hidden = true;
         instance.action_Bob_8_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Issuer_4<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, c: u64, salt: u64) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Issuer), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Issuer_4<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
+        assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
         };
         assert!(!instance.action_Issuer_5_done, 102);
@@ -168,18 +168,18 @@ module threewaylottery::threewaylottery {
         assert!(instance.action_Alice_6_done, 103);
         assert!(instance.action_Bob_8_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = std::bcs::to_bytes<u64>(&c);
-        std::vector::append<u8>(&mut data_c, std::bcs::to_bytes<u64>(&salt));
-        assert!((sui::hash::keccak256(&data_c) == instance.Issuer_c_hidden), 106);
+        let data_c = bcs::to_bytes<u64>(&c);
+        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        assert!((hash::keccak256(&data_c) == instance.Issuer_c_hidden), 106);
         instance.Issuer_c = c;
         instance.done_Issuer_c = true;
         instance.action_Issuer_5_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Alice_6<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, c: u64, salt: u64) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Alice), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Alice_6<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
+        assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
         };
         assert!(!instance.action_Alice_7_done, 102);
@@ -188,18 +188,18 @@ module threewaylottery::threewaylottery {
         assert!(instance.action_Issuer_4_done, 103);
         assert!(instance.action_Bob_8_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = std::bcs::to_bytes<u64>(&c);
-        std::vector::append<u8>(&mut data_c, std::bcs::to_bytes<u64>(&salt));
-        assert!((sui::hash::keccak256(&data_c) == instance.Alice_c_hidden), 106);
+        let data_c = bcs::to_bytes<u64>(&c);
+        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        assert!((hash::keccak256(&data_c) == instance.Alice_c_hidden), 106);
         instance.Alice_c = c;
         instance.done_Alice_c = true;
         instance.action_Alice_7_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun move_Bob_8<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext, c: u64, salt: u64) {
-        assert!((sui::tx_context::sender(ctx) == instance.role_Bob), 101);
-        if ((sui::clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+    public entry fun move_Bob_8<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
+        assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
         };
         assert!(!instance.action_Bob_9_done, 102);
@@ -208,16 +208,16 @@ module threewaylottery::threewaylottery {
         assert!(instance.action_Issuer_4_done, 103);
         assert!(instance.action_Alice_6_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = std::bcs::to_bytes<u64>(&c);
-        std::vector::append<u8>(&mut data_c, std::bcs::to_bytes<u64>(&salt));
-        assert!((sui::hash::keccak256(&data_c) == instance.Bob_c_hidden), 106);
+        let data_c = bcs::to_bytes<u64>(&c);
+        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        assert!((hash::keccak256(&data_c) == instance.Bob_c_hidden), 106);
         instance.Bob_c = c;
         instance.done_Bob_c = true;
         instance.action_Bob_9_done = true;
-        instance.last_ts_ms = sui::clock::timestamp_ms(clock);
+        instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
-    public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(instance.action_Issuer_5_done, 107);
         assert!(instance.action_Alice_7_done, 107);
         assert!(instance.action_Bob_9_done, 107);
@@ -229,40 +229,40 @@ module threewaylottery::threewaylottery {
         total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12);
         instance.claim_amount_Alice = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12;
         total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12);
-        assert!((total_payout <= sui::balance::value<Asset>(&instance.pot)), 109);
+        assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
 
-    public entry fun claim_Issuer<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun claim_Issuer<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 110);
         assert!(!instance.claimed_Issuer, 111);
         instance.claimed_Issuer = true;
         let amount: u64 = instance.claim_amount_Issuer;
         if ((amount > 0)) {
-            let payout_coin = sui::coin::take<Asset>(&mut instance.pot, amount, ctx);
-            sui::transfer::public_transfer<Asset>(payout_coin, sui::tx_context::sender(ctx));
+            let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }
 
-    public entry fun claim_Alice<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun claim_Alice<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 110);
         assert!(!instance.claimed_Alice, 111);
         instance.claimed_Alice = true;
         let amount: u64 = instance.claim_amount_Alice;
         if ((amount > 0)) {
-            let payout_coin = sui::coin::take<Asset>(&mut instance.pot, amount, ctx);
-            sui::transfer::public_transfer<Asset>(payout_coin, sui::tx_context::sender(ctx));
+            let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }
 
-    public entry fun claim_Bob<Asset>(instance: &mut Instance<Asset>, clock: &sui::clock::Clock, ctx: &mut sui::tx_context::TxContext) {
+    public entry fun claim_Bob<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 110);
         assert!(!instance.claimed_Bob, 111);
         instance.claimed_Bob = true;
         let amount: u64 = instance.claim_amount_Bob;
         if ((amount > 0)) {
-            let payout_coin = sui::coin::take<Asset>(&mut instance.pot, amount, ctx);
-            sui::transfer::public_transfer<Asset>(payout_coin, sui::tx_context::sender(ctx));
+            let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }
 
