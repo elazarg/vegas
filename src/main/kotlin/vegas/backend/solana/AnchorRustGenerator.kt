@@ -45,6 +45,14 @@ class AnchorRustGenerator {
 
     private fun generateInstructionParams(sb: StringBuilder, instr: SolanaInstruction) {
         sb.appendLine("    pub fn ${instr.name}(ctx: Context<${instr.name.capitalize()}>, ${instr.params.joinToString(", ") { "${it.name}: ${generateAnchorType(it.type)}" }}) -> Result<()> {")
+        // Account Bindings
+        for (acc in instr.accounts) {
+            // Special handling for system_program which is not usually bound as variable but accessed via ctx
+            if (acc.name == "system_program") continue
+
+            val mut = if (acc.isMut) "&mut " else "&"
+            sb.appendLine("        let ${acc.name} = ${mut}ctx.accounts.${acc.name};")
+        }
         generateBody(sb, instr.body, "        ")
         sb.appendLine("        Ok(())")
         sb.appendLine("    }")
@@ -62,6 +70,12 @@ class AnchorRustGenerator {
         }
         sb.appendLine("pub struct ${instr.name.capitalize()}<'info> {")
         for (account in instr.accounts) {
+            // Add #[account(mut)] if needed and not present in constraints
+            val explicitMut = account.constraints.any { it.contains("mut") }
+            if (account.isMut && !explicitMut) {
+                sb.appendLine("    #[account(mut)]")
+            }
+
             for (constraint in account.constraints) {
                 sb.appendLine("    $constraint")
             }

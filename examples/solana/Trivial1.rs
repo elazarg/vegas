@@ -7,6 +7,9 @@ pub mod trivial1 {
     use super::*;
 
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -15,6 +18,9 @@ pub mod trivial1 {
     }
 
     pub fn move_A_0(ctx: Context<Move_A_0>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+        let vault = &mut ctx.accounts.vault;
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -32,7 +38,10 @@ pub mod trivial1 {
          game.pot_total = (game.pot_total + 10);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -40,6 +49,7 @@ pub mod trivial1 {
     }
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
          require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, 10)) as u64;
          if ((0 + p_A) > game.pot_total) {
@@ -52,6 +62,9 @@ pub mod trivial1 {
     }
 
     pub fn claim_A(ctx: Context<Claim_A>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
@@ -85,19 +98,25 @@ pub mod trivial1 {
 #[derive(Accounts)]
 #[instruction(game_id: u64, timeout: i64)]
 pub struct Init_instance<'info> {
+    #[account(mut)]
     #[account(init, payer = signer, space = 8 + 10240, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(seeds = [b"vault", game.key().as_ref()], bump)]
+    #[account(mut)]
+    #[account(init, payer = signer, space = 8, seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
+    #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Move_A_0<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -105,15 +124,19 @@ pub struct Move_A_0<'info> {
 
 #[derive(Accounts)]
 pub struct Finalize<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_A<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(address = game.roles[0])]
+    #[account(mut)]
+    #[account(constraint = signer.key() == game.roles[0] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }

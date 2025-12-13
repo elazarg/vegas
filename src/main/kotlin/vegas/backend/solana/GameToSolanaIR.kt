@@ -125,17 +125,14 @@ private fun buildInstructions(
 ): List<SolanaInstruction> {
     val list = mutableListOf<SolanaInstruction>()
 
-    // Init
     list.add(buildInitInstruction())
 
     dag.topo().forEach { id ->
         list.add(buildActionInstruction(id, dag, linearization, roleMap))
     }
 
-    // Finalize
     list.add(buildFinalizeInstruction(g, dag, linearization, roles, roleMap))
 
-    // Claim
     roles.forEach { role ->
         list.add(buildClaimInstruction(role, roleMap[role]!!))
     }
@@ -148,10 +145,10 @@ private fun buildInitInstruction(): SolanaInstruction {
         name = "init_instance",
         accounts = listOf(
             SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
-                "#[account(init, payer = signer, space = 8 + 10240, seeds = [b\"game\", game_id.to_le_bytes().as_ref()], bump)]" // Naive space
+                "#[account(init, payer = signer, space = 8 + 10240, seeds = [b\"game\", game_id.to_le_bytes().as_ref()], bump)]"
             )),
             SolanaAccountMeta("vault", "SystemAccount<'info>", isMut = true, constraints = listOf(
-                "#[account(seeds = [b\"vault\", game.key().as_ref()], bump)]"
+                "#[account(init, payer = signer, space = 8, seeds = [b\"vault\", game.key().as_ref()], bump)]"
             )),
             SolanaAccountMeta("signer", "Signer<'info>", isMut = true),
             SolanaAccountMeta("system_program", "Program<'info, System>")
@@ -162,6 +159,18 @@ private fun buildInitInstruction(): SolanaInstruction {
             Assign(FieldAccess(Var("game"), "timeout"), Var("timeout")),
             Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp),
             Assign(FieldAccess(Var("game"), "pot_total"), IntLit(0)),
+        )
+    )
+}
+
+private fun emitCheckTimestamp(roleIdx: Int): List<SolanaStmt> {
+    return listOf(
+        SolanaStmt.If(
+            Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
+            listOf(
+                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)),
+                Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
+            )
         )
     )
 }
@@ -180,7 +189,6 @@ private fun buildActionInstruction(
 
     val params = mutableListOf<SolanaParam>()
     spec.params.forEach { p ->
-        // If COMMIT, the param is hidden. We accept the HASH.
         if (meta.kind == Visibility.COMMIT) {
              params.add(SolanaParam("hidden_${p.name}", Array(U8, 32)))
         } else {
@@ -210,16 +218,10 @@ private fun buildActionInstruction(
 
     // 1. Role Check
     if (spec.join != null) {
-        // require!(!game.joined[roleIdx], ErrorCode::AlreadyJoined)
         body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyJoined", "Already joined")))
-
-        // game.roles[roleIdx] = signer.key()
         body.add(Assign(Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())))
-
-        // game.joined[roleIdx] = true
         body.add(Assign(Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong())), BoolLit(true)))
 
-        // Deposit
         val deposit = spec.join.deposit.v.toLong()
         if (deposit > 0) {
              body.add(SolanaStmt.Comment("Deposit $deposit lamports"))
@@ -227,30 +229,35 @@ private fun buildActionInstruction(
              body.add(Assign(FieldAccess(Var("game"), "pot_total"), Binary(BinaryOp.ADD, FieldAccess(Var("game"), "pot_total"), IntLit(deposit))))
         }
     } else {
-        // require!(game.roles[roleIdx] == signer.key(), ErrorCode::Unauthorized)
         body.add(Require(Binary(BinaryOp.EQ, Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())), SolanaError("Unauthorized", "Unauthorized")))
     }
 
-    // 2. Timeout Check (internal)
-    body.add(SolanaStmt.If(
-        Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
-        listOf(Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)))
-    ))
+    // 2. Timeout Check (Actor)
+    body.addAll(emitCheckTimestamp(roleIdx))
+    // require!(!game.bailed[roleIdx], Timeout)
+    body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
-    // 3. Dependency Checks
+    // 3. One-Shot Check
+    body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
+
+    // 4. Dependency Checks
     dag.prerequisitesOf(id).forEach { pred ->
         val predIdx = linearization.getValue(pred)
         val predOwner = roleMap[dag.owner(pred)]!!
+
+        // Check timeout for dependency owner
+        body.addAll(emitCheckTimestamp(predOwner))
+
         body.add(SolanaStmt.If(
-            Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))),
+            Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(predOwner.toLong()))),
             listOf(Require(
-                Binary(BinaryOp.OR, Index(FieldAccess(Var("game"), "action_done"), IntLit(predIdx.toLong())), Index(FieldAccess(Var("game"), "bailed"), IntLit(predOwner.toLong()))),
+                Index(FieldAccess(Var("game"), "action_done"), IntLit(predIdx.toLong())),
                 SolanaError("DependencyNotMet", "Dependency not met")
             ))
         ))
     }
 
-    // 4. Guards
+    // 5. Guards
     if (meta.kind != Visibility.COMMIT) {
         val guards = translateDomainGuards(spec.params) + if (spec.guardExpr != Expr.Const.BoolVal(true)) {
             listOf(translateExpr(spec.guardExpr, meta.struct.owner, spec.params.map { it.name.name }.toSet()))
@@ -262,14 +269,13 @@ private fun buildActionInstruction(
         }
     }
 
-    // 5. Updates
+    // 6. Updates
     spec.params.forEach { p ->
         val inputName = if (meta.kind == Visibility.COMMIT) "hidden_${p.name}" else p.name.name
         val storage = storageName(struct.owner, p.name, meta.kind == Visibility.COMMIT)
         val done = doneFlagName(struct.owner, p.name, meta.kind == Visibility.COMMIT)
 
         if (meta.kind == Visibility.REVEAL) {
-             // Verify hash
              val commitStorage = storageName(struct.owner, p.name, true)
              val cast = if (p.type is Type.BoolType) " as u8" else ""
              body.add(SolanaStmt.Code("""
@@ -282,14 +288,12 @@ private fun buildActionInstruction(
              """.trimIndent()))
         }
 
-        // Store value
         if (meta.kind == Visibility.COMMIT) {
              body.add(Assign(FieldAccess(Var("game"), storage), Var(inputName)))
         } else {
              body.add(Assign(FieldAccess(Var("game"), storage), Var(inputName)))
         }
 
-        // Mark done
         body.add(Assign(FieldAccess(Var("game"), done), BoolLit(true)))
     }
 
@@ -315,7 +319,6 @@ private fun buildFinalizeInstruction(
 ): SolanaInstruction {
     val body = mutableListOf<SolanaStmt>()
 
-    // Check sinks
     dag.sinks().forEach { sink ->
         val idx = linearization.getValue(sink)
         val owner = roleMap[dag.owner(sink)]!!
@@ -325,7 +328,6 @@ private fun buildFinalizeInstruction(
         ))
     }
 
-    // Compute Payoffs
     var totalPayout: SolanaExpr = IntLit(0)
     val payoutVars = mutableMapOf<RoleId, String>()
 
@@ -333,13 +335,10 @@ private fun buildFinalizeInstruction(
         val varName = "p_${role.name}"
         payoutVars[role] = varName
         val valExpr = translateExpr(expr, null, emptySet())
-        // Clamp 0 and cast u64
         body.add(Let(varName, U64, Raw("(std::cmp::max(0, ${generateExpr(valExpr)})) as u64")))
         totalPayout = Binary(BinaryOp.ADD, totalPayout, Var(varName))
     }
 
-    // Safety Check
-    // if total > pot { refund } else { store }
     body.add(SolanaStmt.If(
         Binary(BinaryOp.GT, totalPayout, FieldAccess(Var("game"), "pot_total")),
         roles.map { role ->
@@ -367,10 +366,8 @@ private fun buildClaimInstruction(role: RoleId, roleIdx: Int): SolanaInstruction
     body.add(Require(FieldAccess(Var("game"), "is_finalized"), SolanaError("NotFinalized", "Not finalized")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "claimed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyClaimed", "Already claimed")))
 
-    // game.claimed[idx] = true
     body.add(Assign(Index(FieldAccess(Var("game"), "claimed"), IntLit(roleIdx.toLong())), BoolLit(true)))
 
-    // Transfer from Vault
     val roleName = role.name
     body.add(SolanaStmt.Code("""
         {
@@ -405,7 +402,7 @@ private fun buildClaimInstruction(role: RoleId, roleIdx: Int): SolanaInstruction
                 "#[account(seeds = [b\"vault\", game.key().as_ref()], bump)]"
             )),
             SolanaAccountMeta("signer", "Signer<'info>", isMut = true, constraints = listOf(
-                "#[account(address = game.roles[$roleIdx])]"
+                "#[account(constraint = signer.key() == game.roles[$roleIdx] @ ErrorCode::Unauthorized)]"
             )),
             SolanaAccountMeta("system_program", "Program<'info, System>")
         ),

@@ -7,6 +7,9 @@ pub mod oddsevens {
     use super::*;
 
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -15,6 +18,9 @@ pub mod oddsevens {
     }
 
     pub fn move_Odd_1(ctx: Context<Move_Odd_1>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+        let vault = &mut ctx.accounts.vault;
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -32,7 +38,10 @@ pub mod oddsevens {
          game.pot_total = (game.pot_total + 100);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
          game.action_done[1 as usize] = true;
          game.action_ts[1 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -40,6 +49,9 @@ pub mod oddsevens {
     }
 
     pub fn move_Even_0(ctx: Context<Move_Even_0>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+        let vault = &mut ctx.accounts.vault;
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -57,7 +69,10 @@ pub mod oddsevens {
          game.pot_total = (game.pot_total + 100);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -65,15 +80,28 @@ pub mod oddsevens {
     }
 
     pub fn move_Odd_2(ctx: Context<Move_Odd_2>, hidden_c: [u8; 32]) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[1 as usize]) {
-             require!((game.action_done[1 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
-         if !(game.bailed[1 as usize]) {
-             require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
          game.Odd_c_hidden = hidden_c;
          game.done_Odd_c_hidden = true;
@@ -84,15 +112,28 @@ pub mod oddsevens {
     }
 
     pub fn move_Even_4(ctx: Context<Move_Even_4>, hidden_c: [u8; 32]) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[0 as usize]) {
-             require!((game.action_done[1 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
-         }
-         if !(game.bailed[0 as usize]) {
-             require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
          game.Even_c_hidden = hidden_c;
          game.done_Even_c_hidden = true;
@@ -103,21 +144,42 @@ pub mod oddsevens {
     }
 
     pub fn move_Odd_3(ctx: Context<Move_Odd_3>, c: bool, salt: u64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[1 as usize]) {
-             require!((game.action_done[1 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[1 as usize]) {
-             require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
-         if !(game.bailed[1 as usize]) {
-             require!((game.action_done[2 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
-         if !(game.bailed[1 as usize]) {
-             require!((game.action_done[4 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
          {
     let val_bytes = (c as u8).to_le_bytes();
@@ -134,21 +196,42 @@ pub mod oddsevens {
     }
 
     pub fn move_Even_5(ctx: Context<Move_Even_5>, c: bool, salt: u64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[0 as usize]) {
-             require!((game.action_done[1 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[0 as usize]) {
-             require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+             require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
-         if !(game.bailed[0 as usize]) {
-             require!((game.action_done[4 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
-         if !(game.bailed[0 as usize]) {
-             require!((game.action_done[2 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          {
     let val_bytes = (c as u8).to_le_bytes();
@@ -165,6 +248,7 @@ pub mod oddsevens {
     }
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
          require!((game.action_done[3 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          require!((game.action_done[5 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_Even: u64 = (std::cmp::max(0, if (game.done_Even_c && game.done_Odd_c) { if (game.Even_c == game.Odd_c) { 126 } else { 74 } } else { if (!(game.done_Even_c) && game.done_Odd_c) { 20 } else { if (game.done_Even_c && !(game.done_Odd_c)) { 180 } else { 100 } } })) as u64;
@@ -181,6 +265,9 @@ pub mod oddsevens {
     }
 
     pub fn claim_Even(ctx: Context<Claim_Even>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
@@ -210,6 +297,9 @@ pub mod oddsevens {
     }
 
     pub fn claim_Odd(ctx: Context<Claim_Odd>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
@@ -243,19 +333,25 @@ pub mod oddsevens {
 #[derive(Accounts)]
 #[instruction(game_id: u64, timeout: i64)]
 pub struct Init_instance<'info> {
+    #[account(mut)]
     #[account(init, payer = signer, space = 8 + 10240, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(seeds = [b"vault", game.key().as_ref()], bump)]
+    #[account(mut)]
+    #[account(init, payer = signer, space = 8, seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
+    #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Move_Odd_1<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -263,9 +359,12 @@ pub struct Move_Odd_1<'info> {
 
 #[derive(Accounts)]
 pub struct Move_Even_0<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -274,56 +373,71 @@ pub struct Move_Even_0<'info> {
 #[derive(Accounts)]
 #[instruction(hidden_c: [u8; 32])]
 pub struct Move_Odd_2<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
 #[instruction(hidden_c: [u8; 32])]
 pub struct Move_Even_4<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
 #[instruction(c: bool, salt: u64)]
 pub struct Move_Odd_3<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
 #[instruction(c: bool, salt: u64)]
 pub struct Move_Even_5<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct Finalize<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_Even<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(address = game.roles[0])]
+    #[account(mut)]
+    #[account(constraint = signer.key() == game.roles[0] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_Odd<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(address = game.roles[1])]
+    #[account(mut)]
+    #[account(constraint = signer.key() == game.roles[1] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }

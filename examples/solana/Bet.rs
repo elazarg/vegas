@@ -7,6 +7,9 @@ pub mod bet {
     use super::*;
 
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -15,6 +18,9 @@ pub mod bet {
     }
 
     pub fn move_Race_0(ctx: Context<Move_Race_0>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+        let vault = &mut ctx.accounts.vault;
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -32,7 +38,10 @@ pub mod bet {
          game.pot_total = (game.pot_total + 10);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -40,6 +49,9 @@ pub mod bet {
     }
 
     pub fn move_Gambler_1(ctx: Context<Move_Gambler_1>, bet: i64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+        let vault = &mut ctx.accounts.vault;
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -57,9 +69,16 @@ pub mod bet {
          game.pot_total = (game.pot_total + 10);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
-         if !(game.bailed[0 as usize]) {
-             require!((game.action_done[0 as usize] || game.bailed[1 as usize]), ErrorCode::DependencyNotMet);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((bet == 1) || (bet == 2)) || (bet == 3)), ErrorCode::GuardFailed);
          game.Gambler_bet = bet;
@@ -71,12 +90,21 @@ pub mod bet {
     }
 
     pub fn move_Race_2(ctx: Context<Move_Race_2>, winner: i64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
-         if !(game.bailed[1 as usize]) {
-             require!((game.action_done[1 as usize] || game.bailed[0 as usize]), ErrorCode::DependencyNotMet);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((winner == 1) || (winner == 2)) || (winner == 3)), ErrorCode::GuardFailed);
          game.Race_winner = winner;
@@ -88,6 +116,7 @@ pub mod bet {
     }
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
          require!((game.action_done[2 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          let p_Gambler: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 20 } else { 0 })) as u64;
          let p_Race: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 0 } else { 20 })) as u64;
@@ -103,6 +132,9 @@ pub mod bet {
     }
 
     pub fn claim_Gambler(ctx: Context<Claim_Gambler>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
@@ -132,6 +164,9 @@ pub mod bet {
     }
 
     pub fn claim_Race(ctx: Context<Claim_Race>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let vault = &mut ctx.accounts.vault;
+        let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
@@ -165,19 +200,25 @@ pub mod bet {
 #[derive(Accounts)]
 #[instruction(game_id: u64, timeout: i64)]
 pub struct Init_instance<'info> {
+    #[account(mut)]
     #[account(init, payer = signer, space = 8 + 10240, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(seeds = [b"vault", game.key().as_ref()], bump)]
+    #[account(mut)]
+    #[account(init, payer = signer, space = 8, seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
+    #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Move_Race_0<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -186,9 +227,12 @@ pub struct Move_Race_0<'info> {
 #[derive(Accounts)]
 #[instruction(bet: i64)]
 pub struct Move_Gambler_1<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -197,32 +241,41 @@ pub struct Move_Gambler_1<'info> {
 #[derive(Accounts)]
 #[instruction(winner: i64)]
 pub struct Move_Race_2<'info> {
+    #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct Finalize<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_Gambler<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(address = game.roles[0])]
+    #[account(mut)]
+    #[account(constraint = signer.key() == game.roles[0] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_Race<'info> {
+    #[account(mut)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(address = game.roles[1])]
+    #[account(mut)]
+    #[account(constraint = signer.key() == game.roles[1] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
