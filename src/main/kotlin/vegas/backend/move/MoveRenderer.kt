@@ -1,6 +1,6 @@
-package vegas.backend.sui_move
+package vegas.backend.move
 
-class SuiMoveRenderer {
+class MoveRenderer {
     private val sb = StringBuilder()
     private var indentLevel = 0
 

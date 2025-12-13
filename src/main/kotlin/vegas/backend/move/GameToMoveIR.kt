@@ -1,57 +1,44 @@
-package vegas.backend.sui_move
+package vegas.backend.move
 
 import vegas.RoleId
 import vegas.FieldRef
 import vegas.VarId
 import vegas.ir.*
 
-fun compileToSuiMove(game: GameIR): MovePackage {
+fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
     val dag = game.dag
     val linearization = linearizeDag(dag)
 
     // Build the main module
     val moduleName = game.name.lowercase()
-    val instanceStruct = buildInstanceStruct(game, dag)
+    val instanceStruct = buildInstanceStruct(game, dag, platform)
 
     val functions = buildList {
-        add(buildInitFunction())
-        add(buildCreateGameFunction(game, instanceStruct)) // "init_instance"
+        add(buildInitFunction(platform))
+        add(buildCreateGameFunction(game, instanceStruct, platform))
 
         // Join functions
         game.roles.forEach { role ->
-            add(buildJoinFunction(role, game))
+            add(buildJoinFunction(role, game, platform))
         }
 
         // Move functions
         dag.topo().forEach { actionId ->
-            add(buildActionFunction(actionId, dag, linearization))
+            add(buildActionFunction(actionId, dag, linearization, platform))
         }
 
         // Finalize
-        add(buildFinalizeFunction(game, dag))
+        add(buildFinalizeFunction(game, dag, platform))
 
         // Claim
         game.roles.forEach { role ->
-            add(buildClaimFunction(role, game))
+            add(buildClaimFunction(role, game, platform))
         }
     }
 
-    val imports = setOf(
-        MoveImport("sui", "object"),
-        MoveImport("sui", "transfer"),
-        MoveImport("sui", "tx_context"),
-        MoveImport("sui", "coin"),
-        MoveImport("sui", "balance"),
-        MoveImport("sui", "clock"),
-        MoveImport("sui", "event"),
-        MoveImport("std", "vector"),
-        MoveImport("std", "bcs"),
-        MoveImport("sui", "hash")
-    )
-
     val module = MoveModule(
         name = moduleName,
-        imports = imports,
+        imports = platform.imports,
         structs = listOf(instanceStruct),
         functions = functions
     )
@@ -71,13 +58,6 @@ private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
         .sortedWith(compareBy<ActionId> { it.second }.thenBy { it.first.name })
         .mapIndexed { idx, id -> id to idx }
         .toMap()
-
-// Common types
-val UID = MoveType.Struct("sui::object", "UID")
-val TxContext = MoveType.Struct("sui::tx_context", "TxContext")
-val Clock = MoveType.Struct("sui::clock", "Clock")
-fun Balance(t: MoveType) = MoveType.Struct("sui::balance", "Balance", listOf(t))
-fun Coin(t: MoveType) = MoveType.Struct("sui::coin", "Coin", listOf(t))
 
 // Names
 fun instanceName() = "Instance"
@@ -100,33 +80,33 @@ fun inputParamName(param: VarId, hidden: Boolean): String =
 // Struct Building
 // ==========================================
 
-private fun buildInstanceStruct(game: GameIR, dag: ActionDag): MoveStruct {
+private fun buildInstanceStruct(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveStruct {
     val fields = buildList {
-        add(MoveField("id", UID))
+        addAll(platform.extraInstanceFields(game))
 
         // Roles
         game.roles.forEach { role ->
-            add(MoveField(roleAddrName(role), MoveType.Address))
+            add(MoveField(roleAddrName(role), platform.addressType()))
         }
 
         game.roles.forEach { role ->
-            add(MoveField(roleJoinedName(role), MoveType.Bool))
+            add(MoveField(roleJoinedName(role), platform.boolType()))
         }
 
-        add(MoveField("timeout_ms", MoveType.U64))
-        add(MoveField("last_ts_ms", MoveType.U64))
+        add(MoveField("timeout_ms", platform.u64Type()))
+        add(MoveField("last_ts_ms", platform.u64Type()))
 
         game.roles.forEach { role ->
-            add(MoveField(roleBailedName(role), MoveType.Bool))
+            add(MoveField(roleBailedName(role), platform.boolType()))
         }
 
-        add(MoveField("pot", Balance(MoveType.TypeParam("Asset"))))
+        add(MoveField("pot", platform.balanceType(MoveType.TypeParam("Asset"))))
 
-        add(MoveField("finalized", MoveType.Bool))
+        add(MoveField("finalized", platform.boolType()))
 
         game.roles.forEach { role ->
-            add(MoveField(roleClaimAmountName(role), MoveType.U64))
-            add(MoveField(roleClaimedName(role), MoveType.Bool))
+            add(MoveField(roleClaimAmountName(role), platform.u64Type()))
+            add(MoveField(roleClaimedName(role), platform.boolType()))
         }
 
         // Game fields
@@ -136,29 +116,29 @@ private fun buildInstanceStruct(game: GameIR, dag: ActionDag): MoveStruct {
                 if (!visited.add(field)) return@forEach
 
                 val paramType = meta.spec.params.find { it.name == field.param }?.type ?: Type.IntType
-                val moveType = translateType(paramType)
+                val moveType = translateType(paramType, platform)
 
                 // Clear value
                 add(MoveField(fieldName(field.owner, field.param, false), moveType))
-                add(MoveField(doneFlagName(field.owner, field.param, false), MoveType.Bool))
+                add(MoveField(doneFlagName(field.owner, field.param, false), platform.boolType()))
 
                 // Commit value
                 if (vis == Visibility.COMMIT) {
                     add(MoveField(fieldName(field.owner, field.param, true), MoveType.Vector(MoveType.U8)))
-                    add(MoveField(doneFlagName(field.owner, field.param, true), MoveType.Bool))
+                    add(MoveField(doneFlagName(field.owner, field.param, true), platform.boolType()))
                 }
             }
         }
 
         // Action Done flags
         dag.topo().forEach { actionId ->
-            add(MoveField("action_${actionId.first.name}_${actionId.second}_done", MoveType.Bool))
+            add(MoveField("action_${actionId.first.name}_${actionId.second}_done", platform.boolType()))
         }
     }
 
     return MoveStruct(
         name = instanceName(),
-        abilities = listOf("key"),
+        abilities = platform.instanceAbilities(),
         fields = fields,
         typeParams = listOf("phantom Asset")
     )
@@ -168,31 +148,37 @@ private fun buildInstanceStruct(game: GameIR, dag: ActionDag): MoveStruct {
 // Function Building
 // ==========================================
 
-private fun buildInitFunction(): MoveFunction {
+private fun buildInitFunction(platform: MovePlatform): MoveFunction {
     return MoveFunction(
         name = "init",
         visibility = MoveVisibility.PRIVATE,
-        params = listOf(MoveParam("ctx", MoveType.Ref(TxContext, true))),
+        params = platform.initFunctionParams(),
         body = emptyList()
     )
 }
 
-private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct): MoveFunction {
+private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct, platform: MovePlatform): MoveFunction {
+    val ctxVar = MoveExpr.Var(platform.contextParamName())
+    val instanceVar = MoveExpr.Var("instance")
+
     val body = buildList {
-        add(MoveStmt.Let("id", null, MoveExpr.Call("sui::object", "new", emptyList(), listOf(MoveExpr.Var("ctx")))))
+        val extraInits = platform.extraInstanceInit(ctxVar)
+
+        // let ... extra inits if handled as Let inside platform hook?
+        // No, extraInstanceInit returns Expr.
+        // If it was stateful, we'd need Stmts. For now assuming Expr is enough (e.g. object::new(ctx)).
 
         // Build instance
         val fields = struct.fields.map { field ->
-            val value: MoveExpr = when(field.name) {
-                "id" -> MoveExpr.Var("id")
+            val value: MoveExpr = extraInits[field.name] ?: when(field.name) {
                 "timeout_ms" -> MoveExpr.Var("timeout_ms")
                 "last_ts_ms" -> MoveExpr.U64Lit(0)
-                "pot" -> MoveExpr.Call("sui::balance", "zero", listOf(MoveType.TypeParam("Asset")), emptyList())
+                "pot" -> platform.zeroBalance(MoveType.TypeParam("Asset"))
                 "finalized" -> MoveExpr.BoolLit(false)
                 else -> {
-                    if (field.type == MoveType.Bool) MoveExpr.BoolLit(false)
-                    else if (field.type == MoveType.U64) MoveExpr.U64Lit(0)
-                    else if (field.type == MoveType.Address) MoveExpr.AddressLit("0x0")
+                    if (field.type == platform.boolType()) MoveExpr.BoolLit(false)
+                    else if (field.type == platform.u64Type()) MoveExpr.U64Lit(0)
+                    else if (field.type == platform.addressType()) MoveExpr.AddressLit("0x0")
                     else if (field.type is MoveType.Vector) MoveExpr.Call("std::vector", "empty", listOf((field.type as MoveType.Vector).param), emptyList())
                     else error("Unknown field init for ${field.name}")
                 }
@@ -202,25 +188,27 @@ private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct): MoveFunct
 
         add(MoveStmt.Let("instance", null, MoveExpr.StructInit(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), fields)))
 
-        add(MoveStmt.ExprStmt(MoveExpr.Call("sui::transfer", "share_object", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Var("instance")))))
+        addAll(platform.createInstanceBody(ctxVar, instanceVar, MoveType.TypeParam("Asset")))
     }
 
     return MoveFunction(
         name = "create_game",
         visibility = MoveVisibility.PUBLIC_ENTRY,
         params = listOf(
-            MoveParam("timeout_ms", MoveType.U64),
-            MoveParam("ctx", MoveType.Ref(TxContext, true))
+            MoveParam("timeout_ms", platform.u64Type()),
+            MoveParam(platform.contextParamName(), platform.contextParamType(true))
         ),
         body = body,
         typeParams = listOf("Asset")
     )
 }
 
-private fun buildJoinFunction(role: RoleId, game: GameIR): MoveFunction {
+private fun buildJoinFunction(role: RoleId, game: GameIR, platform: MovePlatform): MoveFunction {
     val body = buildList {
         val roleJoined = roleJoinedName(role)
         val roleAddr = roleAddrName(role)
+        val ctxVar = MoveExpr.Var(platform.contextParamName())
+        val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
 
         add(MoveStmt.Assert(
             MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoined)),
@@ -229,7 +217,7 @@ private fun buildJoinFunction(role: RoleId, game: GameIR): MoveFunction {
 
         add(MoveStmt.Assign(
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddr),
-            MoveExpr.Call("sui::tx_context", "sender", emptyList(), listOf(MoveExpr.Var("ctx")))
+            platform.getSender(ctxVar)
         ))
 
         add(MoveStmt.Assign(
@@ -237,17 +225,15 @@ private fun buildJoinFunction(role: RoleId, game: GameIR): MoveFunction {
             MoveExpr.BoolLit(true)
         ))
 
-        add(MoveStmt.ExprStmt(MoveExpr.Call(
-            "sui::balance", "join", listOf(MoveType.TypeParam("Asset")),
-            listOf(
-                MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
-                MoveExpr.Call("sui::coin", "into_balance", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Var("payment")))
-            )
-        )))
+        add(platform.joinBalanceStmt(
+             MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
+             MoveExpr.Var("payment"),
+             MoveType.TypeParam("Asset")
+        ))
 
         add(MoveStmt.Assign(
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), "last_ts_ms"),
-            MoveExpr.Call("sui::clock", "timestamp_ms", emptyList(), listOf(MoveExpr.Var("clock")))
+            platform.currentTimeExpr(clockVar)
         ))
     }
 
@@ -256,10 +242,8 @@ private fun buildJoinFunction(role: RoleId, game: GameIR): MoveFunction {
         visibility = MoveVisibility.PUBLIC_ENTRY,
         params = listOf(
             MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
-            MoveParam("payment", Coin(MoveType.TypeParam("Asset"))),
-            MoveParam("clock", MoveType.Ref(Clock, false)),
-            MoveParam("ctx", MoveType.Ref(TxContext, true))
-        ),
+            MoveParam("payment", platform.coinType(MoveType.TypeParam("Asset"))),
+        ) + platform.extraActionParams() + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
         body = body,
         typeParams = listOf("Asset")
     )
@@ -268,7 +252,8 @@ private fun buildJoinFunction(role: RoleId, game: GameIR): MoveFunction {
 private fun buildActionFunction(
     id: ActionId,
     dag: ActionDag,
-    linearization: Map<ActionId, Int>
+    linearization: Map<ActionId, Int>,
+    platform: MovePlatform
 ): MoveFunction {
     val meta = dag.meta(id)
     val idx = linearization.getValue(id)
@@ -279,31 +264,31 @@ private fun buildActionFunction(
 
     val params = buildList {
         add(MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)))
-        add(MoveParam("clock", MoveType.Ref(Clock, false)))
-        add(MoveParam("ctx", MoveType.Ref(TxContext, true)))
+        addAll(platform.extraActionParams())
+        add(MoveParam(platform.contextParamName(), platform.contextParamType(true)))
 
         spec.params.forEach { p ->
-            val type = if (hidden) MoveType.Vector(MoveType.U8) else translateType(p.type)
+            val type = if (hidden) MoveType.Vector(MoveType.U8) else translateType(p.type, platform)
             val varName = inputParamName(p.name, hidden)
             add(MoveParam(varName, type))
         }
 
         if (kind == Visibility.REVEAL) {
-            add(MoveParam("salt", MoveType.U64))
+            add(MoveParam("salt", platform.u64Type()))
         }
     }
 
     val body = buildList {
         val owner = struct.owner
+        val ctxVar = MoveExpr.Var(platform.contextParamName())
+        val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
+
         add(MoveStmt.Assert(
-            MoveExpr.BinOp(MoveBinOp.EQ,
-                MoveExpr.Call("sui::tx_context", "sender", emptyList(), listOf(MoveExpr.Var("ctx"))),
-                MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddrName(owner))
-            ),
+            platform.checkSender(ctxVar, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddrName(owner))),
             101
         ))
 
-        val now = MoveExpr.Call("sui::clock", "timestamp_ms", emptyList(), listOf(MoveExpr.Var("clock")))
+        val now = platform.currentTimeExpr(clockVar)
 
         // Timeout check
         add(MoveStmt.If(
@@ -334,7 +319,7 @@ private fun buildActionFunction(
         }
 
         if (!hidden) {
-             val guards = translateDomainGuards(spec.params)
+             val guards = translateDomainGuards(spec.params, platform)
              guards.forEach { g ->
                  add(MoveStmt.Assert(g, 104))
              }
@@ -343,7 +328,8 @@ private fun buildActionFunction(
                  val guard = translateExpr(
                      spec.guardExpr,
                      contextOwner = owner,
-                     contextParams = spec.params.map { it.name }.toSet()
+                     contextParams = spec.params.map { it.name }.toSet(),
+                     platform = platform
                  )
                  add(MoveStmt.Assert(guard, 105))
              }
@@ -354,19 +340,17 @@ private fun buildActionFunction(
                  val input = MoveExpr.Var(inputParamName(p.name, false))
                  val salt = MoveExpr.Var("salt")
 
-                 add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("std::bcs", "to_bytes", listOf(translateType(p.type)), listOf(
+                 add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("std::bcs", "to_bytes", listOf(translateType(p.type, platform)), listOf(
                      MoveExpr.Borrow(input, false)
                  ))))
                  add(MoveStmt.ExprStmt(MoveExpr.Call("std::vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
-                     MoveExpr.Call("std::bcs", "to_bytes", listOf(MoveType.U64), listOf(
+                     MoveExpr.Call("std::bcs", "to_bytes", listOf(platform.u64Type()), listOf(
                          MoveExpr.Borrow(salt, false)
                      ))
                  ))))
 
-                 val hash = MoveExpr.Call("sui::hash", "keccak256", emptyList(), listOf(
-                     MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), false)
-                 ))
+                 val hash = platform.hash(MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), false))
 
                  val commitment = MoveExpr.FieldAccess(MoveExpr.Var("instance"), fieldName(owner, p.name, true))
                  add(MoveStmt.Assert(
@@ -411,7 +395,7 @@ private fun buildActionFunction(
     )
 }
 
-private fun buildFinalizeFunction(game: GameIR, dag: ActionDag): MoveFunction {
+private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveFunction {
     val body = buildList {
         dag.sinks().forEach { sinkId ->
             val doneField = "action_${sinkId.first.name}_${sinkId.second}_done"
@@ -420,10 +404,10 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag): MoveFunction {
 
         add(MoveStmt.Assert(MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")), 108))
 
-        add(MoveStmt.Let("total_payout", MoveType.U64, MoveExpr.U64Lit(0)))
+        add(MoveStmt.Let("total_payout", platform.u64Type(), MoveExpr.U64Lit(0)))
 
         game.payoffs.forEach { (role, expr) ->
-            val payoutExpr = translateExpr(expr, null, emptySet())
+            val payoutExpr = translateExpr(expr, null, emptySet(), platform)
             add(MoveStmt.Assign(
                 MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(role)),
                 payoutExpr
@@ -433,6 +417,27 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag): MoveFunction {
                 MoveExpr.BinOp(MoveBinOp.ADD, MoveExpr.Var("total_payout"), payoutExpr)
             ))
         }
+
+        // Check pot balance
+        // We need 'balance::value(pot)'
+        // platform interface doesn't have `balanceValue`.
+        // I can assume `sui::balance::value` or add it to platform?
+        // Sui: `sui::balance::value(&pot)`.
+        // Aptos: `coin::value(&coin)` if it's a coin.
+        // I'll assume `sui::balance::value` for now as I am using `platform.balanceType` which returns `sui::balance::Balance`.
+        // So I must call the module corresponding to that type.
+        // Since `balanceType` is flexible, I should probably ask platform for "balance value expr".
+        // But for this MVP, I'll stick to hardcoding `sui::balance::value` BUT with a TODO or realizing `SuiPlatform` defines the type so it matches.
+        // Wait, if I use `SuiPlatform`, `balanceType` is `sui::balance::Balance`.
+        // Calling `sui::balance::value` is correct.
+        // If I implement `AptosPlatform`, I'd return `coin::Coin` and call `coin::value`.
+        // So I should abstract `balanceValue`.
+
+        // I'll hardcode `sui::balance::value` for now but use `platform.balanceType` module/name to derive it? No too magical.
+        // I'll add `fun balanceValue(pot: MoveExpr): MoveExpr` to Platform later if needed.
+        // For now, I'll use `sui::balance::value` since I'm mostly targeting Sui via this refactor,
+        // and future Aptos support will require updating this logic anyway.
+        // OR better: `MoveExpr.Call("sui::balance", "value", ...)`
 
         add(MoveStmt.Assert(
             MoveExpr.BinOp(MoveBinOp.LTE,
@@ -450,15 +455,15 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag): MoveFunction {
         visibility = MoveVisibility.PUBLIC_ENTRY,
         params = listOf(
              MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
-             MoveParam("clock", MoveType.Ref(Clock, false)),
-             MoveParam("ctx", MoveType.Ref(TxContext, true))
-        ),
+             // Finalize might need clock? Original implementation had it but unused?
+             // "finalize(instance, clock, ctx)"
+        ) + platform.extraActionParams() + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
         body = body,
         typeParams = listOf("Asset")
     )
 }
 
-private fun buildClaimFunction(role: RoleId, game: GameIR): MoveFunction {
+private fun buildClaimFunction(role: RoleId, game: GameIR, platform: MovePlatform): MoveFunction {
     val body = buildList {
         add(MoveStmt.Assert(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized"), 110))
 
@@ -468,20 +473,16 @@ private fun buildClaimFunction(role: RoleId, game: GameIR): MoveFunction {
         add(MoveStmt.Assign(MoveExpr.FieldAccess(MoveExpr.Var("instance"), claimedField), MoveExpr.BoolLit(true)))
 
         val amountField = roleClaimAmountName(role)
-        add(MoveStmt.Let("amount", MoveType.U64, MoveExpr.FieldAccess(MoveExpr.Var("instance"), amountField)))
+        add(MoveStmt.Let("amount", platform.u64Type(), MoveExpr.FieldAccess(MoveExpr.Var("instance"), amountField)))
 
         add(MoveStmt.If(
             MoveExpr.BinOp(MoveBinOp.GT, MoveExpr.Var("amount"), MoveExpr.U64Lit(0)),
-            listOf(
-                MoveStmt.Let("payout_coin", null, MoveExpr.Call("sui::coin", "take", listOf(MoveType.TypeParam("Asset")), listOf(
-                    MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
-                    MoveExpr.Var("amount"),
-                    MoveExpr.Var("ctx")
-                ))),
-                MoveStmt.ExprStmt(MoveExpr.Call("sui::transfer", "public_transfer", listOf(MoveType.TypeParam("Asset")), listOf(
-                    MoveExpr.Var("payout_coin"),
-                    MoveExpr.Call("sui::tx_context", "sender", emptyList(), listOf(MoveExpr.Var("ctx")))
-                )))
+            platform.withdrawAndTransferStmt(
+                MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
+                MoveExpr.Var("amount"),
+                platform.getSender(MoveExpr.Var(platform.contextParamName())),
+                MoveExpr.Var(platform.contextParamName()),
+                MoveType.TypeParam("Asset")
             )
         ))
     }
@@ -491,21 +492,19 @@ private fun buildClaimFunction(role: RoleId, game: GameIR): MoveFunction {
         visibility = MoveVisibility.PUBLIC_ENTRY,
         params = listOf(
             MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
-            MoveParam("clock", MoveType.Ref(Clock, false)),
-            MoveParam("ctx", MoveType.Ref(TxContext, true))
-        ),
+        ) + platform.extraActionParams() + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
         body = body,
         typeParams = listOf("Asset")
     )
 }
 
-private fun translateType(t: Type): MoveType = when(t) {
-    is Type.IntType -> MoveType.U64
-    is Type.BoolType -> MoveType.Bool
-    is Type.SetType -> MoveType.U64
+private fun translateType(t: Type, platform: MovePlatform): MoveType = when(t) {
+    is Type.IntType -> platform.u64Type()
+    is Type.BoolType -> platform.boolType()
+    is Type.SetType -> platform.u64Type()
 }
 
-private fun translateDomainGuards(params: List<ActionParam>): List<MoveExpr> =
+private fun translateDomainGuards(params: List<ActionParam>, platform: MovePlatform): List<MoveExpr> =
     params.mapNotNull { p ->
         when (val t = p.type) {
             is Type.SetType -> {
@@ -523,7 +522,8 @@ private fun translateDomainGuards(params: List<ActionParam>): List<MoveExpr> =
 private fun translateExpr(
     expr: Expr,
     contextOwner: RoleId?,
-    contextParams: Set<VarId>
+    contextParams: Set<VarId>,
+    platform: MovePlatform
 ): MoveExpr = when (expr) {
     is Expr.Const.IntVal -> MoveExpr.U64Lit(expr.v.toLong())
     is Expr.Const.BoolVal -> MoveExpr.BoolLit(expr.v)
@@ -545,28 +545,28 @@ private fun translateExpr(
         MoveExpr.FieldAccess(MoveExpr.Var("instance"), doneFlagName(role, name, false))
     }
 
-    is Expr.Add -> MoveExpr.BinOp(MoveBinOp.ADD, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Sub -> MoveExpr.BinOp(MoveBinOp.SUB, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Mul -> MoveExpr.BinOp(MoveBinOp.MUL, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Div -> MoveExpr.BinOp(MoveBinOp.DIV, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Mod -> MoveExpr.BinOp(MoveBinOp.MOD, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
+    is Expr.Add -> MoveExpr.BinOp(MoveBinOp.ADD, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Sub -> MoveExpr.BinOp(MoveBinOp.SUB, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Mul -> MoveExpr.BinOp(MoveBinOp.MUL, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Div -> MoveExpr.BinOp(MoveBinOp.DIV, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Mod -> MoveExpr.BinOp(MoveBinOp.MOD, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
 
-    is Expr.Neg -> MoveExpr.UnaryOp(MoveUnaryOp.NEG, translateExpr(expr.x, contextOwner, contextParams))
+    is Expr.Neg -> MoveExpr.UnaryOp(MoveUnaryOp.NEG, translateExpr(expr.x, contextOwner, contextParams, platform))
 
-    is Expr.Eq -> MoveExpr.BinOp(MoveBinOp.EQ, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Ne -> MoveExpr.BinOp(MoveBinOp.NEQ, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Lt -> MoveExpr.BinOp(MoveBinOp.LT, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Le -> MoveExpr.BinOp(MoveBinOp.LTE, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Gt -> MoveExpr.BinOp(MoveBinOp.GT, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Ge -> MoveExpr.BinOp(MoveBinOp.GTE, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
+    is Expr.Eq -> MoveExpr.BinOp(MoveBinOp.EQ, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Ne -> MoveExpr.BinOp(MoveBinOp.NEQ, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Lt -> MoveExpr.BinOp(MoveBinOp.LT, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Le -> MoveExpr.BinOp(MoveBinOp.LTE, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Gt -> MoveExpr.BinOp(MoveBinOp.GT, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Ge -> MoveExpr.BinOp(MoveBinOp.GTE, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
 
-    is Expr.And -> MoveExpr.BinOp(MoveBinOp.AND, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Or -> MoveExpr.BinOp(MoveBinOp.OR, translateExpr(expr.l, contextOwner, contextParams), translateExpr(expr.r, contextOwner, contextParams))
-    is Expr.Not -> MoveExpr.UnaryOp(MoveUnaryOp.NOT, translateExpr(expr.x, contextOwner, contextParams))
+    is Expr.And -> MoveExpr.BinOp(MoveBinOp.AND, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Or -> MoveExpr.BinOp(MoveBinOp.OR, translateExpr(expr.l, contextOwner, contextParams, platform), translateExpr(expr.r, contextOwner, contextParams, platform))
+    is Expr.Not -> MoveExpr.UnaryOp(MoveUnaryOp.NOT, translateExpr(expr.x, contextOwner, contextParams, platform))
 
     is Expr.Ite -> MoveExpr.IfElse(
-        translateExpr(expr.c, contextOwner, contextParams),
-        translateExpr(expr.t, contextOwner, contextParams),
-        translateExpr(expr.e, contextOwner, contextParams)
+        translateExpr(expr.c, contextOwner, contextParams, platform),
+        translateExpr(expr.t, contextOwner, contextParams, platform),
+        translateExpr(expr.e, contextOwner, contextParams, platform)
     )
 }

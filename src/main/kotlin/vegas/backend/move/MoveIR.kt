@@ -1,9 +1,9 @@
-package vegas.backend.sui_move
+package vegas.backend.move
 
 /**
- * Sui Move Intermediate Representation.
+ * Move Intermediate Representation.
  *
- * Represents the structure of a Sui Move Package.
+ * Represents the structure of a Move Package.
  */
 
 data class MovePackage(

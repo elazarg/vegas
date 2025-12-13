@@ -1,14 +1,14 @@
-package vegas.backend.sui_move
+package vegas.backend.move
 
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import vegas.frontend.parseCode
 import vegas.frontend.compileToIR
-import vegas.backend.sui_move.compileToSuiMove
-import vegas.backend.sui_move.SuiMoveRenderer
+import vegas.backend.move.compileToMove
+import vegas.backend.move.MoveRenderer
+import vegas.backend.move.SuiPlatform
 
-class SuiMoveBackendTest : StringSpec({
+class MoveBackendTest : StringSpec({
     "Compile simple game to Sui Move" {
         val code = """
             join A(x: int) $ 10;
@@ -19,8 +19,8 @@ class SuiMoveBackendTest : StringSpec({
 
         val program = parseCode(code).copy(name = "TestGame")
         val ir = compileToIR(program)
-        val movePkg = compileToSuiMove(ir)
-        val rendered = SuiMoveRenderer().render(movePkg)
+        val movePkg = compileToMove(ir, SuiPlatform)
+        val rendered = MoveRenderer().render(movePkg)
 
         println(rendered)
 
@@ -30,5 +30,9 @@ class SuiMoveBackendTest : StringSpec({
         rendered shouldContain "fun join_B"
         rendered shouldContain "fun finalize"
         rendered shouldContain "fun claim_A"
+
+        // Check for Sui-specifics
+        rendered shouldContain "sui::transfer::share_object"
+        rendered shouldContain "sui::clock::timestamp_ms"
     }
 })
