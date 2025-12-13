@@ -15,13 +15,24 @@ class SmtBackendTest : StringSpec({
 
     fun loadIr(name: String) = compileToIR(inlineMacros(parseFile("examples/$name.vg")))
 
+    fun checkSat(smt: String): String {
+        val tempFile = File.createTempFile("vegas_test", ".smt2")
+        tempFile.writeText(smt)
+        val process = ProcessBuilder("z3", tempFile.absolutePath)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        tempFile.delete()
+        return output
+    }
+
     "QF-SMT generation should produce flat constants" {
         val ir = loadIr("Simple")
         val output = generateSMT(ir)
 
-        // Simple.vg uses A.c (bool)
         output shouldContain "(declare-const A_c Bool)"
-        output shouldContain "(declare-const action_A_0_done Bool)" // Index 0 or 2? A joins at 0. Yields at 2.
+        output shouldContain "(declare-const action_A_0_done Bool)"
         output shouldContain "(assert (=> action_"
         output shouldContain "(check-sat)"
     }
@@ -31,16 +42,7 @@ class SmtBackendTest : StringSpec({
         // No coalition specified -> All Existential (Consistency check) -> Skolem functions depend on history
         val output = generateDQBF(ir)
 
-        // A.c is a function.
-        // It depends on... A's history. A joins.
-        // A.c is written in action 2 (yield A).
-        // Action 2 ancestors: Action 0 (join A).
-        // Action 0 writes nothing visible? (params of join).
-        // So A.c might depend on nothing or just join done flag?
-        // But it should be declared as a function.
         output shouldContain "(declare-fun A_c"
-        // If deps empty: (declare-fun A_c () Bool)
-        // If deps exist: (declare-fun A_c (Type...) Bool)
     }
 
     "DQBF generation with Coalition should use Universal variables for adversaries" {
@@ -55,32 +57,61 @@ class SmtBackendTest : StringSpec({
         // B's moves are NOT functions, they should be variables in the forall
         output shouldNotContain "(declare-fun action_B_"
 
-        // Should contain forall quantifier
+        // Should contain forall quantifier with implication
         output shouldContain "(assert (forall ("
-        // B's variables inside forall
-        output shouldContain "(action_B_"
+        output shouldContain "(=> (and" // Assumptions
     }
 
     "DQBF generation dependencies in MontyHall" {
         val ir = loadIr("MontyHall")
         // Roles: Host, Guest
-        // Coalition: Guest (we want to win)
+        // Coalition: Guest
         val coalition = setOf(RoleId.of("Guest"))
         val output = generateDQBF(ir, coalition)
 
-        // Guest switch action (final move)
-        // Depends on Host reveal (goat).
-        // Host reveal writes `Host_goat`.
-        // So Guest strategy for `Guest_switch` (or `Guest_door2`) should take `Host_goat` as arg.
-
-        // Find the declaration of Guest's final move.
-        // It should look like: (declare-fun Guest_switch (...) Bool)
-        // And the args should include Host_goat's type (Int).
-
-        // We can't easily parse the exact line, but we can check if there's a function with arguments.
+        // Guest switch action (final move) depends on Host reveal (goat)
         output shouldContain "(declare-fun Guest_"
-        // Check if there is a declare-fun with at least one argument (Int or Bool)
-        // Regex: \(declare-fun Guest_\w+ \([^\)]+\)
         output shouldContain Regex("\\(declare-fun Guest_\\w+ \\([^\\)]+\\)")
+    }
+
+    "Z3 Integration: Simple game should be SAT in QF mode" {
+        val ir = loadIr("Simple")
+        val output = generateSMT(ir)
+        val result = checkSat(output)
+        // Check first line of result
+        result.lines().first() shouldBe "sat"
+    }
+
+    "Z3 Integration: Prisoners game should be SAT in QF mode" {
+        val ir = loadIr("Prisoners")
+        val output = generateSMT(ir)
+        val result = checkSat(output)
+        result.lines().first() shouldBe "sat"
+    }
+
+    "Z3 Integration: Simple game Strategy Consistency (All Exists) should be SAT" {
+        val ir = loadIr("Simple")
+        val output = generateDQBF(ir) // Coalition null -> All Exists
+        val result = checkSat(output)
+        result.lines().first() shouldBe "sat"
+    }
+
+    "Z3 Integration: Prisoners Strategy Consistency should be SAT" {
+        val ir = loadIr("Prisoners")
+        val output = generateDQBF(ir)
+        val result = checkSat(output)
+        result.lines().first() shouldBe "sat"
+    }
+
+    "Z3 Integration: Prisoners A vs B Strategy" {
+        // Can A play validly against any B?
+        // Prisoners is simple: Join, Yield.
+        // A can always join. A can always yield (bool).
+        // So this should be SAT.
+        val ir = loadIr("Prisoners")
+        val coalition = setOf(RoleId.of("A"))
+        val output = generateDQBF(ir, coalition)
+        val result = checkSat(output)
+        result.lines().first() shouldBe "sat"
     }
 })

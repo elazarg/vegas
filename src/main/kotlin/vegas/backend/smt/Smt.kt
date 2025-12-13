@@ -106,7 +106,7 @@ private class SmtGenerator(
                 if (isUniversal) {
                     universalVars.add("(${actionDoneName(id)} Bool)")
                     dag.writes(id).forEach { field ->
-                         if (allFields.containsKey(field)) {
+                         if (allFields.containsKey(field) && fieldWriter[field] == id) {
                              val type = allFields[field]!!
                              universalVars.add("(${fieldName(field)} ${smtType(type)})")
                              universalVars.add("(${doneFieldName(field)} Bool)")
@@ -120,7 +120,7 @@ private class SmtGenerator(
                     sb.appendLine("(declare-fun ${actionDoneName(id)} ($depTypes) Bool)")
 
                     dag.writes(id).forEach { field ->
-                         if (allFields.containsKey(field)) {
+                         if (allFields.containsKey(field) && fieldWriter[field] == id) {
                              val type = allFields[field]!!
                              sb.appendLine("(declare-fun ${fieldName(field)} ($depTypes) ${smtType(type)})")
                              sb.appendLine("(declare-fun ${doneFieldName(field)} ($depTypes) Bool)")
