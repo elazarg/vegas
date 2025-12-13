@@ -7,21 +7,16 @@
 (assert (or (= Gambler_bet 1) (= Gambler_bet 2) (= Gambler_bet 3)))
 
 (declare-const action_Race_0_done Bool)
-(assert (=> action_Race_0_done (and true true)))
-
 (declare-const action_Gambler_1_done Bool)
-(assert (=> action_Gambler_1_done (and (and true action_Race_0_done) true)))
-(assert (=> action_Gambler_1_done Gambler_bet_done))
-
 (declare-const action_Race_2_done Bool)
-(assert (=> action_Race_2_done (and (and true action_Gambler_1_done) true)))
-(assert (=> action_Race_2_done Race_winner_done))
-
 (declare-const Gambler_outcome Int)
 (assert (= Gambler_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 20 0)))
-
 (declare-const Race_outcome Int)
 (assert (= Race_outcome (ite (or (not Race_winner_done) (= Race_winner Gambler_bet)) 0 20)))
-
+(assert (=> action_Race_0_done (and true true)))
+(assert (=> action_Gambler_1_done (and (and true action_Race_0_done) true)))
+(assert (=> action_Gambler_1_done Gambler_bet_done))
+(assert (=> action_Race_2_done (and (and true action_Gambler_1_done) true)))
+(assert (=> action_Race_2_done Race_winner_done))
 (check-sat)
 (get-model)

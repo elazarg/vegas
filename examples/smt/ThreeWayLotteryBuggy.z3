@@ -11,46 +11,34 @@
 (assert (or (= Issuer_c 1) (= Issuer_c 2) (= Issuer_c 3)))
 
 (declare-const action_Issuer_0_done Bool)
-(assert (=> action_Issuer_0_done (and true true)))
-
 (declare-const action_Alice_1_done Bool)
-(assert (=> action_Alice_1_done (and (and true action_Issuer_0_done) true)))
-
 (declare-const action_Bob_2_done Bool)
-(assert (=> action_Bob_2_done (and (and true action_Alice_1_done) true)))
-
 (declare-const action_Issuer_4_done Bool)
-(assert (=> action_Issuer_4_done (and (and true action_Bob_2_done) true)))
-(assert (=> action_Issuer_4_done Issuer_c_done))
-
-(declare-const action_Issuer_5_done Bool)
-(assert (=> action_Issuer_5_done (and (and (and (and (and true action_Bob_2_done) action_Issuer_4_done) action_Alice_6_done) action_Bob_8_done) true)))
-(assert (=> action_Issuer_5_done Issuer_c_done))
-
 (declare-const action_Alice_6_done Bool)
-(assert (=> action_Alice_6_done (and (and true action_Bob_2_done) true)))
-(assert (=> action_Alice_6_done Alice_c_done))
-
-(declare-const action_Alice_7_done Bool)
-(assert (=> action_Alice_7_done (and (and (and (and (and true action_Bob_2_done) action_Alice_6_done) action_Issuer_4_done) action_Bob_8_done) true)))
-(assert (=> action_Alice_7_done Alice_c_done))
-
 (declare-const action_Bob_8_done Bool)
-(assert (=> action_Bob_8_done (and (and true action_Bob_2_done) true)))
-(assert (=> action_Bob_8_done Bob_c_done))
-
+(declare-const action_Issuer_5_done Bool)
+(declare-const action_Alice_7_done Bool)
 (declare-const action_Bob_9_done Bool)
-(assert (=> action_Bob_9_done (and (and (and (and (and true action_Bob_2_done) action_Bob_8_done) action_Issuer_4_done) action_Alice_6_done) true)))
-(assert (=> action_Bob_9_done Bob_c_done))
-
 (declare-const Bob_outcome Int)
 (assert (= Bob_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 6 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 6 24)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 34 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 2 (ite (not Issuer_c_done) 17 12)))))))))
-
 (declare-const Issuer_outcome Int)
 (assert (= Issuer_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 24 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 6 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 34 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 1 (ite (not Alice_c_done) 17 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 2 12)))))))))
-
 (declare-const Alice_outcome Int)
 (assert (= Alice_outcome (ite (and (and Alice_c_done Bob_c_done) Issuer_c_done) (ite (= Alice_c Bob_c) 6 (ite (= (mod (+ (+ Alice_c Bob_c) Issuer_c) 2) 0) 24 6)) (ite (and (not Alice_c_done) (not Bob_c_done)) 1 (ite (and (not Alice_c_done) (not Issuer_c_done)) 1 (ite (and (not Bob_c_done) (not Issuer_c_done)) 34 (ite (not Alice_c_done) 2 (ite (not Bob_c_done) 17 (ite (not Issuer_c_done) 17 12)))))))))
-
+(assert (=> action_Issuer_0_done (and true true)))
+(assert (=> action_Alice_1_done (and (and true action_Issuer_0_done) true)))
+(assert (=> action_Bob_2_done (and (and true action_Alice_1_done) true)))
+(assert (=> action_Issuer_4_done (and (and true action_Bob_2_done) true)))
+(assert (=> action_Issuer_4_done Issuer_c_done))
+(assert (=> action_Alice_6_done (and (and true action_Bob_2_done) true)))
+(assert (=> action_Alice_6_done Alice_c_done))
+(assert (=> action_Bob_8_done (and (and true action_Bob_2_done) true)))
+(assert (=> action_Bob_8_done Bob_c_done))
+(assert (=> action_Issuer_5_done (and (and (and (and (and true action_Bob_2_done) action_Issuer_4_done) action_Alice_6_done) action_Bob_8_done) true)))
+(assert (=> action_Issuer_5_done Issuer_c_done))
+(assert (=> action_Alice_7_done (and (and (and (and (and true action_Bob_2_done) action_Alice_6_done) action_Issuer_4_done) action_Bob_8_done) true)))
+(assert (=> action_Alice_7_done Alice_c_done))
+(assert (=> action_Bob_9_done (and (and (and (and (and true action_Bob_2_done) action_Bob_8_done) action_Issuer_4_done) action_Alice_6_done) true)))
+(assert (=> action_Bob_9_done Bob_c_done))
 (check-sat)
 (get-model)

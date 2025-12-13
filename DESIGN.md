@@ -366,14 +366,30 @@ Implementation uses:
 * `Algo.ancestorsOf` for transitive closure of known fields,
 * plus current state to determine what each role knows at each node.
 
-### 5.3 SMT/DQBF Backend (Future)
+### 5.3 SMT/DQBF Backend
 
-Mapping:
+**Goal:** Provide two distinct verification views of the game using SMT-LIB 2.0.
 
-* Each action’s decision variable depends only on predecessor variables in the DAG.
-* DQBF style: `∃x(deps_x) ...` where `deps_x` = fields in `guardReads` / causal ancestors.
+1.  **Satisfiability (QF-SMT):**
+    *   **Purpose:** Check for existence of a single valid trace (e.g. "Can state X ever be reached?").
+    *   **Encoding:** Flat global constants (`(declare-const ...)`).
+    *   **Dependencies:** Asserted via boolean guards (`action_done => prereqs_done`).
+    *   `Hidden` values are treated as existential variables (unconstrained by others' knowledge in a single trace).
 
-This is future work but structurally supported by `ActionDag`.
+2.  **Strategy Synthesis (DQBF / Skolemized):**
+    *   **Purpose:** Check for existence of *strategies* (winning/valid) for roles.
+    *   **Encoding:** Skolem functions (`(declare-fun move (Observed ...) Type)`).
+    *   **Dependencies:**
+        *   Each action's value depends *only* on the information visible to the owner at that time (the "dependency set").
+        *   Dependency Set = Public/Revealed priors + Owner's own past moves.
+        *   This effectively encodes DQBF-style dependencies ($\forall \text{inputs} \exists \text{strategy}$).
+    *   **Hidden/Opaque:**
+        *   `Hidden(val)` is a function of the owner's knowledge (including private history).
+        *   Other roles' moves cannot depend on it until `Reveal`.
+
+**CLI Integration:**
+*   `vegas smt` defaults to QF-SMT.
+*   `vegas smt --dqbf` (or similar flag) generates the strategy-aware encoding.
 
 ---
 
