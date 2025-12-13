@@ -8,17 +8,17 @@ enum class Phase { COMMIT_EVENT, CHOICE, REVEAL_EVENT }
 
 data class PhaseNode(val action: ActionId, val phase: Phase)
 
-class VisibilityGraph private constructor(
+class VisibilityDag private constructor(
     private val inner: Dag<PhaseNode>
 ) : Dag<PhaseNode> by inner {
     companion object {
-        fun build(base: ActionDag): VisibilityGraph {
+        fun build(base: ActionDag): VisibilityDag {
             val dag: Dag<PhaseNode> = ExplicitDag.fromEdges(
                 edges = base.actions.flatMap { a -> chain(a) + deps(base, a) }.toSet(),
                 checkAcyclic = true
-            ) ?: error("VisibilityGraph is cyclic (unexpected)")
+            ) ?: error("VisibilityDag is cyclic (unexpected)")
 
-            return VisibilityGraph(dag)
+            return VisibilityDag(dag)
         }
 
         private fun deps(
