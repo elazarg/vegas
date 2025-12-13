@@ -31,48 +31,36 @@
 (assert (or (= O_c4 0) (= O_c4 1) (= O_c4 2) (= O_c4 3) (= O_c4 4) (= O_c4 5) (= O_c4 6) (= O_c4 7) (= O_c4 8)))
 
 (declare-const action_X_0_done Bool)
-(assert (=> action_X_0_done (and true true)))
-
 (declare-const action_O_1_done Bool)
-(assert (=> action_O_1_done (and (and true action_X_0_done) true)))
-
 (declare-const action_X_2_done Bool)
-(assert (=> action_X_2_done (and (and true action_O_1_done) true)))
-(assert (=> action_X_2_done X_c1_done))
-
 (declare-const action_O_3_done Bool)
-(assert (=> action_O_3_done (and (and true action_X_2_done) (not (= X_c1 O_c1)))))
-(assert (=> action_O_3_done O_c1_done))
-
 (declare-const action_X_4_done Bool)
-(assert (=> action_X_4_done (and (and (and true action_O_3_done) action_X_2_done) (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= O_c1 X_c2))))))
-(assert (=> action_X_4_done X_c2_done))
-
 (declare-const action_O_5_done Bool)
-(assert (=> action_O_5_done (and (and (and (and true action_X_4_done) action_X_2_done) action_O_3_done) (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= X_c2 O_c2))))))
-(assert (=> action_O_5_done O_c2_done))
-
 (declare-const action_X_6_done Bool)
-(assert (=> action_X_6_done (and (and (and (and (and true action_O_5_done) action_X_2_done) action_O_3_done) action_X_4_done) (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= O_c2 X_c3))))))
-(assert (=> action_X_6_done X_c3_done))
-
 (declare-const action_O_7_done Bool)
-(assert (=> action_O_7_done (and (and (and (and (and (and true action_X_6_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= X_c3 O_c3))))))
-(assert (=> action_O_7_done O_c3_done))
-
 (declare-const action_X_8_done Bool)
-(assert (=> action_X_8_done (and (and (and (and (and (and (and true action_O_7_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) action_X_6_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= X_c1 X_c4))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= O_c1 X_c4))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= X_c2 X_c4))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= O_c2 X_c4))) (not (= X_c3 O_c3))) (not (= X_c3 X_c4))) (not (= O_c3 X_c4))))))
-(assert (=> action_X_8_done X_c4_done))
-
 (declare-const action_O_9_done Bool)
-(assert (=> action_O_9_done (and (and (and (and (and (and (and (and true action_X_8_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) action_X_6_done) action_O_7_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= X_c1 X_c4))) (not (= X_c1 O_c4))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= O_c1 X_c4))) (not (= O_c1 O_c4))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= X_c2 X_c4))) (not (= X_c2 O_c4))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= O_c2 X_c4))) (not (= O_c2 O_c4))) (not (= X_c3 O_c3))) (not (= X_c3 X_c4))) (not (= X_c3 O_c4))) (not (= O_c3 X_c4))) (not (= O_c3 O_c4))) (not (= X_c4 O_c4))))))
-(assert (=> action_O_9_done O_c4_done))
-
 (declare-const X_outcome Int)
 (assert (= X_outcome 100))
-
 (declare-const O_outcome Int)
 (assert (= O_outcome 100))
-
+(assert (=> action_X_0_done (and true true)))
+(assert (=> action_O_1_done (and (and true action_X_0_done) true)))
+(assert (=> action_X_2_done (and (and true action_O_1_done) true)))
+(assert (=> action_X_2_done X_c1_done))
+(assert (=> action_O_3_done (and (and true action_X_2_done) (not (= X_c1 O_c1)))))
+(assert (=> action_O_3_done O_c1_done))
+(assert (=> action_X_4_done (and (and (and true action_O_3_done) action_X_2_done) (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= O_c1 X_c2))))))
+(assert (=> action_X_4_done X_c2_done))
+(assert (=> action_O_5_done (and (and (and (and true action_X_4_done) action_X_2_done) action_O_3_done) (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= X_c2 O_c2))))))
+(assert (=> action_O_5_done O_c2_done))
+(assert (=> action_X_6_done (and (and (and (and (and true action_O_5_done) action_X_2_done) action_O_3_done) action_X_4_done) (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= O_c2 X_c3))))))
+(assert (=> action_X_6_done X_c3_done))
+(assert (=> action_O_7_done (and (and (and (and (and (and true action_X_6_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= X_c3 O_c3))))))
+(assert (=> action_O_7_done O_c3_done))
+(assert (=> action_X_8_done (and (and (and (and (and (and (and true action_O_7_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) action_X_6_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= X_c1 X_c4))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= O_c1 X_c4))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= X_c2 X_c4))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= O_c2 X_c4))) (not (= X_c3 O_c3))) (not (= X_c3 X_c4))) (not (= O_c3 X_c4))))))
+(assert (=> action_X_8_done X_c4_done))
+(assert (=> action_O_9_done (and (and (and (and (and (and (and (and true action_X_8_done) action_X_2_done) action_O_3_done) action_X_4_done) action_O_5_done) action_X_6_done) action_O_7_done) (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (not (= X_c1 O_c1)) (not (= X_c1 X_c2))) (not (= X_c1 O_c2))) (not (= X_c1 X_c3))) (not (= X_c1 O_c3))) (not (= X_c1 X_c4))) (not (= X_c1 O_c4))) (not (= O_c1 X_c2))) (not (= O_c1 O_c2))) (not (= O_c1 X_c3))) (not (= O_c1 O_c3))) (not (= O_c1 X_c4))) (not (= O_c1 O_c4))) (not (= X_c2 O_c2))) (not (= X_c2 X_c3))) (not (= X_c2 O_c3))) (not (= X_c2 X_c4))) (not (= X_c2 O_c4))) (not (= O_c2 X_c3))) (not (= O_c2 O_c3))) (not (= O_c2 X_c4))) (not (= O_c2 O_c4))) (not (= X_c3 O_c3))) (not (= X_c3 X_c4))) (not (= X_c3 O_c4))) (not (= O_c3 X_c4))) (not (= O_c3 O_c4))) (not (= X_c4 O_c4))))))
+(assert (=> action_O_9_done O_c4_done))
 (check-sat)
 (get-model)
