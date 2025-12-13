@@ -7,6 +7,8 @@ import vegas.backend.smt.generateDQBF
 import vegas.backend.evm.compileToEvm
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
+import vegas.backend.solana.compileToSolana
+import vegas.backend.solana.generateAnchorRust
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
@@ -45,12 +47,13 @@ private data class Outputs(
     val efg: Boolean,
     val scr: Boolean,
     val sol: Boolean,
-    val vyper: Boolean
+    val vyper: Boolean,
+    val solana: Boolean
 )
 
 private fun parseOutputs(flags: List<String>): Outputs {
     // If empty, generate everything except possibly DQBF specific configs
-    if (flags.isEmpty()) return Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true)
+    if (flags.isEmpty()) return Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true, solana = true)
 
     var wantZ3 = false
     var wantDqbf = false
@@ -59,6 +62,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
     var wantScr = false
     var wantSol = false
     var wantVyper = false
+    var wantSolana = false
 
     var i = 0
     while (i < flags.size) {
@@ -78,15 +82,16 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--scr" -> wantScr = true
             "--sol" -> wantSol = true
             "--vyper" -> wantVyper = true
+            "--solana" -> wantSolana = true
             else -> throw IllegalArgumentException("Unknown flag: $f")
         }
         i++
     }
 
     // If the user provided any known output flags, emit only those.
-    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper
-    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper)
-    else Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true)
+    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper || wantSolana
+    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantSolana)
+    else Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true, solana = true)
 }
 
 private fun runFile(inputPath: Path, outputs: Outputs) {
@@ -101,6 +106,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val outScr = outDir.resolve("$baseName.scr")
     val outSol = outDir.resolve("$baseName.sol")
     val outVyper = outDir.resolve("$baseName.vy")
+    val outSolana = outDir.resolve("$baseName.rs")
 
     println("Analyzing $inputPath ...")
     val program = parseFile(inputPath.toString()).copy(name = baseName, desc = baseName)
@@ -125,6 +131,13 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     if (outputs.sol) writeFile(outSol.toString()) { generateSolidity(evmIr!!) }
     if (outputs.vyper) writeFile(outVyper.toString()) { generateVyper(evmIr!!) }
 
+    if (outputs.solana) {
+        writeFile(outSolana.toString()) {
+            val solanaProgram = compileToSolana(ir)
+            generateAnchorRust(solanaProgram)
+        }
+    }
+
     println("Done")
     println()
 }
@@ -133,7 +146,7 @@ fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println(
             """
-            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper]
+            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--solana]
 
             If no format flags are given, all standard outputs (excluding experimental DQBF) are generated alongside the input:
               - <file>.z3   (SMT)
@@ -141,6 +154,7 @@ fun main(args: Array<String>) {
               - <file>.scr  (Scribble)
               - <file>.sol  (Solidity)
               - <file>.vy   (Vyper)
+              - <file>.rs   (Solana/Anchor)
             """.trimIndent()
         )
         exitProcess(2)
