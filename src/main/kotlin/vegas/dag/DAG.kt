@@ -11,6 +11,16 @@ interface Dag<T : Any> {
     fun topo(): List<T>
 }
 
+/**
+ * `x before y` :=  x is a prerequisite of y
+ */
+infix fun <T>T.before(other: T) = this to other
+
+/**
+ * `x after y`  :=  y is a prerequisite of x
+ */
+infix fun <T>T.after(other: T) = other to this
+
 /* ===========================
    Concrete immutable DAG impls
    =========================== */
@@ -57,6 +67,21 @@ class ExplicitDag<T : Any> internal constructor(
             } catch (_: IllegalStateException) {
                 return null
             }
+        }
+
+        fun <T : Any> fromEdges(
+            edges: Set<Pair<T, T>>,
+            checkAcyclic: Boolean = false
+        ): Dag<T>? {
+            val prerequisitesOf = mutableMapOf<T, MutableSet<T>>()
+            for ((from, to) in edges) {
+                prerequisitesOf.getOrPut(to) { mutableSetOf() }.add(from)
+            }
+            return from(
+                nodes = edges.flatMap { listOf(it.first, it.second) }.toSet(),
+                prerequisitesOf = { n -> prerequisitesOf[n].orEmpty() },
+                checkAcyclic = checkAcyclic,
+            )
         }
     }
 }
