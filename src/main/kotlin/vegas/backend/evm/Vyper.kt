@@ -25,14 +25,15 @@ fun generateVyper(contract: EvmContract): String {
         contract.storage.forEach { slot ->
             renderStorage(slot)
         }
-        // Add timeout infrastructure
-        appendLine("TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds")
-        appendLine("bailed: HashMap[Role, bool]")
         if (contract.storage.isNotEmpty()) appendLine()
 
         // Constructor
         renderConstructor(contract.initialization)
         appendLine()
+
+        // Internal Helpers
+        contract.helpers.forEach { renderFunction(it) }
+        if (contract.helpers.isNotEmpty()) appendLine()
 
         // Game Actions
         contract.actions.forEach { renderAction(it) }
@@ -40,15 +41,6 @@ fun generateVyper(contract: EvmContract): String {
         // Fallback function (prevent accidental ETH transfers)
         renderDefaultFunction()
         appendLine()
-
-        // Internal Helpers
-        renderCheckTimestampHelper()
-        appendLine()
-
-        if (needsCheckReveal(contract)) {
-            renderCheckRevealHelper()
-            appendLine()
-        }
     }
 }
 
@@ -105,48 +97,32 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     appendLine("def ${a.name}($inputs):")
 
     indent {
-        // 1. Synthesize Assertions (Replacements for Modifiers)
-        // Role Check (inline 'by' modifier)
-        val roleCheck = "self.$roleMap[msg.sender] == ${roleEnumMember(a.invokedBy.name)}"
-        appendLine("assert $roleCheck, \"bad role\"")
-
-        // Timeout check (inline from 'by' modifier)
-        appendLine("self._check_timestamp(${roleEnumMember(a.invokedBy.name)})")
-        appendLine("assert not self.bailed[${roleEnumMember(a.invokedBy.name)}], \"you bailed\"")
-
-        // Not Done Check (inline 'action' modifier)
-        val actionRole = roleEnumMember(a.actionId.first.name)
-        val actionIdx = a.actionId.second
-        appendLine("assert not self.actionDone[$actionRole][$actionIdx], \"already done\"")
-
-        // Dependencies (inline 'depends' modifier) - only assert is conditional on bail
-        a.dependencies.forEach { dep ->
-            val depRole = roleEnumMember(dep.first.name)
-            val depIdx = dep.second
-            appendLine("self._check_timestamp($depRole)")
-            appendLine("if not self.bailed[$depRole]:")
-            // Manual indentation for single assert inside if block
-            appendLine("    assert self.actionDone[$depRole][$depIdx], \"dependency not satisfied\"")
-        }
-
-        if (a.isTerminal) {
-            appendLine("assert self.actionDone[FINAL_ACTION], \"game not over\"")
-            appendLine("assert not self.payoffs_distributed, \"payoffs already sent\"")
-        }
-
-        // Domain guards and where clauses - always checked regardless of bail status
+        // Domain guards and where clauses
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
 
-        // 2. Render Body - always executed
+        // Render Body (including injected policy logic)
         if (a.body.isEmpty()) appendLine("pass")
         else a.body.forEach { renderStmt(it) }
+    }
+    appendLine()
+}
 
-        // 3. Mark action as done (inline end of 'action' modifier)
-        appendLine("self.actionDone[$actionRole][$actionIdx] = True")
-        appendLine("self.actionTimestamp[$actionRole][$actionIdx] = block.timestamp")
-        appendLine("self.lastTs = block.timestamp")
+private fun StringBuilder.renderFunction(f: EvmFunction) {
+    val inputs = f.inputs.joinToString(", ") { "${it.name.name}: ${renderType(it.type)}" }
+    // Vyper visibility/decorators
+    val decorator = if (f.visibility == "internal") "@internal" else "@external"
+    // View/Pure? Vyper infers or uses @view/@pure.
+    // EvmFunction.mutability string ("view", "pure") map to decorators.
+    val mutability = if (f.mutability.isNotEmpty()) "@${f.mutability}" else ""
+
+    appendLine(decorator)
+    if (mutability.isNotEmpty()) appendLine(mutability)
+    appendLine("def ${f.name}($inputs):")
+    indent {
+        if (f.body.isEmpty()) appendLine("pass")
+        else f.body.forEach { renderStmt(it) }
     }
     appendLine()
 }
@@ -165,41 +141,6 @@ private fun StringBuilder.renderDefaultFunction() {
     }
 }
 
-private fun StringBuilder.renderCheckTimestampHelper() {
-    // Timeout handling - allows bailout if game stalls
-    // Matches Solidity's _check_timestamp function
-    appendLine("@internal")
-    appendLine("def _check_timestamp(role: Role):")
-    indent {
-        appendLine("if role == Role.None:")
-        indent {
-            appendLine("return")
-        }
-        // Second condition is independent - check timeout after early return
-        appendLine("if block.timestamp > self.lastTs + TIMEOUT:")
-        indent {
-            appendLine("self.bailed[role] = True")
-            appendLine("self.lastTs = block.timestamp")
-        }
-    }
-}
-
-private fun needsCheckReveal(c: EvmContract): Boolean {
-    return c.actions.any { a ->
-        a.body.any { it is ExprStmt && it.expr is Call && it.expr.func == "_checkReveal" }
-    }
-}
-
-private fun StringBuilder.renderCheckRevealHelper() {
-    // Helper to check commitment-reveal scheme
-    // Matches Solidity: _checkReveal(bytes32 commitment, bytes memory preimage)
-    appendLine("@internal")
-    appendLine("@view")
-    appendLine("def _checkReveal(commitment: bytes32, preimage: Bytes[128]):")
-    indent {
-        appendLine("assert keccak256(preimage) == commitment, \"bad reveal\"")
-    }
-}
 
 private fun StringBuilder.renderStmt(stmt: EvmStmt) {
     when (stmt) {
@@ -225,6 +166,19 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             // Vyper `raise` doesn't take args in all versions,
             // but `assert False` is a standard way to revert with msg
             appendLine("assert False, \"${stmt.message}\"")
+        }
+        is If -> {
+            appendLine("if ${renderExpr(stmt.condition)}:")
+            indent {
+                if (stmt.body.isEmpty()) appendLine("pass")
+                else stmt.body.forEach { renderStmt(it) }
+            }
+            if (stmt.elseBody.isNotEmpty()) {
+                appendLine("else:")
+                indent {
+                    stmt.elseBody.forEach { renderStmt(it) }
+                }
+            }
         }
         is Pass -> appendLine("pass")
         is SendEth -> {

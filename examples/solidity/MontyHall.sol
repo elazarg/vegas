@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract MontyHall {
     enum Role { None, Host, Guest }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Host_0 = 0;
     uint256 constant public ACTION_Guest_1 = 1;
     uint256 constant public ACTION_Host_2 = 2;
@@ -35,99 +37,160 @@ contract MontyHall {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Host_0() public payable by(Role.None) action(Role.Host, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+    
+    function move_Host_0() public payable {
+        require((roles[msg.sender] == Role.Host), "bad role");
+        _check_timestamp(Role.Host);
+        require((!bailed[Role.Host]), "you bailed");
+        require((!actionDone[Role.Host][0]), "already done");
         require((!done_Host), "already joined");
         require((msg.value == 20), "bad stake");
         roles[msg.sender] = Role.Host;
         address_Host = msg.sender;
         done_Host = true;
+        actionDone[Role.Host][0] = true;
+        actionTimestamp[Role.Host][0] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Guest_1() public payable by(Role.None) action(Role.Guest, 1) depends(Role.Host, 0) {
+    function move_Guest_1() public payable {
+        require((roles[msg.sender] == Role.Guest), "bad role");
+        _check_timestamp(Role.Guest);
+        require((!bailed[Role.Guest]), "you bailed");
+        require((!actionDone[Role.Guest][1]), "already done");
+        _check_timestamp(Role.Host);
+        if ((!bailed[Role.Host]))
+         {
+            require(actionDone[Role.Host][0], "dependency not satisfied");
+        }
         require((!done_Guest), "already joined");
         require((msg.value == 20), "bad stake");
         roles[msg.sender] = Role.Guest;
         address_Guest = msg.sender;
         done_Guest = true;
+        actionDone[Role.Guest][1] = true;
+        actionTimestamp[Role.Guest][1] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Host_2(bytes32 _hidden_car) public by(Role.Host) action(Role.Host, 2) depends(Role.Guest, 1) {
+    function move_Host_2(bytes32 _hidden_car) public {
+        require((roles[msg.sender] == Role.Host), "bad role");
+        _check_timestamp(Role.Host);
+        require((!bailed[Role.Host]), "you bailed");
+        require((!actionDone[Role.Host][2]), "already done");
+        _check_timestamp(Role.Guest);
+        if ((!bailed[Role.Guest]))
+         {
+            require(actionDone[Role.Guest][1], "dependency not satisfied");
+        }
         Host_car_hidden = _hidden_car;
         done_Host_car_hidden = true;
+        actionDone[Role.Host][2] = true;
+        actionTimestamp[Role.Host][2] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Guest_3(int256 _d) public by(Role.Guest) action(Role.Guest, 3) depends(Role.Host, 2) {
+    function move_Guest_3(int256 _d) public {
+        require((roles[msg.sender] == Role.Guest), "bad role");
+        _check_timestamp(Role.Guest);
+        require((!bailed[Role.Guest]), "you bailed");
+        require((!actionDone[Role.Guest][3]), "already done");
+        _check_timestamp(Role.Host);
+        if ((!bailed[Role.Host]))
+         {
+            require(actionDone[Role.Host][2], "dependency not satisfied");
+        }
         require((((_d == 0) || (_d == 1)) || (_d == 2)), "domain");
         Guest_d = _d;
         done_Guest_d = true;
+        actionDone[Role.Guest][3] = true;
+        actionTimestamp[Role.Guest][3] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Host_4(int256 _goat) public by(Role.Host) action(Role.Host, 4) depends(Role.Guest, 3) {
+    function move_Host_4(int256 _goat) public {
+        require((roles[msg.sender] == Role.Host), "bad role");
+        _check_timestamp(Role.Host);
+        require((!bailed[Role.Host]), "you bailed");
+        require((!actionDone[Role.Host][4]), "already done");
+        _check_timestamp(Role.Guest);
+        if ((!bailed[Role.Guest]))
+         {
+            require(actionDone[Role.Guest][3], "dependency not satisfied");
+        }
         require((((_goat == 0) || (_goat == 1)) || (_goat == 2)), "domain");
         require((_goat != Guest_d), "domain");
         Host_goat = _goat;
         done_Host_goat = true;
+        actionDone[Role.Host][4] = true;
+        actionTimestamp[Role.Host][4] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Guest_5(bool _switch) public by(Role.Guest) action(Role.Guest, 5) depends(Role.Host, 4) {
+    function move_Guest_5(bool _switch) public {
+        require((roles[msg.sender] == Role.Guest), "bad role");
+        _check_timestamp(Role.Guest);
+        require((!bailed[Role.Guest]), "you bailed");
+        require((!actionDone[Role.Guest][5]), "already done");
+        _check_timestamp(Role.Host);
+        if ((!bailed[Role.Host]))
+         {
+            require(actionDone[Role.Host][4], "dependency not satisfied");
+        }
         Guest_switch = _switch;
         done_Guest_switch = true;
+        actionDone[Role.Guest][5] = true;
+        actionTimestamp[Role.Guest][5] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Host_6(int256 _car, uint256 _salt) public by(Role.Host) action(Role.Host, 6) depends(Role.Host, 2) depends(Role.Host, 4) depends(Role.Guest, 5) {
+    function move_Host_6(int256 _car, uint256 _salt) public {
+        require((roles[msg.sender] == Role.Host), "bad role");
+        _check_timestamp(Role.Host);
+        require((!bailed[Role.Host]), "you bailed");
+        require((!actionDone[Role.Host][6]), "already done");
+        _check_timestamp(Role.Host);
+        if ((!bailed[Role.Host]))
+         {
+            require(actionDone[Role.Host][2], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Host);
+        if ((!bailed[Role.Host]))
+         {
+            require(actionDone[Role.Host][4], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Guest);
+        if ((!bailed[Role.Guest]))
+         {
+            require(actionDone[Role.Guest][5], "dependency not satisfied");
+        }
         require((((_car == 0) || (_car == 1)) || (_car == 2)), "domain");
         require((Host_goat != _car), "domain");
         require((keccak256(abi.encodePacked(_car, _salt)) == Host_car_hidden), "reveal failed for car");
         Host_car = _car;
         done_Host_car = true;
+        actionDone[Role.Host][6] = true;
+        actionTimestamp[Role.Host][6] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 7) depends(Role.Host, 6) {
+    function withdraw_Guest() public {
         require((!claimed_Guest), "already claimed");
         claimed_Guest = true;
         int256 payout = ((done_Host_car && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 40 : 0) : ((!done_Host_car) ? 40 : 0));
@@ -137,7 +200,7 @@ contract MontyHall {
         }
     }
     
-    function withdraw_Host() public by(Role.Host) action(Role.Host, 8) depends(Role.Host, 6) {
+    function withdraw_Host() public {
         require((!claimed_Host), "already claimed");
         claimed_Host = true;
         int256 payout = ((done_Host_car && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 0 : 40) : ((!done_Host_car) ? 0 : 40));

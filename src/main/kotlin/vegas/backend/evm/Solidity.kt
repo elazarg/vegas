@@ -39,7 +39,11 @@ fun generateSolidity(contract: EvmContract): String {
             renderConstructor(contract.initialization)
             appendLine()
 
-            // 6. Game Actions
+            // 6. Helpers
+            contract.helpers.forEach { renderFunction(it) }
+            if (contract.helpers.isNotEmpty()) appendLine()
+
+            // 7. Game Actions
             contract.actions.forEach { renderAction(it) }
         }
     }
@@ -70,47 +74,6 @@ private fun StringBuilder.renderInfrastructureModifiers() {
         receive() external payable {
             revert("direct ETH not allowed");
         }
-        
-        uint256 constant public TIMEOUT = 86400;
-
-        mapping(Role => bool) private bailed;
-        
-        function _check_timestamp(Role role) private {
-            if (role == Role.None) {
-                return;
-            }
-            if (block.timestamp > lastTs + TIMEOUT) {
-                bailed[role] = true;
-                lastTs = block.timestamp;
-            }
-        }
-        
-        modifier depends(Role role, uint256 actionId) {
-            _check_timestamp(role);
-            if (!bailed[role]) {
-                require(actionDone[role][actionId], "dependency not satisfied");
-            }
-            _;
-        }
-        
-        modifier action(Role role, uint256 actionId) {
-            require((!actionDone[role][actionId]), "already done");
-            actionDone[role][actionId] = true;
-            _;
-            actionTimestamp[role][actionId] = block.timestamp;
-            lastTs = block.timestamp;
-        }
-        
-        modifier by(Role role) {
-            require((${roleMap}[msg.sender] == role), "bad role");
-            _check_timestamp(role);
-            require(!bailed[role], "you bailed");
-            _;
-        }
-        
-        function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-            require((keccak256(preimage) == commitment), "bad reveal");
-        }
     """.trimIndent())
 }
 
@@ -126,19 +89,24 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     val visibility = "public" // Actions are always public entry points
     val mutability = if (a.payable) " payable" else ""
 
-    // Synthesize Modifiers from Declarative Constraints
-    val modifiers = buildList {
-        add("by(${roleEnumName}.${a.invokedBy})")
-        add("action(Role.${a.actionId.first}, ${a.actionId.second})")
-        a.dependencies.forEach { dep -> add("depends(Role.${dep.first}, ${dep.second})") }
-    }.joinToString(" ")
-
-    append("function ${a.name}($inputs) $visibility$mutability $modifiers")
+    append("function ${a.name}($inputs) $visibility$mutability")
     block {
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
         a.body.forEach { renderStmt(it) }
+    }
+    appendLine()
+}
+
+private fun StringBuilder.renderFunction(f: EvmFunction) {
+    val params = f.inputs.joinToString(", ") { "${renderType(it.type)} ${renderExpr(Var(it.name))}" }
+    val vis = f.visibility
+    val mut = if (f.mutability.isNotEmpty()) " ${f.mutability}" else ""
+
+    append("function ${f.name}($params) $vis$mut")
+    block {
+        f.body.forEach { renderStmt(it) }
     }
     appendLine()
 }
@@ -165,6 +133,18 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
         is ExprStmt -> appendLine("${renderExpr(stmt.expr)};")
         is Require -> appendLine("require(${renderExpr(stmt.condition)}, \"${stmt.message}\");")
         is Revert -> appendLine("revert(\"${stmt.message}\");")
+        is If -> {
+            appendLine("if (${renderExpr(stmt.condition)})")
+            block {
+                stmt.body.forEach { renderStmt(it) }
+            }
+            if (stmt.elseBody.isNotEmpty()) {
+                append(" else")
+                block {
+                    stmt.elseBody.forEach { renderStmt(it) }
+                }
+            }
+        }
         is Pass -> {} // No-op in Solidity
         is SendEth -> {
             // Only send if positive

@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract ThreeWayLotteryShort {
     enum Role { None, Issuer, Alice, Bob }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Issuer_1 = 0;
     uint256 constant public ACTION_Issuer_2 = 1;
     uint256 constant public ACTION_Alice_3 = 2;
@@ -39,52 +41,28 @@ contract ThreeWayLotteryShort {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Issuer_0(bytes32 _hidden_c) public payable by(Role.None) action(Role.Issuer, 1) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+    
+    function move_Issuer_0(bytes32 _hidden_c) public payable {
+        require((roles[msg.sender] == Role.Issuer), "bad role");
+        _check_timestamp(Role.Issuer);
+        require((!bailed[Role.Issuer]), "you bailed");
+        require((!actionDone[Role.Issuer][1]), "already done");
         require((!done_Issuer), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Issuer;
@@ -92,9 +70,16 @@ contract ThreeWayLotteryShort {
         done_Issuer = true;
         Issuer_c_hidden = _hidden_c;
         done_Issuer_c_hidden = true;
+        actionDone[Role.Issuer][1] = true;
+        actionTimestamp[Role.Issuer][1] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Alice_2(bytes32 _hidden_c) public payable by(Role.None) action(Role.Alice, 3) {
+    function move_Alice_2(bytes32 _hidden_c) public payable {
+        require((roles[msg.sender] == Role.Alice), "bad role");
+        _check_timestamp(Role.Alice);
+        require((!bailed[Role.Alice]), "you bailed");
+        require((!actionDone[Role.Alice][3]), "already done");
         require((!done_Alice), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Alice;
@@ -102,9 +87,16 @@ contract ThreeWayLotteryShort {
         done_Alice = true;
         Alice_c_hidden = _hidden_c;
         done_Alice_c_hidden = true;
+        actionDone[Role.Alice][3] = true;
+        actionTimestamp[Role.Alice][3] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Bob_4(bytes32 _hidden_c) public payable by(Role.None) action(Role.Bob, 5) {
+    function move_Bob_4(bytes32 _hidden_c) public payable {
+        require((roles[msg.sender] == Role.Bob), "bad role");
+        _check_timestamp(Role.Bob);
+        require((!bailed[Role.Bob]), "you bailed");
+        require((!actionDone[Role.Bob][5]), "already done");
         require((!done_Bob), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Bob;
@@ -112,30 +104,99 @@ contract ThreeWayLotteryShort {
         done_Bob = true;
         Bob_c_hidden = _hidden_c;
         done_Bob_c_hidden = true;
+        actionDone[Role.Bob][5] = true;
+        actionTimestamp[Role.Bob][5] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Issuer_1(int256 _c, uint256 _salt) public by(Role.Issuer) action(Role.Issuer, 2) depends(Role.Issuer, 1) depends(Role.Alice, 3) depends(Role.Bob, 5) {
+    function move_Issuer_1(int256 _c, uint256 _salt) public {
+        require((roles[msg.sender] == Role.Issuer), "bad role");
+        _check_timestamp(Role.Issuer);
+        require((!bailed[Role.Issuer]), "you bailed");
+        require((!actionDone[Role.Issuer][2]), "already done");
+        _check_timestamp(Role.Issuer);
+        if ((!bailed[Role.Issuer]))
+         {
+            require(actionDone[Role.Issuer][1], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Alice);
+        if ((!bailed[Role.Alice]))
+         {
+            require(actionDone[Role.Alice][3], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Bob);
+        if ((!bailed[Role.Bob]))
+         {
+            require(actionDone[Role.Bob][5], "dependency not satisfied");
+        }
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         require((keccak256(abi.encodePacked(_c, _salt)) == Issuer_c_hidden), "reveal failed for c");
         Issuer_c = _c;
         done_Issuer_c = true;
+        actionDone[Role.Issuer][2] = true;
+        actionTimestamp[Role.Issuer][2] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Alice_3(int256 _c, uint256 _salt) public by(Role.Alice) action(Role.Alice, 4) depends(Role.Issuer, 1) depends(Role.Alice, 3) depends(Role.Bob, 5) {
+    function move_Alice_3(int256 _c, uint256 _salt) public {
+        require((roles[msg.sender] == Role.Alice), "bad role");
+        _check_timestamp(Role.Alice);
+        require((!bailed[Role.Alice]), "you bailed");
+        require((!actionDone[Role.Alice][4]), "already done");
+        _check_timestamp(Role.Issuer);
+        if ((!bailed[Role.Issuer]))
+         {
+            require(actionDone[Role.Issuer][1], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Alice);
+        if ((!bailed[Role.Alice]))
+         {
+            require(actionDone[Role.Alice][3], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Bob);
+        if ((!bailed[Role.Bob]))
+         {
+            require(actionDone[Role.Bob][5], "dependency not satisfied");
+        }
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         require((keccak256(abi.encodePacked(_c, _salt)) == Alice_c_hidden), "reveal failed for c");
         Alice_c = _c;
         done_Alice_c = true;
+        actionDone[Role.Alice][4] = true;
+        actionTimestamp[Role.Alice][4] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Bob_5(int256 _c, uint256 _salt) public by(Role.Bob) action(Role.Bob, 6) depends(Role.Issuer, 1) depends(Role.Alice, 3) depends(Role.Bob, 5) {
+    function move_Bob_5(int256 _c, uint256 _salt) public {
+        require((roles[msg.sender] == Role.Bob), "bad role");
+        _check_timestamp(Role.Bob);
+        require((!bailed[Role.Bob]), "you bailed");
+        require((!actionDone[Role.Bob][6]), "already done");
+        _check_timestamp(Role.Issuer);
+        if ((!bailed[Role.Issuer]))
+         {
+            require(actionDone[Role.Issuer][1], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Alice);
+        if ((!bailed[Role.Alice]))
+         {
+            require(actionDone[Role.Alice][3], "dependency not satisfied");
+        }
+        _check_timestamp(Role.Bob);
+        if ((!bailed[Role.Bob]))
+         {
+            require(actionDone[Role.Bob][5], "dependency not satisfied");
+        }
         require((((_c == 1) || (_c == 2)) || (_c == 3)), "domain");
         require((keccak256(abi.encodePacked(_c, _salt)) == Bob_c_hidden), "reveal failed for c");
         Bob_c = _c;
         done_Bob_c = true;
+        actionDone[Role.Bob][6] = true;
+        actionTimestamp[Role.Bob][6] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function withdraw_Bob() public by(Role.Bob) action(Role.Bob, 6) depends(Role.Issuer, 2) depends(Role.Alice, 4) depends(Role.Bob, 6) {
+    function withdraw_Bob() public {
         require((!claimed_Bob), "already claimed");
         claimed_Bob = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 24 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 34 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 2 : ((!done_Issuer_c) ? 17 : 12)))))));
@@ -145,7 +206,7 @@ contract ThreeWayLotteryShort {
         }
     }
     
-    function withdraw_Issuer() public by(Role.Issuer) action(Role.Issuer, 7) depends(Role.Issuer, 2) depends(Role.Alice, 4) depends(Role.Bob, 6) {
+    function withdraw_Issuer() public {
         require((!claimed_Issuer), "already claimed");
         claimed_Issuer = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 24)) : (((!done_Alice_c) && (!done_Bob_c)) ? 34 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 2 : 12)))))));
@@ -155,7 +216,7 @@ contract ThreeWayLotteryShort {
         }
     }
     
-    function withdraw_Alice() public by(Role.Alice) action(Role.Alice, 8) depends(Role.Issuer, 2) depends(Role.Alice, 4) depends(Role.Bob, 6) {
+    function withdraw_Alice() public {
         require((!claimed_Alice), "already claimed");
         claimed_Alice = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 24 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 34 : ((!done_Alice_c) ? 2 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 17 : 12)))))));

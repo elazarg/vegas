@@ -39,6 +39,9 @@ data class EvmContract(
 
     // Initialization logic (e.g. setting initial timestamps)
     val initialization: List<EvmStmt>,
+
+    // Internal helpers (e.g. timeout checks)
+    val helpers: List<EvmFunction> = emptyList(),
 )
 
 /**
@@ -67,6 +70,17 @@ data class EvmAction(
     // Generic logic (like checking 'actionDone' bitmaps) is implied by the
     // structural constraints above and injected by the renderer.
     val guards: List<EvmExpr>,
+    val body: List<EvmStmt>
+)
+
+/**
+ * General purpose function (for helpers, internal logic).
+ */
+data class EvmFunction(
+    val name: String,
+    val inputs: List<EvmParam>,
+    val visibility: String = "internal", // internal, private, public
+    val mutability: String = "",         // view, pure
     val body: List<EvmStmt>
 )
 
@@ -118,6 +132,8 @@ sealed class EvmStmt {
 
     // Hard stop
     data class Revert(val message: String) : EvmStmt()
+
+    data class If(val condition: EvmExpr, val body: List<EvmStmt>, val elseBody: List<EvmStmt> = emptyList()) : EvmStmt()
 
     // Pass (No-op), useful for empty bodies in Vyper
     object Pass : EvmStmt()

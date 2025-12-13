@@ -120,5 +120,6 @@ data class GameIR(
     val roles: Set<RoleId>,
     val chanceRoles: Set<RoleId>,
     val dag: ActionDag,
-    val payoffs: Map<RoleId, Expr>
+    val payoffs: Map<RoleId, Expr>,
+    val policy: QuitPolicy
 )

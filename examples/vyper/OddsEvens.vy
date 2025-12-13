@@ -5,9 +5,11 @@ enum Role:
     Odd
     Even
 
-lastTs: uint256
 actionDone: HashMap[Role, HashMap[uint256, bool]]
 actionTimestamp: HashMap[Role, HashMap[uint256, uint256]]
+lastTs: uint256
+TIMEOUT: constant(uint256) = 86400
+bailed: HashMap[Role, bool]
 ACTION_Even_0: constant(uint256) = 0
 ACTION_Odd_0: constant(uint256) = 1
 ACTION_Odd_2: constant(uint256) = 2
@@ -29,20 +31,27 @@ Even_c: bool
 done_Even_c: bool
 Even_c_hidden: bytes32
 done_Even_c_hidden: bool
-TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds
-bailed: HashMap[Role, bool]
 
 @external
 def __init__():
     self.lastTs = block.timestamp
 
+@internal
+def _check_timestamp(role: Role):
+    if (_role == Role.None):
+        return
+    if (block.timestamp > (self.lastTs + _TIMEOUT)):
+        self.bailed[_role] = True
+        self.lastTs = block.timestamp
+
+
 @external
 @payable
 def move_Odd_1():
-    assert self.roles[msg.sender] == Role.None, "bad role"
-    self._check_timestamp(Role.None)
-    assert not self.bailed[Role.None], "you bailed"
-    assert not self.actionDone[Role.Odd][0], "already done"
+    assert (self.roles[msg.sender] == Role.Odd), "bad role"
+    _check_timestamp(Role.Odd)
+    assert (not self.bailed[Role.Odd]), "you bailed"
+    assert (not self.actionDone[Role.Odd][0]), "already done"
     assert (not self.done_Odd), "already joined"
     assert (msg.value == 100), "bad stake"
     self.roles[msg.sender] = Role.Odd
@@ -55,10 +64,10 @@ def move_Odd_1():
 @external
 @payable
 def move_Even_0():
-    assert self.roles[msg.sender] == Role.None, "bad role"
-    self._check_timestamp(Role.None)
-    assert not self.bailed[Role.None], "you bailed"
-    assert not self.actionDone[Role.Even][0], "already done"
+    assert (self.roles[msg.sender] == Role.Even), "bad role"
+    _check_timestamp(Role.Even)
+    assert (not self.bailed[Role.Even]), "you bailed"
+    assert (not self.actionDone[Role.Even][0]), "already done"
     assert (not self.done_Even), "already joined"
     assert (msg.value == 100), "bad stake"
     self.roles[msg.sender] = Role.Even
@@ -70,15 +79,15 @@ def move_Even_0():
 
 @external
 def move_Odd_2(_hidden_c: bytes32):
-    assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
-    assert not self.bailed[Role.Odd], "you bailed"
-    assert not self.actionDone[Role.Odd][2], "already done"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    assert (self.roles[msg.sender] == Role.Odd), "bad role"
+    _check_timestamp(Role.Odd)
+    assert (not self.bailed[Role.Odd]), "you bailed"
+    assert (not self.actionDone[Role.Odd][2]), "already done"
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
     self.Odd_c_hidden = _hidden_c
     self.done_Odd_c_hidden = True
@@ -88,15 +97,15 @@ def move_Odd_2(_hidden_c: bytes32):
 
 @external
 def move_Even_4(_hidden_c: bytes32):
-    assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
-    assert not self.bailed[Role.Even], "you bailed"
-    assert not self.actionDone[Role.Even][4], "already done"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    assert (self.roles[msg.sender] == Role.Even), "bad role"
+    _check_timestamp(Role.Even)
+    assert (not self.bailed[Role.Even]), "you bailed"
+    assert (not self.actionDone[Role.Even][4]), "already done"
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
     self.Even_c_hidden = _hidden_c
     self.done_Even_c_hidden = True
@@ -106,21 +115,21 @@ def move_Even_4(_hidden_c: bytes32):
 
 @external
 def move_Odd_3(_c: bool, _salt: uint256):
-    assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
-    assert not self.bailed[Role.Odd], "you bailed"
-    assert not self.actionDone[Role.Odd][3], "already done"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    assert (self.roles[msg.sender] == Role.Odd), "bad role"
+    _check_timestamp(Role.Odd)
+    assert (not self.bailed[Role.Odd]), "you bailed"
+    assert (not self.actionDone[Role.Odd][3]), "already done"
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][2], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Odd_c_hidden), "reveal failed for c"
     self.Odd_c = _c
@@ -131,21 +140,21 @@ def move_Odd_3(_c: bool, _salt: uint256):
 
 @external
 def move_Even_5(_c: bool, _salt: uint256):
-    assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
-    assert not self.bailed[Role.Even], "you bailed"
-    assert not self.actionDone[Role.Even][5], "already done"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    assert (self.roles[msg.sender] == Role.Even), "bad role"
+    _check_timestamp(Role.Even)
+    assert (not self.bailed[Role.Even]), "you bailed"
+    assert (not self.actionDone[Role.Even][5]), "already done"
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
+    _check_timestamp(Role.Odd)
+    if (not self.bailed[Role.Odd]):
         assert self.actionDone[Role.Odd][2], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
+    _check_timestamp(Role.Even)
+    if (not self.bailed[Role.Even]):
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.Even_c_hidden), "reveal failed for c"
     self.Even_c = _c
@@ -156,58 +165,24 @@ def move_Even_5(_c: bool, _salt: uint256):
 
 @external
 def withdraw_Even():
-    assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
-    assert not self.bailed[Role.Even], "you bailed"
-    assert not self.actionDone[Role.Even][6], "already done"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
-        assert self.actionDone[Role.Odd][3], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
-        assert self.actionDone[Role.Even][5], "dependency not satisfied"
     assert (not self.claimed_Even), "already claimed"
     self.claimed_Even = True
     payout: int256 = 126 if (self.Even_c == self.Odd_c) else 74 if (self.done_Even_c and self.done_Odd_c) else 20 if ((not self.done_Even_c) and self.done_Odd_c) else 180 if (self.done_Even_c and (not self.done_Odd_c)) else 100
     if payout > 0:
         success: bool = raw_call(self.address_Even, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.Even][6] = True
-    self.actionTimestamp[Role.Even][6] = block.timestamp
-    self.lastTs = block.timestamp
 
 @external
 def withdraw_Odd():
-    assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
-    assert not self.bailed[Role.Odd], "you bailed"
-    assert not self.actionDone[Role.Odd][7], "already done"
-    self._check_timestamp(Role.Odd)
-    if not self.bailed[Role.Odd]:
-        assert self.actionDone[Role.Odd][3], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
-    if not self.bailed[Role.Even]:
-        assert self.actionDone[Role.Even][5], "dependency not satisfied"
     assert (not self.claimed_Odd), "already claimed"
     self.claimed_Odd = True
     payout: int256 = 74 if (self.Even_c == self.Odd_c) else 126 if (self.done_Even_c and self.done_Odd_c) else 180 if ((not self.done_Even_c) and self.done_Odd_c) else 20 if (self.done_Even_c and (not self.done_Odd_c)) else 100
     if payout > 0:
         success: bool = raw_call(self.address_Odd, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.Odd][7] = True
-    self.actionTimestamp[Role.Odd][7] = block.timestamp
-    self.lastTs = block.timestamp
 
 @payable
 @external
 def __default__():
     assert False, "direct ETH not allowed"
-
-@internal
-def _check_timestamp(role: Role):
-    if role == Role.None:
-        return
-    if block.timestamp > self.lastTs + TIMEOUT:
-        self.bailed[role] = True
-        self.lastTs = block.timestamp
 

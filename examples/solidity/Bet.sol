@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract Bet {
     enum Role { None, Gambler, Race }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Race_0 = 0;
     uint256 constant public ACTION_Gambler_1 = 1;
     uint256 constant public ACTION_Race_2 = 2;
@@ -25,60 +27,48 @@ contract Bet {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Race_0() public payable by(Role.None) action(Role.Race, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+    
+    function move_Race_0() public payable {
+        require((roles[msg.sender] == Role.Race), "bad role");
+        _check_timestamp(Role.Race);
+        require((!bailed[Role.Race]), "you bailed");
+        require((!actionDone[Role.Race][0]), "already done");
         require((!done_Race), "already joined");
         require((msg.value == 10), "bad stake");
         roles[msg.sender] = Role.Race;
         address_Race = msg.sender;
         done_Race = true;
+        actionDone[Role.Race][0] = true;
+        actionTimestamp[Role.Race][0] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Gambler_1(int256 _bet) public payable by(Role.None) action(Role.Gambler, 1) depends(Role.Race, 0) {
+    function move_Gambler_1(int256 _bet) public payable {
+        require((roles[msg.sender] == Role.Gambler), "bad role");
+        _check_timestamp(Role.Gambler);
+        require((!bailed[Role.Gambler]), "you bailed");
+        require((!actionDone[Role.Gambler][1]), "already done");
+        _check_timestamp(Role.Race);
+        if ((!bailed[Role.Race]))
+         {
+            require(actionDone[Role.Race][0], "dependency not satisfied");
+        }
         require((((_bet == 1) || (_bet == 2)) || (_bet == 3)), "domain");
         require((!done_Gambler), "already joined");
         require((msg.value == 10), "bad stake");
@@ -87,15 +77,30 @@ contract Bet {
         done_Gambler = true;
         Gambler_bet = _bet;
         done_Gambler_bet = true;
+        actionDone[Role.Gambler][1] = true;
+        actionTimestamp[Role.Gambler][1] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function move_Race_2(int256 _winner) public by(Role.Race) action(Role.Race, 2) depends(Role.Gambler, 1) {
+    function move_Race_2(int256 _winner) public {
+        require((roles[msg.sender] == Role.Race), "bad role");
+        _check_timestamp(Role.Race);
+        require((!bailed[Role.Race]), "you bailed");
+        require((!actionDone[Role.Race][2]), "already done");
+        _check_timestamp(Role.Gambler);
+        if ((!bailed[Role.Gambler]))
+         {
+            require(actionDone[Role.Gambler][1], "dependency not satisfied");
+        }
         require((((_winner == 1) || (_winner == 2)) || (_winner == 3)), "domain");
         Race_winner = _winner;
         done_Race_winner = true;
+        actionDone[Role.Race][2] = true;
+        actionTimestamp[Role.Race][2] = block.timestamp;
+        lastTs = block.timestamp;
     }
     
-    function withdraw_Gambler() public by(Role.Gambler) action(Role.Gambler, 3) depends(Role.Race, 2) {
+    function withdraw_Gambler() public {
         require((!claimed_Gambler), "already claimed");
         claimed_Gambler = true;
         int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 20 : 0);
@@ -105,7 +110,7 @@ contract Bet {
         }
     }
     
-    function withdraw_Race() public by(Role.Race) action(Role.Race, 4) depends(Role.Race, 2) {
+    function withdraw_Race() public {
         require((!claimed_Race), "already claimed");
         claimed_Race = true;
         int256 payout = (((!done_Race_winner) || (Race_winner == Gambler_bet)) ? 0 : 20);

@@ -12,6 +12,7 @@ import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.Visibility
 import vegas.ir.asBool
+import vegas.ir.QuitPolicy
 
 /**
  * Game semantics as a labelled transition system.
@@ -74,7 +75,7 @@ internal class GameSemantics(val ir: GameIR) {
 
             // Enumerate all valid field assignments for this role's actions
             val explicitMoves = enumerateRoleFrontierChoices(
-                ir.dag, role, actions, config.history, playerView
+                ir.dag, role, actions, config.history, playerView, ir.policy
             )
 
             moves.addAll(explicitMoves.map { (actionId, delta) ->
@@ -92,7 +93,7 @@ internal class GameSemantics(val ir: GameIR) {
             val allParams = actions.flatMap { ir.dag.params(it) }
 
             if (allParams.isNotEmpty()) {
-                val quitDelta = allParametersQuit(ir.dag, role, actions)
+                val quitDelta = ir.policy.getQuitDelta(role, actions, ir.dag)
                 moves.add(Label.Play(role, quitDelta, PlayTag.Quit))
             }
         }
@@ -179,6 +180,7 @@ private fun enumerateAssignmentsForAction(
     actionId: ActionId,
     history: History,
     playerKnowledge: History,
+    policy: QuitPolicy,
 ): List<Map<VarId, Expr.Const>> {
     val spec: ActionSpec = dag.spec(actionId)
     val role = dag.owner(actionId)
@@ -234,7 +236,10 @@ private fun enumerateAssignmentsForAction(
         }
 
         val tempHeap = History(toFrontierMap(role, unwrappedPkt), playerKnowledge)
-        eval({ tempHeap.get(it) }, spec.guardExpr).asBool()
+        eval({
+            val raw = tempHeap.get(it)
+            policy.resolveRead(raw, it) ?: raw
+        }, spec.guardExpr).asBool()
     }
 }
 
@@ -281,6 +286,7 @@ internal fun enumerateRoleFrontierChoices(
     actions: List<ActionId>,
     history: History,
     playerKnowledge: History,
+    policy: QuitPolicy,
 ): List<Pair<ActionId, FrontierAssignmentSlice>> {
     // ========== Check if Role Has Abandoned ==========
     // Once a role has abandoned (some field Quit), it has no explicit choices anymore.
@@ -290,7 +296,7 @@ internal fun enumerateRoleFrontierChoices(
     // For each action, enumerate its local assignments.
     val perActionAssignments: List<List<Map<VarId, Expr.Const>>> =
         actions.map { actionId ->
-            enumerateAssignmentsForAction(dag, actionId, history, playerKnowledge)
+            enumerateAssignmentsForAction(dag, actionId, history, playerKnowledge, policy)
         }
 
     if (perActionAssignments.any { it.isEmpty() }) return emptyList()

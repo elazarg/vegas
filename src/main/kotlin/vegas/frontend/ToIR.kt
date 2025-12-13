@@ -24,6 +24,7 @@ fun compileToIR(ast: GameAst): GameIR {
         chanceRoles = chanceRoles,
         dag = ActionDag.expandCommitReveal(dag),
         payoffs = payoffs,
+        policy = vegas.policy.StandardQuitPolicy()
     )
 
     // IMPORTANT: Verify that IR contains no frontend Exp.Let nodes
