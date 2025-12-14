@@ -326,28 +326,28 @@ module threewaylotterybuggy::threewaylotterybuggy {
                                 instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
                                 total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
                             } else {
-                                if (!instance.action_Issuer_5_done) {
-                                    instance.claim_amount_Issuer = 0;
-                                    instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                if (!instance.action_Alice_6_done) {
+                                    instance.claim_amount_Alice = 0;
+                                    instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
                                     instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
                                     total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
                                 } else {
-                                    if (!instance.action_Alice_6_done) {
-                                        instance.claim_amount_Alice = 0;
+                                    if (!instance.action_Bob_8_done) {
+                                        instance.claim_amount_Bob = 0;
                                         instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
-                                        instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                                        instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
                                         total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
                                     } else {
-                                        if (!instance.action_Alice_7_done) {
-                                            instance.claim_amount_Alice = 0;
-                                            instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                                        if (!instance.action_Issuer_5_done) {
+                                            instance.claim_amount_Issuer = 0;
+                                            instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
                                             instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
                                             total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
                                         } else {
-                                            if (!instance.action_Bob_8_done) {
-                                                instance.claim_amount_Bob = 0;
+                                            if (!instance.action_Alice_7_done) {
+                                                instance.claim_amount_Alice = 0;
                                                 instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
-                                                instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                                instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
                                                 total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
                                             } else {
                                                 if (!instance.action_Bob_9_done) {

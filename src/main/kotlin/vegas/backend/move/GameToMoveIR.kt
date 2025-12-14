@@ -393,7 +393,7 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps: Allow skip if bailed (restoring previous logic)
+        // Deps: Require done OR (dep_owner is bailed)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
             val depOwner = dag.owner(depId)
@@ -513,7 +513,11 @@ private fun buildActionFunction(
     )
 }
 
-private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveFunction {
+private fun buildFinalizeFunction(
+    game: GameIR,
+    dag: ActionDag,
+    platform: MovePlatform
+): MoveFunction {
     val body = buildList {
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
         val now = platform.currentTimeExpr(clockVar)
@@ -543,7 +547,7 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role))
         }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
 
-        val ifAllJoined = buildList {
+        val standardPayout = buildList {
             game.payoffs.forEach { (role, expr) ->
                 val payoutExpr = translateExpr(expr, null, emptySet(), platform)
                 add(MoveStmt.Assign(
@@ -557,7 +561,7 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             }
         }
 
-        val ifRefund = buildList {
+        val refundLogic = buildList {
             game.roles.forEach { role ->
                 val deposit = try { game.dag.deposit(role).v } catch (e: Exception) { 0 }
                 if (deposit > 0) {

@@ -211,14 +211,14 @@ module oddsevens::oddsevens {
                 instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 74 } else { 126 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 180 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 20 } else { 100 } } };
                 total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 74 } else { 126 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 180 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 20 } else { 100 } } });
             } else {
-                if (!instance.action_Even_0_done) {
-                    instance.claim_amount_Even = 0;
-                    instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
+                if (!instance.action_Odd_0_done) {
+                    instance.claim_amount_Odd = 0;
+                    instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
                     total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                 } else {
-                    if (!instance.action_Odd_0_done) {
-                        instance.claim_amount_Odd = 0;
-                        instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
+                    if (!instance.action_Even_0_done) {
+                        instance.claim_amount_Even = 0;
+                        instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
                         total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                     } else {
                         if (!instance.action_Odd_2_done) {
@@ -226,14 +226,14 @@ module oddsevens::oddsevens {
                             instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
                             total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                         } else {
-                            if (!instance.action_Odd_3_done) {
-                                instance.claim_amount_Odd = 0;
-                                instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
+                            if (!instance.action_Even_4_done) {
+                                instance.claim_amount_Even = 0;
+                                instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
                                 total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                             } else {
-                                if (!instance.action_Even_4_done) {
-                                    instance.claim_amount_Even = 0;
-                                    instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
+                                if (!instance.action_Odd_3_done) {
+                                    instance.claim_amount_Odd = 0;
+                                    instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
                                     total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                                 } else {
                                     if (!instance.action_Even_5_done) {

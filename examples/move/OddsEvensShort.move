@@ -178,14 +178,14 @@ module oddsevensshort::oddsevensshort {
                     instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
                     total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                 } else {
-                    if (!instance.action_Odd_2_done) {
-                        instance.claim_amount_Odd = 0;
-                        instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
+                    if (!instance.action_Even_3_done) {
+                        instance.claim_amount_Even = 0;
+                        instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
                         total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                     } else {
-                        if (!instance.action_Even_3_done) {
-                            instance.claim_amount_Even = 0;
-                            instance.claim_amount_Odd = (balance::value<Asset>(&instance.pot) / 1);
+                        if (!instance.action_Odd_2_done) {
+                            instance.claim_amount_Odd = 0;
+                            instance.claim_amount_Even = (balance::value<Asset>(&instance.pot) / 1);
                             total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                         } else {
                             if (!instance.action_Even_4_done) {

@@ -223,14 +223,14 @@ module prisoners::prisoners {
                             instance.claim_amount_B = (balance::value<Asset>(&instance.pot) / 1);
                             total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                         } else {
-                            if (!instance.action_A_4_done) {
-                                instance.claim_amount_A = 0;
-                                instance.claim_amount_B = (balance::value<Asset>(&instance.pot) / 1);
+                            if (!instance.action_B_5_done) {
+                                instance.claim_amount_B = 0;
+                                instance.claim_amount_A = (balance::value<Asset>(&instance.pot) / 1);
                                 total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                             } else {
-                                if (!instance.action_B_5_done) {
-                                    instance.claim_amount_B = 0;
-                                    instance.claim_amount_A = (balance::value<Asset>(&instance.pot) / 1);
+                                if (!instance.action_A_4_done) {
+                                    instance.claim_amount_A = 0;
+                                    instance.claim_amount_B = (balance::value<Asset>(&instance.pot) / 1);
                                     total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
                                 } else {
                                     if (!instance.action_B_6_done) {
