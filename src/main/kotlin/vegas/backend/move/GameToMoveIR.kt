@@ -393,13 +393,13 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps: Require done OR (dep_owner is bailed)
+        // Deps: Allow skip if bailed (restoring previous logic)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
             val depOwner = dag.owner(depId)
 
             if (depOwner == owner) {
-                // Self-dependency: I am not bailed, so just check done
+                // Self-dependency: strict check
                 add(MoveStmt.Assert(
                     MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
                     103
@@ -457,10 +457,10 @@ private fun buildActionFunction(
                      MoveExpr.Borrow(input, false)
                  )), mut = true))
 
-                 // Fix: Assign bytes of salt to a variable before append
+                 // Fix: Salt bytes immutable, pass by value
                  add(MoveStmt.Let("salt_bytes_${p.name}", null,
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false))),
-                     mut = false // Immutable, pass by value
+                     mut = false
                  ))
 
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
