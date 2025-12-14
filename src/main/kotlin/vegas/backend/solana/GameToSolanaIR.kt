@@ -207,9 +207,9 @@ private fun buildCloseInstruction(roles: List<RoleId>): SolanaInstruction {
         name = "close_game",
         accounts = listOf(
             SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
-                "#[account(mut, close = creator, seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
+                "#[account(mut, close = _creator, seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
             )),
-            SolanaAccountMeta("creator", "SystemAccount<'info>", isMut = true, constraints = listOf(
+            SolanaAccountMeta("_creator", "SystemAccount<'info>", isMut = true, constraints = listOf(
                 "#[account(address = game.creator)]"
             ))
         ),
@@ -290,25 +290,7 @@ private fun buildActionInstruction(
     body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("GameFinalized", "Game already finalized")))
     body.add(Let("now", I64, ClockTimestamp))
 
-    // 1. Role Check
-    if (spec.join != null) {
-        body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyJoined", "Already joined")))
-        body.add(Assign(Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())))
-        body.add(Assign(Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong())), BoolLit(true)))
-
-        val deposit = spec.join.deposit.v.toLong()
-        if (deposit > 0) {
-             body.add(SolanaStmt.Comment("Deposit $deposit lamports"))
-             body.add(SolanaStmt.TransferSol(from = "signer", to = "game", amount = IntLit(deposit)))
-             // Track deposit
-             body.add(Assign(Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())),
-                 Binary(BinaryOp.ADD, Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())), IntLit(deposit))))
-        }
-    } else {
-        body.add(Require(Binary(BinaryOp.EQ, Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())), SolanaError("Unauthorized", "Unauthorized")))
-    }
-
-    // 2. Timeout Check (Actor)
+    // 1. Timeout Check (Actor)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
     // STRICT TIMEOUT: now <= last_ts + timeout
@@ -317,11 +299,12 @@ private fun buildActionInstruction(
         SolanaError("Timeout", "Action timed out")
     ))
 
-    // 3. One-Shot Check
+    // 2. One-Shot Check
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
 
-    // 4. Dependency Checks
-    dag.prerequisitesOf(id).forEach { pred ->
+    // 3. Dependency Checks
+    val preds = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
+    preds.forEach { pred ->
         val predIdx = linearization.getValue(pred)
         val predOwner = roleMap[dag.owner(pred)]!!
 
@@ -341,7 +324,7 @@ private fun buildActionInstruction(
         }
     }
 
-    // 5. Guards
+    // 4. Guards
     if (meta.kind != Visibility.COMMIT) {
         val guards = translateDomainGuards(spec.params) + if (spec.guardExpr != Expr.Const.BoolVal(true)) {
             listOf(translateExpr(spec.guardExpr, meta.struct.owner, spec.params.map { it.name.name }.toSet()))
@@ -351,6 +334,24 @@ private fun buildActionInstruction(
              val combinedGuard = guards.reduce { a, b -> Binary(BinaryOp.AND, a, b) }
              body.add(Require(combinedGuard, SolanaError("GuardFailed", "Guard failed")))
         }
+    }
+
+    // 5. Role Check & Join (Updates)
+    if (spec.join != null) {
+        body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyJoined", "Already joined")))
+        body.add(Assign(Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())))
+        body.add(Assign(Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong())), BoolLit(true)))
+
+        val deposit = spec.join.deposit.v.toLong()
+        if (deposit > 0) {
+             body.add(SolanaStmt.Comment("Deposit $deposit lamports"))
+             body.add(SolanaStmt.TransferSol(from = "signer", to = "game", amount = IntLit(deposit)))
+             // Track deposit
+             body.add(Assign(Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())),
+                 Binary(BinaryOp.ADD, Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())), IntLit(deposit))))
+        }
+    } else {
+        body.add(Require(Binary(BinaryOp.EQ, Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())), SolanaError("Unauthorized", "Unauthorized")))
     }
 
     // 6. Updates
@@ -413,6 +414,8 @@ private fun buildFinalizeInstruction(
             lamports.saturating_sub(rent)
         }
     """.trimIndent())))
+
+    // No automatic timeout checks. Dependencies must be resolved (done or bailed).
 
     dag.sinks().forEach { sink ->
         val idx = linearization.getValue(sink)

@@ -18,7 +18,7 @@ pub mod puzzle {
 
     pub fn close_game(ctx: Context<Close_game>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let creator = &mut ctx.accounts.creator;
+        let _creator = &mut ctx.accounts._creator;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!((((now > (game.last_ts + game.timeout)) && !((game.joined[0 as usize] || game.joined[1 as usize]))) || (game.is_finalized && (game.claimed[0 as usize] && game.claimed[1 as usize]))), ErrorCode::CannotClose);
         Ok(())
@@ -49,6 +49,9 @@ pub mod puzzle {
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          let now: i64 = Clock::get()?.unix_timestamp;
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -64,9 +67,6 @@ pub mod puzzle {
             50,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 50);
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.Q_x = x;
          game.done_Q_x = true;
          game.action_done[0 as usize] = true;
@@ -80,9 +80,6 @@ pub mod puzzle {
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
-         game.roles[0 as usize] = signer.key();
-         game.joined[0 as usize] = true;
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
@@ -90,6 +87,9 @@ pub mod puzzle {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
          require!(((((p * q) == game.Q_x) && (p != 1)) && (q != 1)), ErrorCode::GuardFailed);
+         require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
+         game.roles[0 as usize] = signer.key();
+         game.joined[0 as usize] = true;
          game.A_p = p;
          game.done_A_p = true;
          game.A_q = q;
@@ -187,11 +187,11 @@ pub struct Init_instance<'info> {
 
 #[derive(Accounts)]
 pub struct Close_game<'info> {
-    #[account(mut, close = creator, seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    #[account(mut, close = _creator, seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
     #[account(address = game.creator)]
-    pub creator: SystemAccount<'info>,
+    pub _creator: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
