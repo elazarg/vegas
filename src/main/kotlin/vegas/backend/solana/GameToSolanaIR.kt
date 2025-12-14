@@ -18,7 +18,7 @@ fun compileToSolana(game: GameIR): SolanaProgram {
     val stateStruct = buildStateStruct(game, dag, linearization, rolesSorted)
     val errors = buildErrors()
 
-    val instructions = buildInstructions(game, dag, linearization, rolesSorted, roleMap)
+    val instructions = buildInstructions(game, dag, linearization, rolesSorted, roleMap, stateStruct)
 
     return SolanaProgram(
         name = game.name,
@@ -41,6 +41,20 @@ private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
 
 private fun getRoleIndex(role: RoleId, roleMap: Map<RoleId, Int>): Int =
     roleMap[role] ?: error("Unknown role $role")
+
+private fun calculateSize(struct: SolanaAccountStruct): Int {
+    return 8 + struct.fields.sumOf { sizeOf(it.type) }
+}
+
+private fun sizeOf(t: SolanaType): Int = when(t) {
+    U8, Bool -> 1
+    U64, I64 -> 8
+    Pubkey -> 32
+    is SolanaType.Array -> t.size * sizeOf(t.inner)
+    is Vec -> 4 // Dynamic
+    SolanaType.String -> 4 // Dynamic
+    is Custom -> 0
+}
 
 // =========================================================================
 // 2. State Struct
@@ -121,11 +135,12 @@ private fun buildInstructions(
     dag: ActionDag,
     linearization: Map<ActionId, Int>,
     roles: List<RoleId>,
-    roleMap: Map<RoleId, Int>
+    roleMap: Map<RoleId, Int>,
+    stateStruct: SolanaAccountStruct
 ): List<SolanaInstruction> {
     val list = mutableListOf<SolanaInstruction>()
 
-    list.add(buildInitInstruction())
+    list.add(buildInitInstruction(stateStruct))
 
     dag.topo().forEach { id ->
         list.add(buildActionInstruction(id, dag, linearization, roleMap))
@@ -140,15 +155,16 @@ private fun buildInstructions(
     return list
 }
 
-private fun buildInitInstruction(): SolanaInstruction {
+private fun buildInitInstruction(stateStruct: SolanaAccountStruct): SolanaInstruction {
+    val size = calculateSize(stateStruct)
     return SolanaInstruction(
         name = "init_instance",
         accounts = listOf(
             SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
-                "#[account(init, payer = signer, space = 8 + 10240, seeds = [b\"game\", game_id.to_le_bytes().as_ref()], bump)]"
+                "#[account(init, payer = signer, space = $size, seeds = [b\"game\", game_id.to_le_bytes().as_ref()], bump)]"
             )),
             SolanaAccountMeta("vault", "SystemAccount<'info>", isMut = true, constraints = listOf(
-                "#[account(init, payer = signer, space = 8, seeds = [b\"vault\", game.key().as_ref()], bump)]"
+                "#[account(init, payer = signer, space = 0, seeds = [b\"vault\", game.key().as_ref()], bump)]"
             )),
             SolanaAccountMeta("signer", "Signer<'info>", isMut = true),
             SolanaAccountMeta("system_program", "Program<'info, System>")
@@ -164,12 +180,12 @@ private fun buildInitInstruction(): SolanaInstruction {
 }
 
 private fun emitCheckTimestamp(roleIdx: Int): List<SolanaStmt> {
+    // Only set bailed, do NOT update last_ts here
     return listOf(
         SolanaStmt.If(
             Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
             listOf(
-                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)),
-                Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
+                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true))
             )
         )
     )
@@ -234,7 +250,6 @@ private fun buildActionInstruction(
 
     // 2. Timeout Check (Actor)
     body.addAll(emitCheckTimestamp(roleIdx))
-    // require!(!game.bailed[roleIdx], Timeout)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
     // 3. One-Shot Check
@@ -245,7 +260,6 @@ private fun buildActionInstruction(
         val predIdx = linearization.getValue(pred)
         val predOwner = roleMap[dag.owner(pred)]!!
 
-        // Check timeout for dependency owner
         body.addAll(emitCheckTimestamp(predOwner))
 
         body.add(SolanaStmt.If(
@@ -319,6 +333,12 @@ private fun buildFinalizeInstruction(
 ): SolanaInstruction {
     val body = mutableListOf<SolanaStmt>()
 
+    // Check timeouts for ALL roles to ensure liveness
+    roles.forEach { role ->
+        val roleIdx = roleMap[role]!!
+        body.addAll(emitCheckTimestamp(roleIdx))
+    }
+
     dag.sinks().forEach { sink ->
         val idx = linearization.getValue(sink)
         val owner = roleMap[dag.owner(sink)]!!
@@ -354,7 +374,11 @@ private fun buildFinalizeInstruction(
 
     return SolanaInstruction(
         name = "finalize",
-        accounts = listOf(SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true)),
+        accounts = listOf(
+            SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
+                "#[account(seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
+            ))
+        ),
         params = emptyList(),
         body = body
     )
@@ -362,6 +386,9 @@ private fun buildFinalizeInstruction(
 
 private fun buildClaimInstruction(role: RoleId, roleIdx: Int): SolanaInstruction {
     val body = mutableListOf<SolanaStmt>()
+
+    // Check timeouts? Finalize should handle it. Claim depends on finalize.
+    // So just checks are enough.
 
     body.add(Require(FieldAccess(Var("game"), "is_finalized"), SolanaError("NotFinalized", "Not finalized")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "claimed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyClaimed", "Already claimed")))
@@ -397,7 +424,9 @@ private fun buildClaimInstruction(role: RoleId, roleIdx: Int): SolanaInstruction
     return SolanaInstruction(
         name = "claim_${roleName}",
         accounts = listOf(
-            SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true),
+            SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
+                "#[account(seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
+            )),
             SolanaAccountMeta("vault", "SystemAccount<'info>", isMut = true, constraints = listOf(
                 "#[account(seeds = [b\"vault\", game.key().as_ref()], bump)]"
             )),

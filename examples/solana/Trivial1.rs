@@ -38,7 +38,6 @@ pub mod trivial1 {
          game.pot_total = (game.pot_total + 10);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
@@ -50,6 +49,9 @@ pub mod trivial1 {
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+         }
          require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, 10)) as u64;
          if ((0 + p_A) > game.pot_total) {
@@ -99,10 +101,10 @@ pub mod trivial1 {
 #[instruction(game_id: u64, timeout: i64)]
 pub struct Init_instance<'info> {
     #[account(mut)]
-    #[account(init, payer = signer, space = 8 + 10240, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
+    #[account(init, payer = signer, space = 93, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    #[account(init, payer = signer, space = 8, seeds = [b"vault", game.key().as_ref()], bump)]
+    #[account(init, payer = signer, space = 0, seeds = [b"vault", game.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
     #[account(mut)]
     pub signer: Signer<'info>,
@@ -125,12 +127,14 @@ pub struct Move_A_0<'info> {
 #[derive(Accounts)]
 pub struct Finalize<'info> {
     #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
 }
 
 #[derive(Accounts)]
 pub struct Claim_A<'info> {
     #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
     #[account(seeds = [b"vault", game.key().as_ref()], bump)]
