@@ -294,12 +294,78 @@ module threewaylotterybuggy::threewaylotterybuggy {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if (((instance.joined_Issuer && instance.joined_Alice) && instance.joined_Bob)) {
-            instance.claim_amount_Bob = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 24 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 34 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 2 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } };
-            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 24 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 34 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 2 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } });
-            instance.claim_amount_Issuer = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 24 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 34 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 2 } else { 12 } } } } } } };
-            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 24 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 34 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 2 } else { 12 } } } } } } });
-            instance.claim_amount_Alice = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 24 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 34 } else { if (!instance.done_Alice_c) { 2 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } };
-            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 24 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 34 } else { if (!instance.done_Alice_c) { 2 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } });
+            if (((instance.action_Issuer_5_done && instance.action_Alice_7_done) && instance.action_Bob_9_done)) {
+                instance.claim_amount_Bob = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 24 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 34 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 2 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } };
+                total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 24 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 34 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 2 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } });
+                instance.claim_amount_Issuer = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 24 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 34 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 2 } else { 12 } } } } } } };
+                total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 24 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 6 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 34 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 1 } else { if (!instance.done_Alice_c) { 17 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 2 } else { 12 } } } } } } });
+                instance.claim_amount_Alice = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 24 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 34 } else { if (!instance.done_Alice_c) { 2 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } };
+                total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) { if ((instance.Alice_c == instance.Bob_c)) { 6 } else { if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) { 24 } else { 6 } } } else { if ((!instance.done_Alice_c && !instance.done_Bob_c)) { 1 } else { if ((!instance.done_Alice_c && !instance.done_Issuer_c)) { 1 } else { if ((!instance.done_Bob_c && !instance.done_Issuer_c)) { 34 } else { if (!instance.done_Alice_c) { 2 } else { if (!instance.done_Bob_c) { 17 } else { if (!instance.done_Issuer_c) { 17 } else { 12 } } } } } } });
+            } else {
+                if (!instance.action_Issuer_0_done) {
+                    instance.claim_amount_Issuer = 0;
+                    instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                    instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                    total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                } else {
+                    if (!instance.action_Alice_1_done) {
+                        instance.claim_amount_Alice = 0;
+                        instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                        instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                        total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                    } else {
+                        if (!instance.action_Bob_2_done) {
+                            instance.claim_amount_Bob = 0;
+                            instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                            instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                            total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                        } else {
+                            if (!instance.action_Issuer_4_done) {
+                                instance.claim_amount_Issuer = 0;
+                                instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                                total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                            } else {
+                                if (!instance.action_Issuer_5_done) {
+                                    instance.claim_amount_Issuer = 0;
+                                    instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                    instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                                    total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                                } else {
+                                    if (!instance.action_Alice_6_done) {
+                                        instance.claim_amount_Alice = 0;
+                                        instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                                        instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                                        total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                                    } else {
+                                        if (!instance.action_Alice_7_done) {
+                                            instance.claim_amount_Alice = 0;
+                                            instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                                            instance.claim_amount_Bob = (balance::value<Asset>(&instance.pot) / 2);
+                                            total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                                        } else {
+                                            if (!instance.action_Bob_8_done) {
+                                                instance.claim_amount_Bob = 0;
+                                                instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                                                instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                                total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                                            } else {
+                                                if (!instance.action_Bob_9_done) {
+                                                    instance.claim_amount_Bob = 0;
+                                                    instance.claim_amount_Issuer = (balance::value<Asset>(&instance.pot) / 2);
+                                                    instance.claim_amount_Alice = (balance::value<Asset>(&instance.pot) / 2);
+                                                    total_payout = ((balance::value<Asset>(&instance.pot) / 2) * 2);
+                                                } else {
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             if (instance.joined_Issuer) {
                 instance.claim_amount_Issuer = 12;

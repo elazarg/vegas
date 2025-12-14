@@ -304,10 +304,73 @@ module tictactoe::tictactoe {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if ((instance.joined_X && instance.joined_O)) {
-            instance.claim_amount_X = 100;
-            total_payout = (total_payout + 100);
-            instance.claim_amount_O = 100;
-            total_payout = (total_payout + 100);
+            if (instance.action_O_9_done) {
+                instance.claim_amount_X = 100;
+                total_payout = (total_payout + 100);
+                instance.claim_amount_O = 100;
+                total_payout = (total_payout + 100);
+            } else {
+                if (!instance.action_X_0_done) {
+                    instance.claim_amount_X = 0;
+                    instance.claim_amount_O = (balance::value<Asset>(&instance.pot) / 1);
+                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                } else {
+                    if (!instance.action_O_1_done) {
+                        instance.claim_amount_O = 0;
+                        instance.claim_amount_X = (balance::value<Asset>(&instance.pot) / 1);
+                        total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                    } else {
+                        if (!instance.action_X_2_done) {
+                            instance.claim_amount_X = 0;
+                            instance.claim_amount_O = (balance::value<Asset>(&instance.pot) / 1);
+                            total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                        } else {
+                            if (!instance.action_O_3_done) {
+                                instance.claim_amount_O = 0;
+                                instance.claim_amount_X = (balance::value<Asset>(&instance.pot) / 1);
+                                total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                            } else {
+                                if (!instance.action_X_4_done) {
+                                    instance.claim_amount_X = 0;
+                                    instance.claim_amount_O = (balance::value<Asset>(&instance.pot) / 1);
+                                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                } else {
+                                    if (!instance.action_O_5_done) {
+                                        instance.claim_amount_O = 0;
+                                        instance.claim_amount_X = (balance::value<Asset>(&instance.pot) / 1);
+                                        total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                    } else {
+                                        if (!instance.action_X_6_done) {
+                                            instance.claim_amount_X = 0;
+                                            instance.claim_amount_O = (balance::value<Asset>(&instance.pot) / 1);
+                                            total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                        } else {
+                                            if (!instance.action_O_7_done) {
+                                                instance.claim_amount_O = 0;
+                                                instance.claim_amount_X = (balance::value<Asset>(&instance.pot) / 1);
+                                                total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                            } else {
+                                                if (!instance.action_X_8_done) {
+                                                    instance.claim_amount_X = 0;
+                                                    instance.claim_amount_O = (balance::value<Asset>(&instance.pot) / 1);
+                                                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                                } else {
+                                                    if (!instance.action_O_9_done) {
+                                                        instance.claim_amount_O = 0;
+                                                        instance.claim_amount_X = (balance::value<Asset>(&instance.pot) / 1);
+                                                        total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                                    } else {
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             if (instance.joined_X) {
                 instance.claim_amount_X = 100;

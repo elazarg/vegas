@@ -111,10 +111,29 @@ module bet::bet {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if (instance.joined_Gambler) {
-            instance.claim_amount_Gambler = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 20 } else { 0 };
-            total_payout = (total_payout + if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 20 } else { 0 });
-            instance.claim_amount_Race = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 0 } else { 20 };
-            total_payout = (total_payout + if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 0 } else { 20 });
+            if (instance.action_Race_2_done) {
+                instance.claim_amount_Gambler = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 20 } else { 0 };
+                total_payout = (total_payout + if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 20 } else { 0 });
+                instance.claim_amount_Race = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 0 } else { 20 };
+                total_payout = (total_payout + if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) { 0 } else { 20 });
+            } else {
+                if (!instance.action_Race_0_done) {
+                    instance.claim_amount_Race = 0;
+                    instance.claim_amount_Gambler = (balance::value<Asset>(&instance.pot) / 1);
+                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                } else {
+                    if (!instance.action_Gambler_1_done) {
+                        instance.claim_amount_Gambler = 0;
+                    } else {
+                        if (!instance.action_Race_2_done) {
+                            instance.claim_amount_Race = 0;
+                            instance.claim_amount_Gambler = (balance::value<Asset>(&instance.pot) / 1);
+                            total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                        } else {
+                        }
+                    }
+                }
+            }
         } else {
             if (instance.joined_Gambler) {
                 instance.claim_amount_Gambler = 10;

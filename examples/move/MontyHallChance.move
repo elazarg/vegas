@@ -196,10 +196,49 @@ module montyhallchance::montyhallchance {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if (instance.joined_Guest) {
-            instance.claim_amount_Guest = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } };
-            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } });
-            instance.claim_amount_Host = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } };
-            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } });
+            if (instance.action_Host_6_done) {
+                instance.claim_amount_Guest = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } };
+                total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } });
+                instance.claim_amount_Host = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } };
+                total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } });
+            } else {
+                if (!instance.action_Host_0_done) {
+                    instance.claim_amount_Host = 0;
+                    instance.claim_amount_Guest = (balance::value<Asset>(&instance.pot) / 1);
+                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                } else {
+                    if (!instance.action_Guest_1_done) {
+                        instance.claim_amount_Guest = 0;
+                    } else {
+                        if (!instance.action_Host_2_done) {
+                            instance.claim_amount_Host = 0;
+                            instance.claim_amount_Guest = (balance::value<Asset>(&instance.pot) / 1);
+                            total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                        } else {
+                            if (!instance.action_Guest_3_done) {
+                                instance.claim_amount_Guest = 0;
+                            } else {
+                                if (!instance.action_Host_4_done) {
+                                    instance.claim_amount_Host = 0;
+                                    instance.claim_amount_Guest = (balance::value<Asset>(&instance.pot) / 1);
+                                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                } else {
+                                    if (!instance.action_Guest_5_done) {
+                                        instance.claim_amount_Guest = 0;
+                                    } else {
+                                        if (!instance.action_Host_6_done) {
+                                            instance.claim_amount_Host = 0;
+                                            instance.claim_amount_Guest = (balance::value<Asset>(&instance.pot) / 1);
+                                            total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                                        } else {
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             if (instance.joined_Guest) {
                 instance.claim_amount_Guest = 100;

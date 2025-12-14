@@ -69,8 +69,15 @@ module trivial1::trivial1 {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if (instance.joined_A) {
-            instance.claim_amount_A = 10;
-            total_payout = (total_payout + 10);
+            if (instance.action_A_0_done) {
+                instance.claim_amount_A = 10;
+                total_payout = (total_payout + 10);
+            } else {
+                if (!instance.action_A_0_done) {
+                    instance.claim_amount_A = 0;
+                } else {
+                }
+            }
         } else {
             if (instance.joined_A) {
                 instance.claim_amount_A = 10;

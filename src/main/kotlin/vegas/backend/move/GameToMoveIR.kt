@@ -33,7 +33,7 @@ fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
         }
 
         // Finalize
-        add(buildFinalizeFunction(game, dag, platform))
+        add(buildFinalizeFunction(game, dag, linearization, platform))
 
         // Claim
         game.roles.forEach { role ->
@@ -393,7 +393,7 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps: Allow skip if bailed (restoring previous logic)
+        // Deps: Require done OR (dep_owner is bailed)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
             val depOwner = dag.owner(depId)
@@ -460,7 +460,7 @@ private fun buildActionFunction(
                  // Fix: Salt bytes immutable, pass by value
                  add(MoveStmt.Let("salt_bytes_${p.name}", null,
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false))),
-                     mut = false
+                     mut = false // Immutable, pass by value
                  ))
 
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
@@ -513,7 +513,12 @@ private fun buildActionFunction(
     )
 }
 
-private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveFunction {
+private fun buildFinalizeFunction(
+    game: GameIR,
+    dag: ActionDag,
+    linearization: Map<ActionId, Int>,
+    platform: MovePlatform
+): MoveFunction {
     val body = buildList {
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
         val now = platform.currentTimeExpr(clockVar)
@@ -543,7 +548,8 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role))
         }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
 
-        val ifAllJoined = buildList {
+        // Standard Payout Logic
+        val standardPayout = buildList {
             game.payoffs.forEach { (role, expr) ->
                 val payoutExpr = translateExpr(expr, null, emptySet(), platform)
                 add(MoveStmt.Assign(
@@ -557,7 +563,8 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             }
         }
 
-        val ifRefund = buildList {
+        // Refund Logic (Partial Join)
+        val refundLogic = buildList {
             game.roles.forEach { role ->
                 val deposit = try { game.dag.deposit(role).v } catch (e: Exception) { 0 }
                 if (deposit > 0) {
@@ -578,7 +585,45 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
             }
         }
 
-        add(MoveStmt.If(allJoined, ifAllJoined, ifRefund))
+        // Blame Logic (Timeout Payout)
+        // Check actions in linear order. First missing action owner is blamed.
+        // We iterate actions sorted by index.
+        val orderedActions = dag.actions.sortedBy { linearization[it] }
+        val blameLogic = orderedActions.foldRight(
+            // Fallback if all done (should be covered by standardPayout if sinksDone, but if timeout triggered despite sinksDone? No, if sinksDone is true, we take standardPayout branch. So this branch is only for !sinksDone.)
+            // But wait, my outer IF is `if (allJoined)`.
+            // Inside `allJoined`: `if (sinksDone) standard else blameLogic`.
+            // So:
+            emptyList<MoveStmt>() // Fallback (e.g. refund? or just standard?)
+            // If we reach here, and not all done, but we didn't find missing action? Impossible if logic is correct.
+            // I'll make fallback a refund to be safe.
+        ) { actionId, acc ->
+             val doneField = "action_${actionId.first.name}_${actionId.second}_done"
+             val owner = actionId.first
+
+             listOf(MoveStmt.If(
+                 MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), doneField)),
+                 buildPunishment(owner, game, platform),
+                 acc
+             ))
+        }
+
+        // Combine logic:
+        // if (allJoined) {
+        //    if (sinksDone) { standardPayout } else { blameLogic }
+        // } else {
+        //    refundLogic
+        // }
+
+        val allJoinedBlock = buildList {
+             add(MoveStmt.If(
+                 sinksDone,
+                 standardPayout,
+                 blameLogic.ifEmpty { refundLogic } // use refund if blameLogic empty (unlikely)
+             ))
+        }
+
+        add(MoveStmt.If(allJoined, allJoinedBlock, refundLogic))
 
         add(MoveStmt.Assert(
             MoveExpr.BinOp(MoveBinOp.LTE,
@@ -600,6 +645,39 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
         body = body,
         typeParams = listOf("Asset")
     )
+}
+
+private fun buildPunishment(blamedRole: RoleId, game: GameIR, platform: MovePlatform): List<MoveStmt> {
+    return buildList {
+        // Blamed gets 0
+        add(MoveStmt.Assign(
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(blamedRole)),
+            MoveExpr.U64Lit(0)
+        ))
+
+        // Others split pot (simple heuristic for now: others.size > 0)
+        val others = game.roles.filter { it != blamedRole }
+        if (others.isNotEmpty()) {
+            val potVal = MoveExpr.Call("balance", "value", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), false)))
+            val share = MoveExpr.BinOp(MoveBinOp.DIV, potVal, MoveExpr.U64Lit(others.size.toLong()))
+
+            others.forEach { other ->
+                add(MoveStmt.Assign(
+                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(other)),
+                    share
+                ))
+            }
+
+            // total_payout = share * others.size
+            add(MoveStmt.Assign(
+                MoveExpr.Var("total_payout"),
+                MoveExpr.BinOp(MoveBinOp.MUL, share, MoveExpr.U64Lit(others.size.toLong()))
+            ))
+        } else {
+             // If no others (1 player game?), pot remains?
+             // total_payout = 0.
+        }
+    }
 }
 
 private fun buildSweepFunction(game: GameIR, platform: MovePlatform): MoveFunction {

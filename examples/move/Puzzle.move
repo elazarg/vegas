@@ -120,10 +120,25 @@ module puzzle::puzzle {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if ((instance.joined_Q && instance.joined_A)) {
-            instance.claim_amount_Q = 0;
-            total_payout = (total_payout + 0);
-            instance.claim_amount_A = 100;
-            total_payout = (total_payout + 100);
+            if (instance.action_A_1_done) {
+                instance.claim_amount_Q = 0;
+                total_payout = (total_payout + 0);
+                instance.claim_amount_A = 100;
+                total_payout = (total_payout + 100);
+            } else {
+                if (!instance.action_Q_0_done) {
+                    instance.claim_amount_Q = 0;
+                    instance.claim_amount_A = (balance::value<Asset>(&instance.pot) / 1);
+                    total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                } else {
+                    if (!instance.action_A_1_done) {
+                        instance.claim_amount_A = 0;
+                        instance.claim_amount_Q = (balance::value<Asset>(&instance.pot) / 1);
+                        total_payout = ((balance::value<Asset>(&instance.pot) / 1) * 1);
+                    } else {
+                    }
+                }
+            }
         } else {
             if (instance.joined_Q) {
                 instance.claim_amount_Q = 50;
