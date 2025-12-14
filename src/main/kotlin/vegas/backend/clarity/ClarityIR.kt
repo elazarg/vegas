@@ -15,6 +15,7 @@ internal data class ClarityGame(
     val pot: Long,
     val actions: List<ClarityAction>,
     val abortPayoffs: Map<Set<ActionId>, Map<RoleId, Long>>, // DoneSet -> Payoff
+    val initialDone: Set<ActionId>,
     val terminalFrontiers: List<Set<ActionId>>,
     val payoffs: Map<RoleId, Expr>
 )

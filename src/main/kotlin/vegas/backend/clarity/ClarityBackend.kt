@@ -202,6 +202,13 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (begin")
         sb.appendLine("            (var-set initialized true)")
         sb.appendLine("            (var-set last-progress (get-time))")
+
+        // Mark implicitly done actions (e.g. parameter-less joins)
+        protocol.initialDone.forEach { actionId ->
+            val uintId = actionIds[actionId]!!
+            sb.appendLine("            (map-set action-done u$uintId true)")
+        }
+
         sb.appendLine("        )")
         sb.appendLine("        true")
         sb.appendLine("    )")
@@ -213,6 +220,8 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine(";; Actions")
 
         sortedActions.forEachIndexed { index, action ->
+            if (action.id in protocol.initialDone) return@forEachIndexed
+
             val actionIdUint = index // actionIds[action.id] is index
             val actionName = "action-${kebab(action.owner.name)}-${action.id.second}"
 

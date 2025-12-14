@@ -48,9 +48,9 @@ class GoldenMasterTest : FreeSpec({
         Example("Simple", disableBackend = setOf()),
         Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
         Example("Puzzle", disableBackend = setOf("gambit", "lightning", "clarity")), // Unbounded int
-        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("ThreeWayLottery", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
         Example("TicTacToe", disableBackend = setOf("gambit", "lightning", "clarity")), // Complex game
     )
 

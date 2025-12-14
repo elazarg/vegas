@@ -24,7 +24,7 @@ internal object ClarityCompiler {
         }
 
         // 3. Explore State Space
-        val (abortPayoffs, terminalFrontiers) = exploreStateSpace(game, rolesSorted, potAmount)
+        val (abortPayoffs, terminalFrontiers, initialDone) = exploreStateSpace(game, rolesSorted, potAmount)
 
         return ClarityGame(
             name = game.name,
@@ -32,6 +32,7 @@ internal object ClarityCompiler {
             pot = potAmount,
             actions = actions,
             abortPayoffs = abortPayoffs,
+            initialDone = initialDone,
             terminalFrontiers = terminalFrontiers,
             payoffs = game.payoffs
         )
@@ -86,7 +87,7 @@ internal object ClarityCompiler {
         game: GameIR,
         roles: List<RoleId>,
         pot: Long
-    ): Pair<Map<Set<ActionId>, Map<RoleId, Long>>, List<Set<ActionId>>> {
+    ): Triple<Map<Set<ActionId>, Map<RoleId, Long>>, List<Set<ActionId>>, Set<ActionId>> {
         val semantics = GameSemantics(game)
 
         val frontierPayoffs = mutableMapOf<Set<ActionId>, Map<RoleId, Long>>()
@@ -130,7 +131,6 @@ internal object ClarityCompiler {
                 val (canonNext, canonDone) = canonicalize(semantics, next, roles)
 
                 val actionId = (move.tag as PlayTag.Action).actionId
-                // We add actionId (from Play) AND any actions completed by Finalize (canonDone)
                 val nextDone = done + actionId + canonDone
 
                 if (nextDone !in visited) {
@@ -140,7 +140,7 @@ internal object ClarityCompiler {
             }
         }
 
-        return frontierPayoffs to terminalFrontiers.toList()
+        return Triple(frontierPayoffs, terminalFrontiers.toList(), initialDone)
     }
 
     private fun computePot(game: GameIR, players: Set<RoleId>): Long {
@@ -213,24 +213,21 @@ internal object ClarityCompiler {
         players: List<RoleId>,
         pot: Long
     ): Map<RoleId, Long> {
-        var current = config
-        val moves = semantics.enabledMoves(current)
-        val quitLabel = moves.find {
-            it is Label.Play && it.role == quitter && it.tag == PlayTag.Quit
-        } ?: return resolvePayoff(game, current, players, pot)
+        // Construct "Super Quit" delta: overwrite ALL fields of the quitter with Quit.
+        // This ensures the payoff function sees them as undefined, triggering correct forfeit logic.
+        val allFields = game.dag.actions
+            .filter { game.dag.owner(it) == quitter }
+            .flatMap { game.dag.writes(it) }
+            .toSet()
 
-        current = applyMove(current, quitLabel)
+        val quitDelta = allFields.associateWith { vegas.ir.Expr.Const.Quit }
+
+        // Create synthetic quit label
+        val quitLabel = Label.Play(quitter, quitDelta, PlayTag.Quit)
+
+        var current = applyMove(config, quitLabel)
         current = canonicalize(semantics, current, players).first
 
-        while (!current.isTerminal()) {
-            val m = semantics.enabledMoves(current)
-            val nextQuit = m.filterIsInstance<Label.Play>()
-                .filter { it.tag == PlayTag.Quit && it.role in players }
-                .minByOrNull { it.role.name }
-            if (nextQuit == null) break
-            current = applyMove(current, nextQuit)
-            current = canonicalize(semantics, current, players).first
-        }
         return resolvePayoff(game, current, players, pot)
     }
 }

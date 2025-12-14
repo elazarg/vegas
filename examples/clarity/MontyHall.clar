@@ -81,37 +81,14 @@
         (begin
             (var-set initialized true)
             (var-set last-progress (get-time))
+            (map-set action-done u0 true)
+            (map-set action-done u1 true)
         )
         true
     )
 )
 
 ;; Actions
-(define-public (action-host-0  )
-    (begin
-        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-        (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
-        (asserts! (is-eq (some tx-sender) (var-get role-host)) ERR_WRONG_ROLE)
-        (asserts! (not (is-done u0)) ERR_ACTION_ALREADY_DONE)
-        (map-set action-done u0 true)
-        (var-set last-progress (get-time))
-        (ok true)
-    )
-)
-
-(define-public (action-guest-1  )
-    (begin
-        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-        (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
-        (asserts! (is-eq (some tx-sender) (var-get role-guest)) ERR_WRONG_ROLE)
-        (asserts! (not (is-done u1)) ERR_ACTION_ALREADY_DONE)
-        (asserts! (is-done u0) ERR_DEPENDENCY_NOT_MET)
-        (map-set action-done u1 true)
-        (var-set last-progress (get-time))
-        (ok true)
-    )
-)
-
 (define-public (action-host-2 (car (buff 32)) )
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
@@ -214,7 +191,7 @@
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u3)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u4)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u5)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u6)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))))
+        (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u3)) (begin (map-set claims (unwrap-panic (var-get role-host)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u4)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u5)) (begin (map-set claims (unwrap-panic (var-get role-host)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u6)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))))
     )
 )
 

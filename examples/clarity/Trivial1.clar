@@ -62,24 +62,13 @@
         (begin
             (var-set initialized true)
             (var-set last-progress (get-time))
+            (map-set action-done u0 true)
         )
         true
     )
 )
 
 ;; Actions
-(define-public (action-a-0  )
-    (begin
-        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-        (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
-        (asserts! (is-eq (some tx-sender) (var-get role-a)) ERR_WRONG_ROLE)
-        (asserts! (not (is-done u0)) ERR_ACTION_ALREADY_DONE)
-        (map-set action-done u0 true)
-        (var-set last-progress (get-time))
-        (ok true)
-    )
-)
-
 ;; Finalize
 (define-public (finalize)
     (begin
