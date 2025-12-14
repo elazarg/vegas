@@ -33,7 +33,7 @@ fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
         }
 
         // Finalize
-        add(buildFinalizeFunction(game, dag, linearization, platform))
+        add(buildFinalizeFunction(game, dag, platform))
 
         // Claim
         game.roles.forEach { role ->
@@ -393,7 +393,7 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps: Require done OR (dep_owner is bailed)
+        // Deps: Allow skip if bailed (restoring previous logic)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
             val depOwner = dag.owner(depId)
@@ -513,12 +513,7 @@ private fun buildActionFunction(
     )
 }
 
-private fun buildFinalizeFunction(
-    game: GameIR,
-    dag: ActionDag,
-    linearization: Map<ActionId, Int>,
-    platform: MovePlatform
-): MoveFunction {
+private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveFunction {
     val body = buildList {
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
         val now = platform.currentTimeExpr(clockVar)
@@ -548,8 +543,7 @@ private fun buildFinalizeFunction(
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role))
         }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
 
-        // Standard Payout Logic
-        val standardPayout = buildList {
+        val ifAllJoined = buildList {
             game.payoffs.forEach { (role, expr) ->
                 val payoutExpr = translateExpr(expr, null, emptySet(), platform)
                 add(MoveStmt.Assign(
@@ -563,8 +557,7 @@ private fun buildFinalizeFunction(
             }
         }
 
-        // Refund Logic (Partial Join)
-        val refundLogic = buildList {
+        val ifRefund = buildList {
             game.roles.forEach { role ->
                 val deposit = try { game.dag.deposit(role).v } catch (e: Exception) { 0 }
                 if (deposit > 0) {
@@ -586,17 +579,10 @@ private fun buildFinalizeFunction(
         }
 
         // Blame Logic (Timeout Payout)
-        // Check actions in linear order. First missing action owner is blamed.
-        // We iterate actions sorted by index.
-        val orderedActions = dag.actions.sortedBy { linearization[it] }
+        // Use topological order for correctness
+        val orderedActions = dag.topo() // CHANGED: linearization -> topo
         val blameLogic = orderedActions.foldRight(
-            // Fallback if all done (should be covered by standardPayout if sinksDone, but if timeout triggered despite sinksDone? No, if sinksDone is true, we take standardPayout branch. So this branch is only for !sinksDone.)
-            // But wait, my outer IF is `if (allJoined)`.
-            // Inside `allJoined`: `if (sinksDone) standard else blameLogic`.
-            // So:
-            emptyList<MoveStmt>() // Fallback (e.g. refund? or just standard?)
-            // If we reach here, and not all done, but we didn't find missing action? Impossible if logic is correct.
-            // I'll make fallback a refund to be safe.
+            emptyList<MoveStmt>()
         ) { actionId, acc ->
              val doneField = "action_${actionId.first.name}_${actionId.second}_done"
              val owner = actionId.first
@@ -609,17 +595,11 @@ private fun buildFinalizeFunction(
         }
 
         // Combine logic:
-        // if (allJoined) {
-        //    if (sinksDone) { standardPayout } else { blameLogic }
-        // } else {
-        //    refundLogic
-        // }
-
         val allJoinedBlock = buildList {
              add(MoveStmt.If(
                  sinksDone,
                  standardPayout,
-                 blameLogic.ifEmpty { refundLogic } // use refund if blameLogic empty (unlikely)
+                 blameLogic.ifEmpty { refundLogic }
              ))
         }
 
