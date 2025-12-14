@@ -150,7 +150,7 @@ class MoveRenderer {
             is MoveExpr.Deref -> "*${renderExpr(expr.expr)}"
             is MoveExpr.Borrow -> if (expr.mut) "&mut ${renderExpr(expr.expr)}" else "&${renderExpr(expr.expr)}"
             is MoveExpr.Cast -> "(${renderExpr(expr.expr)} as ${renderType(expr.type)})"
-            is MoveExpr.IfElse -> "if (${renderExpr(expr.cond)}) ${renderExpr(expr.ifTrue)} else ${renderExpr(expr.ifFalse)}"
+            is MoveExpr.IfElse -> "if (${renderExpr(expr.cond)}) { ${renderExpr(expr.ifTrue)} } else { ${renderExpr(expr.ifFalse)} }"
         }
     }
 

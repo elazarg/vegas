@@ -28,12 +28,13 @@ module trivial1::trivial1 {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_A: 0x0, joined_A: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_A: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_A: 0, claimed_A: false, action_A_0_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_A: @0x0, joined_A: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_A: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_A: 0, claimed_A: false, action_A_0_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_A, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 10), 112);
         instance.role_A = tx_context::sender(ctx);
         instance.joined_A = true;
@@ -42,6 +43,8 @@ module trivial1::trivial1 {
     }
 
     public entry fun timeout_A<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_A, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
         };
@@ -91,6 +94,7 @@ module trivial1::trivial1 {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!(instance.claimed_A, 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

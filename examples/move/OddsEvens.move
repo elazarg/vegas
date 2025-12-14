@@ -46,12 +46,13 @@ module oddsevens::oddsevens {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_Odd: 0x0, role_Even: 0x0, joined_Odd: false, joined_Even: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Odd: false, bailed_Even: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Odd: 0, claimed_Odd: false, claim_amount_Even: 0, claimed_Even: false, Odd_c: false, done_Odd_c: false, Odd_c_hidden: vector::empty<u8>(), done_Odd_c_hidden: false, Even_c: false, done_Even_c: false, Even_c_hidden: vector::empty<u8>(), done_Even_c_hidden: false, action_Odd_0_done: false, action_Even_0_done: false, action_Odd_2_done: false, action_Even_4_done: false, action_Odd_3_done: false, action_Even_5_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_Odd: @0x0, role_Even: @0x0, joined_Odd: false, joined_Even: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Odd: false, bailed_Even: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Odd: 0, claimed_Odd: false, claim_amount_Even: 0, claimed_Even: false, Odd_c: false, done_Odd_c: false, Odd_c_hidden: vector::empty<u8>(), done_Odd_c_hidden: false, Even_c: false, done_Even_c: false, Even_c_hidden: vector::empty<u8>(), done_Even_c_hidden: false, action_Odd_0_done: false, action_Even_0_done: false, action_Odd_2_done: false, action_Even_4_done: false, action_Odd_3_done: false, action_Even_5_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_Odd<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Odd, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Odd = tx_context::sender(ctx);
         instance.joined_Odd = true;
@@ -61,6 +62,7 @@ module oddsevens::oddsevens {
 
     public entry fun join_Even<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Even, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Even = tx_context::sender(ctx);
         instance.joined_Even = true;
@@ -69,12 +71,16 @@ module oddsevens::oddsevens {
     }
 
     public entry fun timeout_Odd<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_Odd, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Odd = true;
         };
     }
 
     public entry fun timeout_Even<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_Even, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Even = true;
         };
@@ -161,7 +167,8 @@ module oddsevens::oddsevens {
         assert!((instance.action_Odd_2_done || instance.bailed_Odd), 103);
         assert!((instance.action_Even_4_done || instance.bailed_Even), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.Odd_c_hidden), 106);
         instance.Odd_c = c;
         instance.done_Odd_c = true;
@@ -184,7 +191,8 @@ module oddsevens::oddsevens {
         assert!((instance.action_Even_4_done || instance.bailed_Even), 103);
         assert!((instance.action_Odd_2_done || instance.bailed_Odd), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.Even_c_hidden), 106);
         instance.Even_c = c;
         instance.done_Even_c = true;
@@ -197,10 +205,10 @@ module oddsevens::oddsevens {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if ((instance.joined_Odd && instance.joined_Even)) {
-            instance.claim_amount_Even = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100;
-            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100);
-            instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100;
-            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100);
+            instance.claim_amount_Even = if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 126 } else { 74 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 20 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 180 } else { 100 } } };
+            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 126 } else { 74 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 20 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 180 } else { 100 } } });
+            instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 74 } else { 126 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 180 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 20 } else { 100 } } };
+            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) { if ((instance.Even_c == instance.Odd_c)) { 74 } else { 126 } } else { if ((!instance.done_Even_c && instance.done_Odd_c)) { 180 } else { if ((instance.done_Even_c && !instance.done_Odd_c)) { 20 } else { 100 } } });
         } else {
             if (instance.joined_Odd) {
                 instance.claim_amount_Odd = 100;
@@ -239,6 +247,7 @@ module oddsevens::oddsevens {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!((instance.claimed_Odd && instance.claimed_Even), 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

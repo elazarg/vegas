@@ -46,12 +46,13 @@ module prisoners::prisoners {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_A: 0x0, role_B: 0x0, joined_A: false, joined_B: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_A: false, bailed_B: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_A: 0, claimed_A: false, claim_amount_B: 0, claimed_B: false, A_c: false, done_A_c: false, A_c_hidden: vector::empty<u8>(), done_A_c_hidden: false, B_c: false, done_B_c: false, B_c_hidden: vector::empty<u8>(), done_B_c_hidden: false, action_A_0_done: false, action_B_1_done: false, action_A_3_done: false, action_B_5_done: false, action_A_4_done: false, action_B_6_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_A: @0x0, role_B: @0x0, joined_A: false, joined_B: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_A: false, bailed_B: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_A: 0, claimed_A: false, claim_amount_B: 0, claimed_B: false, A_c: false, done_A_c: false, A_c_hidden: vector::empty<u8>(), done_A_c_hidden: false, B_c: false, done_B_c: false, B_c_hidden: vector::empty<u8>(), done_B_c_hidden: false, action_A_0_done: false, action_B_1_done: false, action_A_3_done: false, action_B_5_done: false, action_A_4_done: false, action_B_6_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_A, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_A = tx_context::sender(ctx);
         instance.joined_A = true;
@@ -61,6 +62,7 @@ module prisoners::prisoners {
 
     public entry fun join_B<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_B, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_B = tx_context::sender(ctx);
         instance.joined_B = true;
@@ -69,12 +71,16 @@ module prisoners::prisoners {
     }
 
     public entry fun timeout_A<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_A, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
         };
     }
 
     public entry fun timeout_B<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_B, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
         };
@@ -159,7 +165,8 @@ module prisoners::prisoners {
         assert!((instance.action_A_3_done || instance.bailed_A), 103);
         assert!((instance.action_B_5_done || instance.bailed_B), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.A_c_hidden), 106);
         instance.A_c = c;
         instance.done_A_c = true;
@@ -181,7 +188,8 @@ module prisoners::prisoners {
         assert!((instance.action_B_5_done || instance.bailed_B), 103);
         assert!((instance.action_A_3_done || instance.bailed_A), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.B_c_hidden), 106);
         instance.B_c = c;
         instance.done_B_c = true;
@@ -194,10 +202,10 @@ module prisoners::prisoners {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if ((instance.joined_A && instance.joined_B)) {
-            instance.claim_amount_A = if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 0 else if ((!instance.A_c && instance.B_c)) 200 else 90 else if (!instance.done_A_c) 0 else 200;
-            total_payout = (total_payout + if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 0 else if ((!instance.A_c && instance.B_c)) 200 else 90 else if (!instance.done_A_c) 0 else 200);
-            instance.claim_amount_B = if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 200 else if ((!instance.A_c && instance.B_c)) 0 else 110 else if (!instance.done_A_c) 200 else 0;
-            total_payout = (total_payout + if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 200 else if ((!instance.A_c && instance.B_c)) 0 else 110 else if (!instance.done_A_c) 200 else 0);
+            instance.claim_amount_A = if ((instance.done_A_c && instance.done_B_c)) { if ((instance.A_c && instance.B_c)) { 100 } else { if ((instance.A_c && !instance.B_c)) { 0 } else { if ((!instance.A_c && instance.B_c)) { 200 } else { 90 } } } } else { if (!instance.done_A_c) { 0 } else { 200 } };
+            total_payout = (total_payout + if ((instance.done_A_c && instance.done_B_c)) { if ((instance.A_c && instance.B_c)) { 100 } else { if ((instance.A_c && !instance.B_c)) { 0 } else { if ((!instance.A_c && instance.B_c)) { 200 } else { 90 } } } } else { if (!instance.done_A_c) { 0 } else { 200 } });
+            instance.claim_amount_B = if ((instance.done_A_c && instance.done_B_c)) { if ((instance.A_c && instance.B_c)) { 100 } else { if ((instance.A_c && !instance.B_c)) { 200 } else { if ((!instance.A_c && instance.B_c)) { 0 } else { 110 } } } } else { if (!instance.done_A_c) { 200 } else { 0 } };
+            total_payout = (total_payout + if ((instance.done_A_c && instance.done_B_c)) { if ((instance.A_c && instance.B_c)) { 100 } else { if ((instance.A_c && !instance.B_c)) { 200 } else { if ((!instance.A_c && instance.B_c)) { 0 } else { 110 } } } } else { if (!instance.done_A_c) { 200 } else { 0 } });
         } else {
             if (instance.joined_A) {
                 instance.claim_amount_A = 100;
@@ -236,6 +244,7 @@ module prisoners::prisoners {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!((instance.claimed_A && instance.claimed_B), 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

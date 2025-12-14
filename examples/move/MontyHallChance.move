@@ -44,12 +44,13 @@ module montyhallchance::montyhallchance {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_Guest: 0x0, joined_Guest: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Guest: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Guest: 0, claimed_Guest: false, Host_car: 0, done_Host_car: false, Host_car_hidden: vector::empty<u8>(), done_Host_car_hidden: false, Guest_d: 0, done_Guest_d: false, Host_goat: 0, done_Host_goat: false, Guest_switch: false, done_Guest_switch: false, action_Host_0_done: false, action_Guest_1_done: false, action_Host_2_done: false, action_Guest_3_done: false, action_Host_4_done: false, action_Guest_5_done: false, action_Host_6_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_Guest: @0x0, joined_Guest: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Guest: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Guest: 0, claimed_Guest: false, Host_car: 0, done_Host_car: false, Host_car_hidden: vector::empty<u8>(), done_Host_car_hidden: false, Guest_d: 0, done_Guest_d: false, Host_goat: 0, done_Host_goat: false, Guest_switch: false, done_Guest_switch: false, action_Host_0_done: false, action_Guest_1_done: false, action_Host_2_done: false, action_Guest_3_done: false, action_Host_4_done: false, action_Guest_5_done: false, action_Host_6_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_Guest<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Guest, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Guest = tx_context::sender(ctx);
         instance.joined_Guest = true;
@@ -58,6 +59,8 @@ module montyhallchance::montyhallchance {
     }
 
     public entry fun timeout_Guest<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_Guest, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
         };
@@ -179,7 +182,8 @@ module montyhallchance::montyhallchance {
         assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
         assert!((((car == 0) || (car == 1)) || (car == 2)), 104);
         let mut data_car = bcs::to_bytes<u64>(&car);
-        vector::append<u8>(&mut data_car, bcs::to_bytes<u64>(&salt));
+        let salt_bytes_car = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_car, salt_bytes_car);
         assert!((hash::keccak256(&data_car) == instance.Host_car_hidden), 106);
         instance.Host_car = car;
         instance.done_Host_car = true;
@@ -192,10 +196,10 @@ module montyhallchance::montyhallchance {
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
         if (instance.joined_Guest) {
-            instance.claim_amount_Guest = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 120 else 80 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 200 else 0;
-            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 120 else 80 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 200 else 0);
-            instance.claim_amount_Host = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 80 else 120 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 0 else 200;
-            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 80 else 120 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 0 else 200);
+            instance.claim_amount_Guest = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } };
+            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 120 } else { 80 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 200 } else { 0 } });
+            instance.claim_amount_Host = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } };
+            total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) { if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) { 80 } else { 120 } } else { if ((!instance.done_Host_car || !instance.done_Host_goat)) { 0 } else { 200 } });
         } else {
             if (instance.joined_Guest) {
                 instance.claim_amount_Guest = 100;
@@ -219,6 +223,7 @@ module montyhallchance::montyhallchance {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!(instance.claimed_Guest, 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

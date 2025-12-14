@@ -58,12 +58,13 @@ module tictactoe::tictactoe {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_X: 0x0, role_O: 0x0, joined_X: false, joined_O: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_X: false, bailed_O: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_X: 0, claimed_X: false, claim_amount_O: 0, claimed_O: false, X_c1: 0, done_X_c1: false, O_c1: 0, done_O_c1: false, X_c2: 0, done_X_c2: false, O_c2: 0, done_O_c2: false, X_c3: 0, done_X_c3: false, O_c3: 0, done_O_c3: false, X_c4: 0, done_X_c4: false, O_c4: 0, done_O_c4: false, action_X_0_done: false, action_O_1_done: false, action_X_2_done: false, action_O_3_done: false, action_X_4_done: false, action_O_5_done: false, action_X_6_done: false, action_O_7_done: false, action_X_8_done: false, action_O_9_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_X: @0x0, role_O: @0x0, joined_X: false, joined_O: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_X: false, bailed_O: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_X: 0, claimed_X: false, claim_amount_O: 0, claimed_O: false, X_c1: 0, done_X_c1: false, O_c1: 0, done_O_c1: false, X_c2: 0, done_X_c2: false, O_c2: 0, done_O_c2: false, X_c3: 0, done_X_c3: false, O_c3: 0, done_O_c3: false, X_c4: 0, done_X_c4: false, O_c4: 0, done_O_c4: false, action_X_0_done: false, action_O_1_done: false, action_X_2_done: false, action_O_3_done: false, action_X_4_done: false, action_O_5_done: false, action_X_6_done: false, action_O_7_done: false, action_X_8_done: false, action_O_9_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_X<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_X, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_X = tx_context::sender(ctx);
         instance.joined_X = true;
@@ -73,6 +74,7 @@ module tictactoe::tictactoe {
 
     public entry fun join_O<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_O, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_O = tx_context::sender(ctx);
         instance.joined_O = true;
@@ -81,12 +83,16 @@ module tictactoe::tictactoe {
     }
 
     public entry fun timeout_X<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_X, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_X = true;
         };
     }
 
     public entry fun timeout_O<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_O, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_O = true;
         };
@@ -340,6 +346,7 @@ module tictactoe::tictactoe {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!((instance.claimed_X && instance.claimed_O), 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

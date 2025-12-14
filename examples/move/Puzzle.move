@@ -40,12 +40,13 @@ module puzzle::puzzle {
     }
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
-        let instance = Instance<Asset> { id: object::new(ctx), role_Q: 0x0, role_A: 0x0, joined_Q: false, joined_A: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Q: false, bailed_A: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Q: 0, claimed_Q: false, claim_amount_A: 0, claimed_A: false, Q_x: 0, done_Q_x: false, A_p: 0, done_A_p: false, A_q: 0, done_A_q: false, action_Q_0_done: false, action_A_1_done: false };
+        let instance = Instance<Asset> { id: object::new(ctx), role_Q: @0x0, role_A: @0x0, joined_Q: false, joined_A: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Q: false, bailed_A: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Q: 0, claimed_Q: false, claim_amount_A: 0, claimed_A: false, Q_x: 0, done_Q_x: false, A_p: 0, done_A_p: false, A_q: 0, done_A_q: false, action_Q_0_done: false, action_A_1_done: false };
         transfer::share_object(instance);
     }
 
     public entry fun join_Q<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Q, 100);
+        assert!(!instance.finalized, 117);
         assert!((coin::value<Asset>(&payment) == 50), 112);
         instance.role_Q = tx_context::sender(ctx);
         instance.joined_Q = true;
@@ -55,6 +56,7 @@ module puzzle::puzzle {
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_A, 100);
+        assert!(!instance.finalized, 117);
         instance.role_A = tx_context::sender(ctx);
         instance.joined_A = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -62,12 +64,16 @@ module puzzle::puzzle {
     }
 
     public entry fun timeout_Q<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_Q, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Q = true;
         };
     }
 
     public entry fun timeout_A<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        assert!(instance.joined_A, 113);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
         };
@@ -152,6 +158,7 @@ module puzzle::puzzle {
 
     public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
         assert!(instance.finalized, 116);
+        assert!((instance.claimed_Q && instance.claimed_A), 118);
         let val: u64 = balance::value<Asset>(&instance.pot);
         if ((val > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);

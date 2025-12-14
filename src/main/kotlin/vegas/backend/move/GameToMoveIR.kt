@@ -41,7 +41,7 @@ fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
         }
 
         // Sweep (Dust cleanup)
-        add(buildSweepFunction(platform))
+        add(buildSweepFunction(game, platform))
     }
 
     val module = MoveModule(
@@ -182,7 +182,7 @@ private fun buildCreateGameFunction(game: GameIR, struct: MoveStruct, platform: 
                 else -> {
                     if (field.type == platform.boolType()) MoveExpr.BoolLit(false)
                     else if (field.type == platform.u64Type()) MoveExpr.U64Lit(0)
-                    else if (field.type == platform.addressType()) MoveExpr.AddressLit("0x0")
+                    else if (field.type == platform.addressType()) MoveExpr.AddressLit("@0x0")
                     else if (field.type is MoveType.Vector) MoveExpr.Call("vector", "empty", listOf((field.type as MoveType.Vector).param), emptyList())
                     else error("Unknown field init for ${field.name}")
                 }
@@ -218,6 +218,12 @@ private fun buildJoinFunction(role: RoleId, game: GameIR, platform: MovePlatform
         add(MoveStmt.Assert(
             MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoined)),
             100
+        ))
+
+        // Ensure not finalized (no late joins)
+        add(MoveStmt.Assert(
+            MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")),
+            117 // EFinalized
         ))
 
         if (deposit > 0) {
@@ -266,6 +272,18 @@ private fun buildJoinFunction(role: RoleId, game: GameIR, platform: MovePlatform
 
 private fun buildTimeoutFunction(role: RoleId, platform: MovePlatform): MoveFunction {
     val body = buildList {
+        // Must be joined
+        add(MoveStmt.Assert(
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role)),
+            113 // ENotJoined
+        ))
+
+        // Must not be finalized
+        add(MoveStmt.Assert(
+            MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")),
+            117 // EFinalized
+        ))
+
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
         val now = platform.currentTimeExpr(clockVar)
 
@@ -430,11 +448,14 @@ private fun buildActionFunction(
                      MoveExpr.Borrow(input, false)
                  )), mut = true))
 
+                 // Fix: Assign bytes of salt to a variable before append
+                 add(MoveStmt.Let("salt_bytes_${p.name}", null,
+                     MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false)))
+                 ))
+
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
-                     MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(
-                         MoveExpr.Borrow(salt, false)
-                     ))
+                     MoveExpr.Var("salt_bytes_${p.name}") // Pass by value (consumed)
                  ))))
 
                  val hash = platform.hash(MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), false))
@@ -571,9 +592,16 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
     )
 }
 
-private fun buildSweepFunction(platform: MovePlatform): MoveFunction {
+private fun buildSweepFunction(game: GameIR, platform: MovePlatform): MoveFunction {
     val body = buildList {
         add(MoveStmt.Assert(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized"), 116))
+
+        // Ensure all claimed
+        val allClaimed = game.roles.map { role ->
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimedName(role))
+        }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
+
+        add(MoveStmt.Assert(allClaimed, 118)) // ENotAllClaimed
 
         val valExpr = MoveExpr.Call("balance", "value", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), false)))
         add(MoveStmt.Let("val", platform.u64Type(), valExpr))
