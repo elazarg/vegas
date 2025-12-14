@@ -9,9 +9,18 @@ pub mod trivial1 {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
+         game.creator = signer.key();
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
+
+    pub fn close_game(ctx: Context<Close_game>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let creator = &mut ctx.accounts.creator;
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((((now > (game.last_ts + game.timeout)) && !(game.joined[0 as usize])) || (game.is_finalized && game.claimed[0 as usize])), ErrorCode::CannotClose);
         Ok(())
     }
 
@@ -30,9 +39,6 @@ pub mod trivial1 {
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -48,6 +54,9 @@ pub mod trivial1 {
             10,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = now;
          game.last_ts = now;
@@ -109,6 +118,15 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
+pub struct Close_game<'info> {
+    #[account(mut, close = creator, seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    #[account(address = game.creator)]
+    pub creator: Signer<'info>,
+}
+
+#[derive(Accounts)]
 pub struct Timeout_A<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -146,6 +164,7 @@ pub struct Claim_A<'info> {
 #[account]
 #[derive(InitSpace)]
 pub struct GameState {
+    pub creator: Pubkey,
     pub game_id: u64,
     pub roles: [Pubkey; 1],
     pub joined: [bool; 1],
@@ -188,6 +207,8 @@ pub enum ErrorCode {
     BadAmount,
     #[msg("Insufficient funds including rent")]
     InsufficientFunds,
+    #[msg("Cannot close game yet")]
+    CannotClose,
     #[msg("Guard condition failed")]
     GuardFailed,
 }
