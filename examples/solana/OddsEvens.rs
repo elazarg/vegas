@@ -158,11 +158,11 @@ pub mod oddsevens {
              require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
          {
-    let val_bytes = (c as u8).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Odd_c_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (c as u8).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Odd_c_hidden, ErrorCode::InvalidReveal);
+         }
          game.Odd_c = c;
          game.done_Odd_c = true;
          game.action_done[3 as usize] = true;
@@ -191,11 +191,11 @@ pub mod oddsevens {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          {
-    let val_bytes = (c as u8).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Even_c_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (c as u8).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Even_c_hidden, ErrorCode::InvalidReveal);
+         }
          game.Even_c = c;
          game.done_Even_c = true;
          game.action_done[5 as usize] = true;
@@ -229,12 +229,12 @@ pub mod oddsevens {
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
          {
-    let amount = game.claim_amount[0];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[0];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
@@ -245,12 +245,12 @@ pub mod oddsevens {
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
          {
-    let amount = game.claim_amount[1];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[1];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 

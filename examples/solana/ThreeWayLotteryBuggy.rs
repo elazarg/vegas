@@ -217,11 +217,11 @@ pub mod threewaylotterybuggy {
          }
          require!((((c == 1) || (c == 2)) || (c == 3)), ErrorCode::GuardFailed);
          {
-    let val_bytes = (c).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Issuer_c_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (c).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Issuer_c_hidden, ErrorCode::InvalidReveal);
+         }
          game.Issuer_c = c;
          game.done_Issuer_c = true;
          game.action_done[4 as usize] = true;
@@ -251,11 +251,11 @@ pub mod threewaylotterybuggy {
          }
          require!((((c == 1) || (c == 2)) || (c == 3)), ErrorCode::GuardFailed);
          {
-    let val_bytes = (c).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Alice_c_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (c).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Alice_c_hidden, ErrorCode::InvalidReveal);
+         }
          game.Alice_c = c;
          game.done_Alice_c = true;
          game.action_done[6 as usize] = true;
@@ -285,11 +285,11 @@ pub mod threewaylotterybuggy {
          }
          require!((((c == 1) || (c == 2)) || (c == 3)), ErrorCode::GuardFailed);
          {
-    let val_bytes = (c).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Bob_c_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (c).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Bob_c_hidden, ErrorCode::InvalidReveal);
+         }
          game.Bob_c = c;
          game.done_Bob_c = true;
          game.action_done[8 as usize] = true;
@@ -327,12 +327,12 @@ pub mod threewaylotterybuggy {
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
          {
-    let amount = game.claim_amount[0];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[0];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
@@ -343,12 +343,12 @@ pub mod threewaylotterybuggy {
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
          {
-    let amount = game.claim_amount[1];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[1];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
@@ -359,12 +359,12 @@ pub mod threewaylotterybuggy {
          require!(!(game.claimed[2 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[2 as usize] = true;
          {
-    let amount = game.claim_amount[2];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[2];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 

@@ -338,12 +338,12 @@ pub mod tictactoe {
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
          {
-    let amount = game.claim_amount[0];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[0];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
@@ -354,12 +354,12 @@ pub mod tictactoe {
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
          {
-    let amount = game.claim_amount[1];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[1];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 

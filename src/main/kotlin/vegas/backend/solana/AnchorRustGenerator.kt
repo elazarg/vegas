@@ -160,7 +160,9 @@ class AnchorRustGenerator {
                 sb.appendLine("$indent )?;")
             }
             is SolanaStmt.Code -> {
-                sb.appendLine("$indent ${stmt.text}")
+                stmt.text.lines().forEach { line ->
+                    sb.appendLine("$indent $line")
+                }
             }
             is SolanaStmt.Comment -> {
                 sb.appendLine("$indent // ${stmt.text}")

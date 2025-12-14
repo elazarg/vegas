@@ -191,11 +191,11 @@ pub mod montyhallchance {
          }
          require!((((car == 0) || (car == 1)) || (car == 2)), ErrorCode::GuardFailed);
          {
-    let val_bytes = (car).to_be_bytes();
-    let salt_bytes = salt.to_be_bytes();
-    let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
-    require!(hash == game.Host_car_hidden, ErrorCode::InvalidReveal);
-}
+             let val_bytes = (car).to_be_bytes();
+             let salt_bytes = salt.to_be_bytes();
+             let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
+             require!(hash == game.Host_car_hidden, ErrorCode::InvalidReveal);
+         }
          game.Host_car = car;
          game.done_Host_car = true;
          game.action_done[6 as usize] = true;
@@ -228,12 +228,12 @@ pub mod montyhallchance {
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
          {
-    let amount = game.claim_amount[0];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[0];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
@@ -244,12 +244,12 @@ pub mod montyhallchance {
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
          {
-    let amount = game.claim_amount[1];
-    if amount > 0 {
-        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
-    }
-}
+             let amount = game.claim_amount[1];
+             if amount > 0 {
+                 **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+             }
+         }
         Ok(())
     }
 
