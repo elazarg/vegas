@@ -50,7 +50,7 @@ module montyhall::montyhall {
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
         let instance = Instance<Asset> { id: object::new(ctx), role_Host: 0x0, role_Guest: 0x0, joined_Host: false, joined_Guest: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Host: false, bailed_Guest: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Host: 0, claimed_Host: false, claim_amount_Guest: 0, claimed_Guest: false, Host_car: 0, done_Host_car: false, Host_car_hidden: vector::empty<u8>(), done_Host_car_hidden: false, Guest_d: 0, done_Guest_d: false, Host_goat: 0, done_Host_goat: false, Guest_switch: false, done_Guest_switch: false, action_Host_0_done: false, action_Guest_1_done: false, action_Host_2_done: false, action_Guest_3_done: false, action_Host_4_done: false, action_Guest_5_done: false, action_Host_6_done: false };
-        transfer::share_object<Asset>(instance);
+        transfer::share_object(instance);
     }
 
     public entry fun join_Host<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
@@ -71,10 +71,23 @@ module montyhall::montyhall {
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
+    public entry fun timeout_Host<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Host = true;
+        };
+    }
+
+    public entry fun timeout_Guest<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Guest = true;
+        };
+    }
+
     public entry fun move_Host_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
         assert!(instance.joined_Host, 113);
         assert!(!instance.bailed_Host, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
             return
@@ -88,6 +101,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
         assert!(instance.joined_Guest, 113);
         assert!(!instance.bailed_Guest, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
             return
@@ -102,6 +116,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
         assert!(instance.joined_Host, 113);
         assert!(!instance.bailed_Host, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
             return
@@ -119,6 +134,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
         assert!(instance.joined_Guest, 113);
         assert!(!instance.bailed_Guest, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
             return
@@ -136,6 +152,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
         assert!(instance.joined_Host, 113);
         assert!(!instance.bailed_Host, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
             return
@@ -154,6 +171,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
         assert!(instance.joined_Guest, 113);
         assert!(!instance.bailed_Guest, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
             return
@@ -170,6 +188,7 @@ module montyhall::montyhall {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
         assert!(instance.joined_Host, 113);
         assert!(!instance.bailed_Host, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
             return
@@ -193,10 +212,21 @@ module montyhall::montyhall {
         assert!((instance.action_Host_6_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
-        instance.claim_amount_Guest = if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 40 else 0 else if (!instance.done_Host_car) 40 else 0;
-        total_payout = (total_payout + if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 40 else 0 else if (!instance.done_Host_car) 40 else 0);
-        instance.claim_amount_Host = if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 0 else 40 else if (!instance.done_Host_car) 0 else 40;
-        total_payout = (total_payout + if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 0 else 40 else if (!instance.done_Host_car) 0 else 40);
+        if ((instance.joined_Host && instance.joined_Guest)) {
+            instance.claim_amount_Guest = if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 40 else 0 else if (!instance.done_Host_car) 40 else 0;
+            total_payout = (total_payout + if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 40 else 0 else if (!instance.done_Host_car) 40 else 0);
+            instance.claim_amount_Host = if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 0 else 40 else if (!instance.done_Host_car) 0 else 40;
+            total_payout = (total_payout + if ((instance.done_Host_car && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 0 else 40 else if (!instance.done_Host_car) 0 else 40);
+        } else {
+            if (instance.joined_Host) {
+                instance.claim_amount_Host = 20;
+                total_payout = (total_payout + 20);
+            };
+            if (instance.joined_Guest) {
+                instance.claim_amount_Guest = 20;
+                total_payout = (total_payout + 20);
+            };
+        }
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
@@ -208,7 +238,7 @@ module montyhall::montyhall {
         let amount: u64 = instance.claim_amount_Host;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Host);
         };
     }
 
@@ -219,6 +249,15 @@ module montyhall::montyhall {
         let amount: u64 = instance.claim_amount_Guest;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Guest);
+        };
+    }
+
+    public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
+        assert!(instance.finalized, 116);
+        let val: u64 = balance::value<Asset>(&instance.pot);
+        if ((val > 0)) {
+            let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);
             transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }

@@ -53,11 +53,11 @@ object SuiPlatform : MovePlatform {
     }
 
     override fun createInstanceBody(ctxVar: MoveExpr, instanceVar: MoveExpr, assetType: MoveType): List<MoveStmt> {
-        // transfer::share_object<Asset>(instance)
+        // transfer::share_object(instance)
         return listOf(
             MoveStmt.ExprStmt(MoveExpr.Call(
                 "transfer", "share_object",
-                listOf(assetType),
+                emptyList(),
                 listOf(instanceVar)
             ))
         )

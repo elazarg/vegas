@@ -44,7 +44,7 @@ module simple::simple {
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
         let instance = Instance<Asset> { id: object::new(ctx), role_A: 0x0, role_B: 0x0, joined_A: false, joined_B: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_A: false, bailed_B: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_A: 0, claimed_A: false, claim_amount_B: 0, claimed_B: false, A_c: false, done_A_c: false, A_c_hidden: vector::empty<u8>(), done_A_c_hidden: false, B_c: false, done_B_c: false, action_A_0_done: false, action_B_1_done: false, action_A_2_done: false, action_B_3_done: false, action_A_4_done: false };
-        transfer::share_object<Asset>(instance);
+        transfer::share_object(instance);
     }
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
@@ -65,10 +65,23 @@ module simple::simple {
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
+    public entry fun timeout_A<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_A = true;
+        };
+    }
+
+    public entry fun timeout_B<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_B = true;
+        };
+    }
+
     public entry fun move_A_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
         assert!(instance.joined_A, 113);
         assert!(!instance.bailed_A, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
             return
@@ -82,6 +95,7 @@ module simple::simple {
         assert!((tx_context::sender(ctx) == instance.role_B), 101);
         assert!(instance.joined_B, 113);
         assert!(!instance.bailed_B, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
             return
@@ -96,6 +110,7 @@ module simple::simple {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
         assert!(instance.joined_A, 113);
         assert!(!instance.bailed_A, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
             return
@@ -113,6 +128,7 @@ module simple::simple {
         assert!((tx_context::sender(ctx) == instance.role_B), 101);
         assert!(instance.joined_B, 113);
         assert!(!instance.bailed_B, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
             return
@@ -129,6 +145,7 @@ module simple::simple {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
         assert!(instance.joined_A, 113);
         assert!(!instance.bailed_A, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
             return
@@ -149,10 +166,21 @@ module simple::simple {
         assert!((instance.action_A_4_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
-        instance.claim_amount_A = if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 1 else if (!instance.done_B_c) 11 else if ((instance.A_c != instance.B_c)) 9 else 3;
-        total_payout = (total_payout + if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 1 else if (!instance.done_B_c) 11 else if ((instance.A_c != instance.B_c)) 9 else 3);
-        instance.claim_amount_B = if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 11 else if (!instance.done_B_c) 1 else if ((instance.A_c == instance.B_c)) 9 else 3;
-        total_payout = (total_payout + if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 11 else if (!instance.done_B_c) 1 else if ((instance.A_c == instance.B_c)) 9 else 3);
+        if ((instance.joined_A && instance.joined_B)) {
+            instance.claim_amount_A = if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 1 else if (!instance.done_B_c) 11 else if ((instance.A_c != instance.B_c)) 9 else 3;
+            total_payout = (total_payout + if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 1 else if (!instance.done_B_c) 11 else if ((instance.A_c != instance.B_c)) 9 else 3);
+            instance.claim_amount_B = if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 11 else if (!instance.done_B_c) 1 else if ((instance.A_c == instance.B_c)) 9 else 3;
+            total_payout = (total_payout + if ((!instance.done_A_c && !instance.done_B_c)) 6 else if (!instance.done_A_c) 11 else if (!instance.done_B_c) 1 else if ((instance.A_c == instance.B_c)) 9 else 3);
+        } else {
+            if (instance.joined_A) {
+                instance.claim_amount_A = 6;
+                total_payout = (total_payout + 6);
+            };
+            if (instance.joined_B) {
+                instance.claim_amount_B = 6;
+                total_payout = (total_payout + 6);
+            };
+        }
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
@@ -164,7 +192,7 @@ module simple::simple {
         let amount: u64 = instance.claim_amount_A;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_A);
         };
     }
 
@@ -175,6 +203,15 @@ module simple::simple {
         let amount: u64 = instance.claim_amount_B;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, instance.role_B);
+        };
+    }
+
+    public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
+        assert!(instance.finalized, 116);
+        let val: u64 = balance::value<Asset>(&instance.pot);
+        if ((val > 0)) {
+            let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);
             transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }

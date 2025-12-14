@@ -22,6 +22,11 @@ fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
             add(buildJoinFunction(role, game, platform))
         }
 
+        // Timeout functions (Externally triggerable)
+        game.roles.forEach { role ->
+            add(buildTimeoutFunction(role, platform))
+        }
+
         // Move functions
         dag.topo().forEach { actionId ->
             add(buildActionFunction(actionId, dag, linearization, platform))
@@ -34,6 +39,9 @@ fun compileToMove(game: GameIR, platform: MovePlatform): MovePackage {
         game.roles.forEach { role ->
             add(buildClaimFunction(role, game, platform))
         }
+
+        // Sweep (Dust cleanup)
+        add(buildSweepFunction(platform))
     }
 
     val module = MoveModule(
@@ -256,6 +264,36 @@ private fun buildJoinFunction(role: RoleId, game: GameIR, platform: MovePlatform
     )
 }
 
+private fun buildTimeoutFunction(role: RoleId, platform: MovePlatform): MoveFunction {
+    val body = buildList {
+        val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
+        val now = platform.currentTimeExpr(clockVar)
+
+        add(MoveStmt.If(
+            MoveExpr.BinOp(MoveBinOp.GT, now, MoveExpr.BinOp(MoveBinOp.ADD,
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), "last_ts_ms"),
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), "timeout_ms")
+            )),
+            listOf(
+                MoveStmt.Assign(
+                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(role)),
+                    MoveExpr.BoolLit(true)
+                )
+            )
+        ))
+    }
+
+    return MoveFunction(
+        name = "timeout_${role.name}",
+        visibility = MoveVisibility.PUBLIC_ENTRY,
+        params = listOf(
+            MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
+        ) + platform.extraActionParams() + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
+        body = body,
+        typeParams = listOf("Asset")
+    )
+}
+
 private fun buildActionFunction(
     id: ActionId,
     dag: ActionDag,
@@ -302,10 +340,16 @@ private fun buildActionFunction(
             113 // ENotJoined
         ))
 
-        // Ensure not bailed (EVM-style: bailed roles cannot act)
+        // Ensure not bailed
         add(MoveStmt.Assert(
             MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(owner))),
             114 // EPlayerBailed
+        ))
+
+        // Ensure not finalized
+        add(MoveStmt.Assert(
+            MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")),
+            117 // EFinalized
         ))
 
         val now = platform.currentTimeExpr(clockVar)
@@ -384,7 +428,7 @@ private fun buildActionFunction(
 
                  add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("bcs", "to_bytes", listOf(translateType(p.type, platform)), listOf(
                      MoveExpr.Borrow(input, false)
-                 )), mut = true)) // MUTABLE
+                 )), mut = true))
 
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
@@ -461,19 +505,49 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
 
         add(MoveStmt.Assert(MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")), 108))
 
-        add(MoveStmt.Let("total_payout", platform.u64Type(), MoveExpr.U64Lit(0), mut = true)) // MUTABLE
+        add(MoveStmt.Let("total_payout", platform.u64Type(), MoveExpr.U64Lit(0), mut = true))
 
-        game.payoffs.forEach { (role, expr) ->
-            val payoutExpr = translateExpr(expr, null, emptySet(), platform)
-            add(MoveStmt.Assign(
-                MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(role)),
-                payoutExpr
-            ))
-            add(MoveStmt.Assign(
-                MoveExpr.Var("total_payout"),
-                MoveExpr.BinOp(MoveBinOp.ADD, MoveExpr.Var("total_payout"), payoutExpr)
-            ))
+        // Check if all joined
+        val allJoined = game.roles.map { role ->
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role))
+        }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
+
+        val ifAllJoined = buildList {
+            game.payoffs.forEach { (role, expr) ->
+                val payoutExpr = translateExpr(expr, null, emptySet(), platform)
+                add(MoveStmt.Assign(
+                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(role)),
+                    payoutExpr
+                ))
+                add(MoveStmt.Assign(
+                    MoveExpr.Var("total_payout"),
+                    MoveExpr.BinOp(MoveBinOp.ADD, MoveExpr.Var("total_payout"), payoutExpr)
+                ))
+            }
         }
+
+        val ifRefund = buildList {
+            game.roles.forEach { role ->
+                val deposit = try { game.dag.deposit(role).v } catch (e: Exception) { 0 }
+                if (deposit > 0) {
+                    add(MoveStmt.If(
+                        MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(role)),
+                        listOf(
+                            MoveStmt.Assign(
+                                MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleClaimAmountName(role)),
+                                MoveExpr.U64Lit(deposit.toLong())
+                            ),
+                            MoveStmt.Assign(
+                                MoveExpr.Var("total_payout"),
+                                MoveExpr.BinOp(MoveBinOp.ADD, MoveExpr.Var("total_payout"), MoveExpr.U64Lit(deposit.toLong()))
+                            )
+                        )
+                    ))
+                }
+            }
+        }
+
+        add(MoveStmt.If(allJoined, ifAllJoined, ifRefund))
 
         add(MoveStmt.Assert(
             MoveExpr.BinOp(MoveBinOp.LTE,
@@ -497,6 +571,36 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
     )
 }
 
+private fun buildSweepFunction(platform: MovePlatform): MoveFunction {
+    val body = buildList {
+        add(MoveStmt.Assert(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized"), 116))
+
+        val valExpr = MoveExpr.Call("balance", "value", listOf(MoveType.TypeParam("Asset")), listOf(MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), false)))
+        add(MoveStmt.Let("val", platform.u64Type(), valExpr))
+
+        add(MoveStmt.If(
+            MoveExpr.BinOp(MoveBinOp.GT, MoveExpr.Var("val"), MoveExpr.U64Lit(0)),
+            platform.withdrawAndTransferStmt(
+                MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
+                MoveExpr.Var("val"),
+                platform.getSender(MoveExpr.Var(platform.contextParamName())),
+                MoveExpr.Var(platform.contextParamName()),
+                MoveType.TypeParam("Asset")
+            )
+        ))
+    }
+
+    return MoveFunction(
+        name = "sweep",
+        visibility = MoveVisibility.PUBLIC_ENTRY,
+        params = listOf(
+            MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
+        ) + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
+        body = body,
+        typeParams = listOf("Asset")
+    )
+}
+
 private fun buildClaimFunction(role: RoleId, game: GameIR, platform: MovePlatform): MoveFunction {
     val body = buildList {
         add(MoveStmt.Assert(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized"), 110))
@@ -514,7 +618,7 @@ private fun buildClaimFunction(role: RoleId, game: GameIR, platform: MovePlatfor
             platform.withdrawAndTransferStmt(
                 MoveExpr.Borrow(MoveExpr.FieldAccess(MoveExpr.Var("instance"), "pot"), true),
                 MoveExpr.Var("amount"),
-                platform.getSender(MoveExpr.Var(platform.contextParamName())),
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddrName(role)), // Transfer to Role Address
                 MoveExpr.Var(platform.contextParamName()),
                 MoveType.TypeParam("Asset")
             )

@@ -45,7 +45,7 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
         let instance = Instance<Asset> { id: object::new(ctx), role_Odd: 0x0, role_Even: 0x0, joined_Odd: false, joined_Even: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Odd: false, bailed_Even: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Odd: 0, claimed_Odd: false, claim_amount_Even: 0, claimed_Even: false, Odd_c: false, done_Odd_c: false, Odd_c_hidden: vector::empty<u8>(), done_Odd_c_hidden: false, Even_c: false, done_Even_c: false, Even_c_hidden: vector::empty<u8>(), done_Even_c_hidden: false, action_Odd_1_done: false, action_Even_3_done: false, action_Odd_2_done: false, action_Even_4_done: false };
-        transfer::share_object<Asset>(instance);
+        transfer::share_object(instance);
     }
 
     public entry fun join_Odd<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
@@ -66,10 +66,23 @@ module oddsevensshort::oddsevensshort {
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
+    public entry fun timeout_Odd<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Odd = true;
+        };
+    }
+
+    public entry fun timeout_Even<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Even = true;
+        };
+    }
+
     public entry fun move_Odd_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Odd), 101);
         assert!(instance.joined_Odd, 113);
         assert!(!instance.bailed_Odd, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Odd = true;
             return
@@ -86,6 +99,7 @@ module oddsevensshort::oddsevensshort {
         assert!((tx_context::sender(ctx) == instance.role_Even), 101);
         assert!(instance.joined_Even, 113);
         assert!(!instance.bailed_Even, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Even = true;
             return
@@ -102,6 +116,7 @@ module oddsevensshort::oddsevensshort {
         assert!((tx_context::sender(ctx) == instance.role_Odd), 101);
         assert!(instance.joined_Odd, 113);
         assert!(!instance.bailed_Odd, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Odd = true;
             return
@@ -122,6 +137,7 @@ module oddsevensshort::oddsevensshort {
         assert!((tx_context::sender(ctx) == instance.role_Even), 101);
         assert!(instance.joined_Even, 113);
         assert!(!instance.bailed_Even, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Even = true;
             return
@@ -142,10 +158,21 @@ module oddsevensshort::oddsevensshort {
         assert!(((instance.action_Odd_2_done && instance.action_Even_4_done) || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
-        instance.claim_amount_Even = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100;
-        total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100);
-        instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100;
-        total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100);
+        if ((instance.joined_Odd && instance.joined_Even)) {
+            instance.claim_amount_Even = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100;
+            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100);
+            instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100;
+            total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100);
+        } else {
+            if (instance.joined_Odd) {
+                instance.claim_amount_Odd = 100;
+                total_payout = (total_payout + 100);
+            };
+            if (instance.joined_Even) {
+                instance.claim_amount_Even = 100;
+                total_payout = (total_payout + 100);
+            };
+        }
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
@@ -157,7 +184,7 @@ module oddsevensshort::oddsevensshort {
         let amount: u64 = instance.claim_amount_Odd;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Odd);
         };
     }
 
@@ -168,6 +195,15 @@ module oddsevensshort::oddsevensshort {
         let amount: u64 = instance.claim_amount_Even;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Even);
+        };
+    }
+
+    public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
+        assert!(instance.finalized, 116);
+        let val: u64 = balance::value<Asset>(&instance.pot);
+        if ((val > 0)) {
+            let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);
             transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }

@@ -41,7 +41,7 @@ module puzzle::puzzle {
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
         let instance = Instance<Asset> { id: object::new(ctx), role_Q: 0x0, role_A: 0x0, joined_Q: false, joined_A: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Q: false, bailed_A: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Q: 0, claimed_Q: false, claim_amount_A: 0, claimed_A: false, Q_x: 0, done_Q_x: false, A_p: 0, done_A_p: false, A_q: 0, done_A_q: false, action_Q_0_done: false, action_A_1_done: false };
-        transfer::share_object<Asset>(instance);
+        transfer::share_object(instance);
     }
 
     public entry fun join_Q<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
@@ -61,10 +61,23 @@ module puzzle::puzzle {
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
+    public entry fun timeout_Q<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Q = true;
+        };
+    }
+
+    public entry fun timeout_A<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_A = true;
+        };
+    }
+
     public entry fun move_Q_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, x: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Q), 101);
         assert!(instance.joined_Q, 113);
         assert!(!instance.bailed_Q, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Q = true;
             return
@@ -80,6 +93,7 @@ module puzzle::puzzle {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
         assert!(instance.joined_A, 113);
         assert!(!instance.bailed_A, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
             return
@@ -99,10 +113,17 @@ module puzzle::puzzle {
         assert!((instance.action_A_1_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
-        instance.claim_amount_Q = 0;
-        total_payout = (total_payout + 0);
-        instance.claim_amount_A = 100;
-        total_payout = (total_payout + 100);
+        if ((instance.joined_Q && instance.joined_A)) {
+            instance.claim_amount_Q = 0;
+            total_payout = (total_payout + 0);
+            instance.claim_amount_A = 100;
+            total_payout = (total_payout + 100);
+        } else {
+            if (instance.joined_Q) {
+                instance.claim_amount_Q = 50;
+                total_payout = (total_payout + 50);
+            };
+        }
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
@@ -114,7 +135,7 @@ module puzzle::puzzle {
         let amount: u64 = instance.claim_amount_Q;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Q);
         };
     }
 
@@ -125,6 +146,15 @@ module puzzle::puzzle {
         let amount: u64 = instance.claim_amount_A;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, instance.role_A);
+        };
+    }
+
+    public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
+        assert!(instance.finalized, 116);
+        let val: u64 = balance::value<Asset>(&instance.pot);
+        if ((val > 0)) {
+            let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);
             transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }

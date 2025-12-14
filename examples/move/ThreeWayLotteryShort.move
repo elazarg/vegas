@@ -56,7 +56,7 @@ module threewaylotteryshort::threewaylotteryshort {
 
     public entry fun create_game<Asset>(timeout_ms: u64, ctx: &mut tx_context::TxContext) {
         let instance = Instance<Asset> { id: object::new(ctx), role_Issuer: 0x0, role_Alice: 0x0, role_Bob: 0x0, joined_Issuer: false, joined_Alice: false, joined_Bob: false, timeout_ms: timeout_ms, last_ts_ms: 0, bailed_Issuer: false, bailed_Alice: false, bailed_Bob: false, pot: balance::zero<Asset>(), finalized: false, claim_amount_Issuer: 0, claimed_Issuer: false, claim_amount_Alice: 0, claimed_Alice: false, claim_amount_Bob: 0, claimed_Bob: false, Issuer_c: 0, done_Issuer_c: false, Issuer_c_hidden: vector::empty<u8>(), done_Issuer_c_hidden: false, Alice_c: 0, done_Alice_c: false, Alice_c_hidden: vector::empty<u8>(), done_Alice_c_hidden: false, Bob_c: 0, done_Bob_c: false, Bob_c_hidden: vector::empty<u8>(), done_Bob_c_hidden: false, action_Issuer_1_done: false, action_Alice_3_done: false, action_Bob_5_done: false, action_Issuer_2_done: false, action_Alice_4_done: false, action_Bob_6_done: false };
-        transfer::share_object<Asset>(instance);
+        transfer::share_object(instance);
     }
 
     public entry fun join_Issuer<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
@@ -86,10 +86,29 @@ module threewaylotteryshort::threewaylotteryshort {
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
+    public entry fun timeout_Issuer<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Issuer = true;
+        };
+    }
+
+    public entry fun timeout_Alice<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Alice = true;
+        };
+    }
+
+    public entry fun timeout_Bob<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
+            instance.bailed_Bob = true;
+        };
+    }
+
     public entry fun move_Issuer_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
         assert!(instance.joined_Issuer, 113);
         assert!(!instance.bailed_Issuer, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
             return
@@ -106,6 +125,7 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
         assert!(instance.joined_Alice, 113);
         assert!(!instance.bailed_Alice, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
             return
@@ -122,6 +142,7 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
         assert!(instance.joined_Bob, 113);
         assert!(!instance.bailed_Bob, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
             return
@@ -138,6 +159,7 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
         assert!(instance.joined_Issuer, 113);
         assert!(!instance.bailed_Issuer, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
             return
@@ -160,6 +182,7 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
         assert!(instance.joined_Alice, 113);
         assert!(!instance.bailed_Alice, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
             return
@@ -182,6 +205,7 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
         assert!(instance.joined_Bob, 113);
         assert!(!instance.bailed_Bob, 114);
+        assert!(!instance.finalized, 117);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
             return
@@ -204,12 +228,27 @@ module threewaylotteryshort::threewaylotteryshort {
         assert!((((instance.action_Issuer_2_done && instance.action_Alice_4_done) && instance.action_Bob_6_done) || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
         let mut total_payout: u64 = 0;
-        instance.claim_amount_Bob = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 24 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12;
-        total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 24 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12);
-        instance.claim_amount_Issuer = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12;
-        total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12);
-        instance.claim_amount_Alice = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12;
-        total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12);
+        if (((instance.joined_Issuer && instance.joined_Alice) && instance.joined_Bob)) {
+            instance.claim_amount_Bob = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 24 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12;
+            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 24 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12);
+            instance.claim_amount_Issuer = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12;
+            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 6 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12);
+            instance.claim_amount_Alice = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12;
+            total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 0)) 24 else if (((((instance.Issuer_c + instance.Alice_c) + instance.Bob_c) % 3) == 1)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 34 else if (!instance.done_Alice_c) 2 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 17 else 12);
+        } else {
+            if (instance.joined_Issuer) {
+                instance.claim_amount_Issuer = 12;
+                total_payout = (total_payout + 12);
+            };
+            if (instance.joined_Alice) {
+                instance.claim_amount_Alice = 12;
+                total_payout = (total_payout + 12);
+            };
+            if (instance.joined_Bob) {
+                instance.claim_amount_Bob = 12;
+                total_payout = (total_payout + 12);
+            };
+        }
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
         instance.finalized = true;
     }
@@ -221,7 +260,7 @@ module threewaylotteryshort::threewaylotteryshort {
         let amount: u64 = instance.claim_amount_Issuer;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Issuer);
         };
     }
 
@@ -232,7 +271,7 @@ module threewaylotteryshort::threewaylotteryshort {
         let amount: u64 = instance.claim_amount_Alice;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
-            transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Alice);
         };
     }
 
@@ -243,6 +282,15 @@ module threewaylotteryshort::threewaylotteryshort {
         let amount: u64 = instance.claim_amount_Bob;
         if ((amount > 0)) {
             let payout_coin = coin::take<Asset>(&mut instance.pot, amount, ctx);
+            transfer::public_transfer<Asset>(payout_coin, instance.role_Bob);
+        };
+    }
+
+    public entry fun sweep<Asset>(instance: &mut Instance<Asset>, ctx: &mut tx_context::TxContext) {
+        assert!(instance.finalized, 116);
+        let val: u64 = balance::value<Asset>(&instance.pot);
+        if ((val > 0)) {
+            let payout_coin = coin::take<Asset>(&mut instance.pot, val, ctx);
             transfer::public_transfer<Asset>(payout_coin, tx_context::sender(ctx));
         };
     }
