@@ -87,6 +87,7 @@ class AnchorRustGenerator {
 
     private fun generateAccountStruct(sb: StringBuilder, struct: SolanaAccountStruct) {
         sb.appendLine("#[account]")
+        sb.appendLine("#[derive(InitSpace)]")
         sb.appendLine("pub struct ${struct.name} {")
         for (field in struct.fields) {
             sb.appendLine("    pub ${field.name}: ${generateAnchorType(field.type)},")

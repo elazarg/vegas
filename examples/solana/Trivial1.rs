@@ -8,7 +8,6 @@ pub mod trivial1 {
 
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let vault = &mut ctx.accounts.vault;
         let signer = &mut ctx.accounts.signer;
          game.game_id = game_id;
          game.timeout = timeout;
@@ -17,11 +16,23 @@ pub mod trivial1 {
         Ok(())
     }
 
+    pub fn timeout_A(ctx: Context<Timeout_A>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let signer = &mut ctx.accounts.signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         } else {
+             require!(false, ErrorCode::NotTimedOut);
+         }
+        Ok(())
+    }
+
     pub fn move_A_0(ctx: Context<Move_A_0>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
-        let vault = &mut ctx.accounts.vault;
-         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -31,16 +42,12 @@ pub mod trivial1 {
                 ctx.accounts.system_program.to_account_info(),
                 anchor_lang::system_program::Transfer {
                     from: ctx.accounts.signer.to_account_info(),
-                    to: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.game.to_account_info(),
                 },
             ),
             10,
          )?;
          game.pot_total = (game.pot_total + 10);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
@@ -51,11 +58,7 @@ pub mod trivial1 {
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, 10)) as u64;
          if ((0 + p_A) > game.pot_total) {
@@ -69,7 +72,6 @@ pub mod trivial1 {
 
     pub fn claim_A(ctx: Context<Claim_A>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let vault = &mut ctx.accounts.vault;
         let signer = &mut ctx.accounts.signer;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
@@ -77,23 +79,8 @@ pub mod trivial1 {
          {
     let amount = game.claim_amount[0];
     if amount > 0 {
-        let seeds = &[
-            b"vault",
-            game.to_account_info().key.as_ref(),
-            &[ctx.bumps.vault],
-        ];
-        let signer_seeds = &[&seeds[..]];
-        anchor_lang::system_program::transfer(
-            anchor_lang::context::CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                anchor_lang::system_program::Transfer {
-                    from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.signer.to_account_info(),
-                },
-                signer_seeds
-            ),
-            amount,
-        )?;
+        **game.to_account_info().try_borrow_mut_lamports()? -= amount;
+        **signer.to_account_info().try_borrow_mut_lamports()? += amount;
     }
 }
         Ok(())
@@ -105,14 +92,20 @@ pub mod trivial1 {
 #[instruction(game_id: u64, timeout: i64)]
 pub struct Init_instance<'info> {
     #[account(mut)]
-    #[account(init, payer = signer, space = 93, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
+    #[account(init, payer = signer, space = 8 + GameState::INIT_SPACE, seeds = [b"game", game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    #[account(init, payer = signer, space = 0, seeds = [b"vault", game.key().as_ref()], bump)]
-    pub vault: SystemAccount<'info>,
     #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_A<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -122,9 +115,6 @@ pub struct Move_A_0<'info> {
     pub game: Account<'info, GameState>,
     #[account(mut)]
     pub signer: Signer<'info>,
-    #[account(mut)]
-    #[account(seeds = [b"vault", game.key().as_ref()], bump)]
-    pub vault: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -141,15 +131,13 @@ pub struct Claim_A<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    #[account(seeds = [b"vault", game.key().as_ref()], bump)]
-    pub vault: SystemAccount<'info>,
-    #[account(mut)]
     #[account(constraint = signer.key() == game.roles[0] @ ErrorCode::Unauthorized)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct GameState {
     pub game_id: u64,
     pub roles: [Pubkey; 1],
@@ -175,6 +163,8 @@ pub enum ErrorCode {
     Unauthorized,
     #[msg("Action timed out")]
     Timeout,
+    #[msg("Action not yet timed out")]
+    NotTimedOut,
     #[msg("Action dependency not met")]
     DependencyNotMet,
     #[msg("Reveal hash mismatch")]
@@ -185,6 +175,8 @@ pub enum ErrorCode {
     AlreadyClaimed,
     #[msg("Game not finalized")]
     NotFinalized,
+    #[msg("Game already finalized")]
+    GameFinalized,
     #[msg("Invalid amount")]
     BadAmount,
     #[msg("Guard condition failed")]
