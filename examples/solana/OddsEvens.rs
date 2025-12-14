@@ -225,13 +225,19 @@ pub mod oddsevens {
              game.claim_amount[0 as usize] = p_Even;
              game.claim_amount[1 as usize] = p_Odd;
          }
+         if (game.claim_amount[0 as usize] == 0) {
+             game.claimed[0 as usize] = true;
+         }
+         if (game.claim_amount[1 as usize] == 0) {
+             game.claimed[1 as usize] = true;
+         }
          game.is_finalized = true;
         Ok(())
     }
 
     pub fn claim_Even(ctx: Context<Claim_Even>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let recipient = &mut ctx.accounts.recipient;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[0 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[0 as usize] = true;
@@ -245,7 +251,7 @@ pub mod oddsevens {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+                 **recipient.to_account_info().try_borrow_mut_lamports()? += amount;
              }
          }
         Ok(())
@@ -253,7 +259,7 @@ pub mod oddsevens {
 
     pub fn claim_Odd(ctx: Context<Claim_Odd>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let recipient = &mut ctx.accounts.recipient;
          require!(game.is_finalized, ErrorCode::NotFinalized);
          require!(!(game.claimed[1 as usize]), ErrorCode::AlreadyClaimed);
          game.claimed[1 as usize] = true;
@@ -267,7 +273,7 @@ pub mod oddsevens {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
-                 **signer.to_account_info().try_borrow_mut_lamports()? += amount;
+                 **recipient.to_account_info().try_borrow_mut_lamports()? += amount;
              }
          }
         Ok(())
@@ -292,7 +298,7 @@ pub struct Close_game<'info> {
     pub game: Account<'info, GameState>,
     #[account(mut)]
     #[account(address = game.creator)]
-    pub creator: Signer<'info>,
+    pub creator: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -382,8 +388,8 @@ pub struct Claim_Even<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    #[account(constraint = signer.key() == game.roles[0] @ ErrorCode::Unauthorized)]
-    pub signer: Signer<'info>,
+    #[account(address = game.roles[0] @ ErrorCode::Unauthorized)]
+    pub recipient: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -393,8 +399,8 @@ pub struct Claim_Odd<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    #[account(constraint = signer.key() == game.roles[1] @ ErrorCode::Unauthorized)]
-    pub signer: Signer<'info>,
+    #[account(address = game.roles[1] @ ErrorCode::Unauthorized)]
+    pub recipient: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
