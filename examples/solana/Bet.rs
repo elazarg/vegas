@@ -18,9 +18,8 @@ pub mod bet {
 
     pub fn timeout_Gambler(ctx: Context<Timeout_Gambler>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[0 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
@@ -29,9 +28,8 @@ pub mod bet {
 
     pub fn timeout_Race(ctx: Context<Timeout_Race>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[1 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
@@ -60,6 +58,10 @@ pub mod bet {
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 10);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -88,6 +90,14 @@ pub mod bet {
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -107,6 +117,14 @@ pub mod bet {
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
@@ -122,10 +140,23 @@ pub mod bet {
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let spendable_pot: u64 = {
+    let rent = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+    let lamports = **game.to_account_info().lamports.borrow();
+    lamports.saturating_sub(rent)
+};
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          require!((game.action_done[2 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          let p_Gambler: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 20 } else { 0 })) as u64;
          let p_Race: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 0 } else { 20 })) as u64;
-         if (((0 + p_Gambler) + p_Race) > game.pot_total) {
+         if (((0 + p_Gambler) + p_Race) > spendable_pot) {
              game.claim_amount[0 as usize] = game.deposited[0 as usize];
              game.claim_amount[1 as usize] = game.deposited[1 as usize];
          } else {
@@ -146,7 +177,9 @@ pub mod bet {
              let amount = game.claim_amount[0];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -166,7 +199,9 @@ pub mod bet {
              let amount = game.claim_amount[1];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -195,7 +230,7 @@ pub struct Timeout_Gambler<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -204,7 +239,7 @@ pub struct Timeout_Race<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]

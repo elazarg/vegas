@@ -18,9 +18,8 @@ pub mod threewaylottery {
 
     pub fn timeout_Alice(ctx: Context<Timeout_Alice>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[0 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
@@ -29,9 +28,8 @@ pub mod threewaylottery {
 
     pub fn timeout_Bob(ctx: Context<Timeout_Bob>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[1 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
@@ -40,9 +38,8 @@ pub mod threewaylottery {
 
     pub fn timeout_Issuer(ctx: Context<Timeout_Issuer>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[2 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[2 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[2 as usize] = true;
@@ -71,6 +68,10 @@ pub mod threewaylottery {
          game.deposited[2 as usize] = (game.deposited[2 as usize] + 12);
          require!(!(game.bailed[2 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -99,6 +100,14 @@ pub mod threewaylottery {
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 12);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[2 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -130,6 +139,14 @@ pub mod threewaylottery {
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 12);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
@@ -146,6 +163,14 @@ pub mod threewaylottery {
          require!((game.roles[2 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[2 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -164,6 +189,14 @@ pub mod threewaylottery {
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -182,6 +215,10 @@ pub mod threewaylottery {
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[7 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -200,6 +237,18 @@ pub mod threewaylottery {
          require!((game.roles[2 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[2 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -234,14 +283,26 @@ pub mod threewaylottery {
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[6 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
-         if !(game.bailed[0 as usize]) {
-             require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
-         }
          if !(game.bailed[2 as usize]) {
              require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
          }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[7 as usize], ErrorCode::DependencyNotMet);
@@ -268,17 +329,29 @@ pub mod threewaylottery {
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[8 as usize]), ErrorCode::AlreadyDone);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[1 as usize]) {
-             require!(game.action_done[7 as usize], ErrorCode::DependencyNotMet);
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          if !(game.bailed[2 as usize]) {
              require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[7 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((c == 1) || (c == 2)) || (c == 3)), ErrorCode::GuardFailed);
          {
@@ -298,13 +371,30 @@ pub mod threewaylottery {
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let spendable_pot: u64 = {
+    let rent = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+    let lamports = **game.to_account_info().lamports.borrow();
+    lamports.saturating_sub(rent)
+};
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[2 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          require!((game.action_done[4 as usize] || game.bailed[2 as usize]), ErrorCode::NotFinalized);
          require!((game.action_done[6 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          require!((game.action_done[8 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          let p_Bob: u64 = (std::cmp::max(0, if ((game.done_Alice_c && game.done_Bob_c) && game.done_Issuer_c) { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 0) { 6 } else { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 1) { 24 } else { 6 } } } else { if (!(game.done_Alice_c) && !(game.done_Bob_c)) { 1 } else { if (!(game.done_Alice_c) && !(game.done_Issuer_c)) { 34 } else { if (!(game.done_Bob_c) && !(game.done_Issuer_c)) { 1 } else { if !(game.done_Alice_c) { 17 } else { if !(game.done_Bob_c) { 2 } else { if !(game.done_Issuer_c) { 17 } else { 12 } } } } } } })) as u64;
          let p_Issuer: u64 = (std::cmp::max(0, if ((game.done_Alice_c && game.done_Bob_c) && game.done_Issuer_c) { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 0) { 6 } else { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 1) { 6 } else { 24 } } } else { if (!(game.done_Alice_c) && !(game.done_Bob_c)) { 34 } else { if (!(game.done_Alice_c) && !(game.done_Issuer_c)) { 1 } else { if (!(game.done_Bob_c) && !(game.done_Issuer_c)) { 1 } else { if !(game.done_Alice_c) { 17 } else { if !(game.done_Bob_c) { 17 } else { if !(game.done_Issuer_c) { 2 } else { 12 } } } } } } })) as u64;
          let p_Alice: u64 = (std::cmp::max(0, if ((game.done_Alice_c && game.done_Bob_c) && game.done_Issuer_c) { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 0) { 24 } else { if ((((game.Issuer_c + game.Alice_c) + game.Bob_c) % 3) == 1) { 6 } else { 6 } } } else { if (!(game.done_Alice_c) && !(game.done_Bob_c)) { 1 } else { if (!(game.done_Alice_c) && !(game.done_Issuer_c)) { 1 } else { if (!(game.done_Bob_c) && !(game.done_Issuer_c)) { 34 } else { if !(game.done_Alice_c) { 2 } else { if !(game.done_Bob_c) { 17 } else { if !(game.done_Issuer_c) { 17 } else { 12 } } } } } } })) as u64;
-         if ((((0 + p_Bob) + p_Issuer) + p_Alice) > game.pot_total) {
+         if ((((0 + p_Bob) + p_Issuer) + p_Alice) > spendable_pot) {
              game.claim_amount[0 as usize] = game.deposited[0 as usize];
              game.claim_amount[1 as usize] = game.deposited[1 as usize];
              game.claim_amount[2 as usize] = game.deposited[2 as usize];
@@ -327,7 +417,9 @@ pub mod threewaylottery {
              let amount = game.claim_amount[0];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -347,7 +439,9 @@ pub mod threewaylottery {
              let amount = game.claim_amount[1];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -367,7 +461,9 @@ pub mod threewaylottery {
              let amount = game.claim_amount[2];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -396,7 +492,7 @@ pub struct Timeout_Alice<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -405,7 +501,7 @@ pub struct Timeout_Bob<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -414,7 +510,7 @@ pub struct Timeout_Issuer<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]

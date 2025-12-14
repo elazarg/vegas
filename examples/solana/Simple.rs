@@ -18,9 +18,8 @@ pub mod simple {
 
     pub fn timeout_A(ctx: Context<Timeout_A>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[0 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
@@ -29,9 +28,8 @@ pub mod simple {
 
     pub fn timeout_B(ctx: Context<Timeout_B>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let signer = &mut ctx.accounts.signer;
+        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(game.joined[1 as usize], ErrorCode::NotJoined);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
@@ -60,6 +58,10 @@ pub mod simple {
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 6);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -88,6 +90,14 @@ pub mod simple {
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 6);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -104,6 +114,14 @@ pub mod simple {
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
@@ -122,6 +140,14 @@ pub mod simple {
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -140,11 +166,19 @@ pub mod simple {
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          }
          {
              let val_bytes = (c as u8).to_be_bytes();
@@ -163,10 +197,23 @@ pub mod simple {
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let spendable_pot: u64 = {
+    let rent = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+    let lamports = **game.to_account_info().lamports.borrow();
+    lamports.saturating_sub(rent)
+};
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          require!((game.action_done[4 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, if (!(game.done_A_c) && !(game.done_B_c)) { 6 } else { if !(game.done_A_c) { 1 } else { if !(game.done_B_c) { 11 } else { if (game.A_c != game.B_c) { 9 } else { 3 } } } })) as u64;
          let p_B: u64 = (std::cmp::max(0, if (!(game.done_A_c) && !(game.done_B_c)) { 6 } else { if !(game.done_A_c) { 11 } else { if !(game.done_B_c) { 1 } else { if (game.A_c == game.B_c) { 9 } else { 3 } } } })) as u64;
-         if (((0 + p_A) + p_B) > game.pot_total) {
+         if (((0 + p_A) + p_B) > spendable_pot) {
              game.claim_amount[0 as usize] = game.deposited[0 as usize];
              game.claim_amount[1 as usize] = game.deposited[1 as usize];
          } else {
@@ -187,7 +234,9 @@ pub mod simple {
              let amount = game.claim_amount[0];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -207,7 +256,9 @@ pub mod simple {
              let amount = game.claim_amount[1];
              if amount > 0 {
                  let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
-                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                 let game_lamports = **game.to_account_info().lamports.borrow();
+                 let spendable = game_lamports.checked_sub(rent_balance).ok_or(ErrorCode::InsufficientFunds)?;
+                 if amount > spendable {
                       return err!(ErrorCode::InsufficientFunds);
                  }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -236,7 +287,7 @@ pub struct Timeout_A<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -245,7 +296,7 @@ pub struct Timeout_B<'info> {
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
