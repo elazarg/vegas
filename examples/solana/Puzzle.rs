@@ -9,38 +9,34 @@ pub mod puzzle {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.last_ts = now;
         Ok(())
     }
 
-    pub fn timeout_Q_0(ctx: Context<Timeout_Q_0>, ) -> Result<()> {
+    pub fn timeout_A(ctx: Context<Timeout_A>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-         require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         game.bailed[1 as usize] = true;
-         game.action_done[0 as usize] = true;
-         game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
-        Ok(())
-    }
-
-    pub fn timeout_A_1(ctx: Context<Timeout_A_1>, ) -> Result<()> {
-        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
-         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
+         require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.action_done[1 as usize] = true;
-         game.action_ts[1 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.last_ts = now;
+        Ok(())
+    }
+
+    pub fn timeout_Q(ctx: Context<Timeout_Q>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[1 as usize] = true;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -63,18 +59,15 @@ pub mod puzzle {
             50,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 50);
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          game.Q_x = x;
          game.done_Q_x = true;
          game.action_done[0 as usize] = true;
-         game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.action_ts[0 as usize] = now;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -85,17 +78,10 @@ pub mod puzzle {
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -105,8 +91,8 @@ pub mod puzzle {
          game.A_q = q;
          game.done_A_q = true;
          game.action_done[1 as usize] = true;
-         game.action_ts[1 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.action_ts[1 as usize] = now;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -118,14 +104,6 @@ pub mod puzzle {
     let lamports = **game.to_account_info().lamports.borrow();
     lamports.saturating_sub(rent)
 };
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          require!((game.action_done[1 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_Q: u64 = (std::cmp::max(0, 0)) as u64;
          let p_A: u64 = (std::cmp::max(0, 100)) as u64;
@@ -198,17 +176,21 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Q_0<'info> {
+pub struct Timeout_A<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct Timeout_A_1<'info> {
+pub struct Timeout_Q<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]

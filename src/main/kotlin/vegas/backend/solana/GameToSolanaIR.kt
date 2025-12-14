@@ -145,8 +145,8 @@ private fun buildInstructions(
 
     list.add(buildInitInstruction(stateStruct))
 
-    dag.topo().forEach { id ->
-        list.add(buildTimeoutActionInstruction(id, dag, linearization, roleMap))
+    roles.forEach { role ->
+        list.add(buildTimeoutInstruction(role, roleMap))
     }
 
     dag.topo().forEach { id ->
@@ -175,94 +175,42 @@ private fun buildInitInstruction(stateStruct: SolanaAccountStruct): SolanaInstru
         ),
         params = listOf(SolanaParam("game_id", U64), SolanaParam("timeout", I64)),
         body = listOf(
+            Let("now", I64, ClockTimestamp),
             Assign(FieldAccess(Var("game"), "game_id"), Var("game_id")),
             Assign(FieldAccess(Var("game"), "timeout"), Var("timeout")),
-            Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
+            Assign(FieldAccess(Var("game"), "last_ts"), Var("now"))
         )
     )
 }
 
-private fun buildTimeoutActionInstruction(
-    id: ActionId,
-    dag: ActionDag,
-    linearization: Map<ActionId, Int>,
-    roleMap: Map<RoleId, Int>
-): SolanaInstruction {
-    val meta = dag.meta(id)
-    val idx = linearization.getValue(id)
-    val owner = dag.owner(id)
-    val roleIdx = roleMap[owner]!!
+private fun buildTimeoutInstruction(role: RoleId, roleMap: Map<RoleId, Int>): SolanaInstruction {
+    val roleIdx = roleMap[role]!!
     val body = mutableListOf<SolanaStmt>()
 
+    body.add(Let("now", I64, ClockTimestamp))
     body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("GameFinalized", "Game already finalized")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyDone", "Already bailed")))
-    body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
-
-    // Check joined if this is not a join action
-    if (meta.spec.join == null) {
-        body.add(Require(Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong())), SolanaError("NotJoined", "Player not joined")))
-    }
 
     // Check timeout condition
     body.add(Require(
-        Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
+        Binary(BinaryOp.GT, Var("now"), Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
         SolanaError("NotTimedOut", "Not timed out")
     ))
 
-    // Check dependencies (Action must be ENABLED to be timed out)
-    dag.prerequisitesOf(id).forEach { pred ->
-        val predIdx = linearization.getValue(pred)
-        val predOwner = roleMap[dag.owner(pred)]!!
-
-        if (predOwner == roleIdx) {
-            // Self-dependency: we already know !bailed[roleIdx] (from top check)
-            body.add(Require(
-                Index(FieldAccess(Var("game"), "action_done"), IntLit(predIdx.toLong())),
-                SolanaError("DependencyNotMet", "Dependency not met")
-            ))
-        } else {
-            body.add(SolanaStmt.If(
-                Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(predOwner.toLong()))),
-                listOf(Require(
-                    Index(FieldAccess(Var("game"), "action_done"), IntLit(predIdx.toLong())),
-                    SolanaError("DependencyNotMet", "Dependency not met")
-                ))
-            ))
-        }
-    }
-
-    // Set bailed = true
+    // Set bailed = true AND update last_ts
     body.add(Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)))
-    // Mark action as resolved to prevent reprocessing and satisfy downstream
-    body.add(Assign(Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong())), BoolLit(true)))
-    body.add(Assign(Index(FieldAccess(Var("game"), "action_ts"), IntLit(idx.toLong())), ClockTimestamp))
-    // Update last_ts to reset timer
-    body.add(Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp))
+    body.add(Assign(FieldAccess(Var("game"), "last_ts"), Var("now")))
 
-    val ownerName = owner.name
     return SolanaInstruction(
-        name = "timeout_${ownerName}_$idx",
+        name = "timeout_${role.name}",
         accounts = listOf(
             SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
                 "#[account(seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
-            ))
-            // No signer needed for permissionless timeout
+            )),
+            SolanaAccountMeta("_signer", "Signer<'info>", isMut = true) // Payer for tx, prefixed to suppress unused warning
         ),
         params = emptyList(),
         body = body
-    )
-}
-
-private fun emitCheckTimestamp(roleIdx: Int): List<SolanaStmt> {
-    // If timed out: set bailed AND reset last_ts to now.
-    return listOf(
-        SolanaStmt.If(
-            Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
-            listOf(
-                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)),
-                Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
-            )
-        )
     )
 }
 
@@ -325,13 +273,14 @@ private fun buildActionInstruction(
         body.add(Require(Binary(BinaryOp.EQ, Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())), SolanaError("Unauthorized", "Unauthorized")))
     }
 
+    body.add(Let("now", I64, ClockTimestamp))
+
     // 2. Timeout Check (Actor)
-    // require!(!game.bailed[roleIdx], Timeout)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
     // STRICT TIMEOUT: now <= last_ts + timeout
     body.add(Require(
-        Binary(BinaryOp.LE, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
+        Binary(BinaryOp.LE, Var("now"), Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
         SolanaError("Timeout", "Action timed out")
     ))
 
@@ -339,15 +288,7 @@ private fun buildActionInstruction(
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
 
     // 4. Dependency Checks
-    val preds = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
-    val predOwners = preds.map { roleMap[dag.owner(it)]!! }
-    val ownersToCheck = (listOf(roleIdx) + predOwners).distinct()
-
-    ownersToCheck.forEach { r ->
-        body.addAll(emitCheckTimestamp(r))
-    }
-
-    preds.forEach { pred ->
+    dag.prerequisitesOf(id).forEach { pred ->
         val predIdx = linearization.getValue(pred)
         val predOwner = roleMap[dag.owner(pred)]!!
 
@@ -409,8 +350,8 @@ private fun buildActionInstruction(
 
     // Action Done
     body.add(Assign(Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong())), BoolLit(true)))
-    body.add(Assign(Index(FieldAccess(Var("game"), "action_ts"), IntLit(idx.toLong())), ClockTimestamp))
-    body.add(Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp))
+    body.add(Assign(Index(FieldAccess(Var("game"), "action_ts"), IntLit(idx.toLong())), Var("now")))
+    body.add(Assign(FieldAccess(Var("game"), "last_ts"), Var("now")))
 
     return SolanaInstruction(
         name = "move_${meta.struct.owner.name}_$idx",
@@ -440,11 +381,7 @@ private fun buildFinalizeInstruction(
         }
     """.trimIndent())))
 
-    // Check timeouts for ALL roles to ensure liveness
-    roles.forEach { role ->
-        val roleIdx = roleMap[role]!!
-        body.addAll(emitCheckTimestamp(roleIdx))
-    }
+    // No automatic timeout checks. Dependencies must be resolved (done or bailed).
 
     dag.sinks().forEach { sink ->
         val idx = linearization.getValue(sink)

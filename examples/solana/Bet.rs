@@ -9,55 +9,34 @@ pub mod bet {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.last_ts = now;
         Ok(())
     }
 
-    pub fn timeout_Race_0(ctx: Context<Timeout_Race_0>, ) -> Result<()> {
+    pub fn timeout_Gambler(ctx: Context<Timeout_Gambler>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-         require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         game.bailed[1 as usize] = true;
-         game.action_done[0 as usize] = true;
-         game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
-        Ok(())
-    }
-
-    pub fn timeout_Gambler_1(ctx: Context<Timeout_Gambler_1>, ) -> Result<()> {
-        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
-         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
+         require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.action_done[1 as usize] = true;
-         game.action_ts[1 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.last_ts = now;
         Ok(())
     }
 
-    pub fn timeout_Race_2(ctx: Context<Timeout_Race_2>, ) -> Result<()> {
+    pub fn timeout_Race(ctx: Context<Timeout_Race>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
-         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
-         require!(game.joined[1 as usize], ErrorCode::NotJoined);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         if !(game.bailed[0 as usize]) {
-             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
-         }
+         require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
-         game.action_done[2 as usize] = true;
-         game.action_ts[2 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -80,16 +59,13 @@ pub mod bet {
             10,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 10);
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          game.action_done[0 as usize] = true;
-         game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.action_ts[0 as usize] = now;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -112,17 +88,10 @@ pub mod bet {
             10,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -130,8 +99,8 @@ pub mod bet {
          game.Gambler_bet = bet;
          game.done_Gambler_bet = true;
          game.action_done[1 as usize] = true;
-         game.action_ts[1 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.action_ts[1 as usize] = now;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -140,17 +109,10 @@ pub mod bet {
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
+         let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
@@ -158,8 +120,8 @@ pub mod bet {
          game.Race_winner = winner;
          game.done_Race_winner = true;
          game.action_done[2 as usize] = true;
-         game.action_ts[2 as usize] = Clock::get()?.unix_timestamp;
-         game.last_ts = Clock::get()?.unix_timestamp;
+         game.action_ts[2 as usize] = now;
+         game.last_ts = now;
         Ok(())
     }
 
@@ -171,14 +133,6 @@ pub mod bet {
     let lamports = **game.to_account_info().lamports.borrow();
     lamports.saturating_sub(rent)
 };
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          require!((game.action_done[2 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          let p_Gambler: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 20 } else { 0 })) as u64;
          let p_Race: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 0 } else { 20 })) as u64;
@@ -251,24 +205,21 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Race_0<'info> {
+pub struct Timeout_Gambler<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Gambler_1<'info> {
+pub struct Timeout_Race<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-}
-
-#[derive(Accounts)]
-pub struct Timeout_Race_2<'info> {
     #[account(mut)]
-    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
-    pub game: Account<'info, GameState>,
+    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
