@@ -11,6 +11,8 @@ import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
+import vegas.backend.solana.compileToSolana
+import vegas.backend.solana.generateAnchorRust
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -76,6 +78,10 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "scr", "scribble") { prog ->
                 val ir = compileToIR(prog)
                 genScribbleFromIR(ir)
+            },
+            TestCase(example, "rs", "solana") { prog ->
+                val ir = compileToIR(prog)
+                generateAnchorRust(compileToSolana(ir))
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
