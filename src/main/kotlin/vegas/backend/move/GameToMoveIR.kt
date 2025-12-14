@@ -393,28 +393,13 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps
+        // Deps: Require strict done (no bail skipping)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
-            val depOwner = dag.owner(depId)
-
-            if (depOwner == owner) {
-                // Self-dependency: I am not bailed, so just check done
-                add(MoveStmt.Assert(
-                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
-                    103
-                ))
-            } else {
-                // Cross-dependency: Check done OR they bailed
-                val depBailed = MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(depOwner))
-                add(MoveStmt.Assert(
-                    MoveExpr.BinOp(MoveBinOp.OR,
-                        MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
-                        depBailed
-                    ),
-                    103
-                ))
-            }
+            add(MoveStmt.Assert(
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
+                103
+            ))
         }
 
         if (!hidden) {
@@ -457,7 +442,6 @@ private fun buildActionFunction(
                      MoveExpr.Borrow(input, false)
                  )), mut = true))
 
-                 // Fix: Assign bytes of salt to a mutable variable before append, per user request
                  add(MoveStmt.Let("salt_bytes_${p.name}", null,
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false))),
                      mut = true

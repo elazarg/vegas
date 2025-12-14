@@ -122,7 +122,7 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_O_1_done, 102);
-        assert!((instance.action_X_0_done || instance.bailed_X), 103);
+        assert!(instance.action_X_0_done, 103);
         instance.action_O_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -137,7 +137,7 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_X_2_done, 102);
-        assert!((instance.action_O_1_done || instance.bailed_O), 103);
+        assert!(instance.action_O_1_done, 103);
         assert!((((c1 == 0) || (c1 == 1)) || (c1 == 4)), 104);
         instance.X_c1 = c1;
         instance.done_X_c1 = true;
@@ -155,7 +155,7 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_O_3_done, 102);
-        assert!((instance.action_X_2_done || instance.bailed_X), 103);
+        assert!(instance.action_X_2_done, 103);
         assert!((((((c1 == 1) || (c1 == 3)) || (c1 == 4)) || (c1 == 5)) || (c1 == 9)), 104);
         assert!((instance.X_c1 != c1), 105);
         instance.O_c1 = c1;
@@ -174,7 +174,7 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_X_4_done, 102);
-        assert!((instance.action_O_3_done || instance.bailed_O), 103);
+        assert!(instance.action_O_3_done, 103);
         assert!(instance.action_X_2_done, 103);
         assert!((((((((((c2 == 0) || (c2 == 1)) || (c2 == 2)) || (c2 == 3)) || (c2 == 4)) || (c2 == 5)) || (c2 == 6)) || (c2 == 7)) || (c2 == 8)), 104);
         assert!((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != c2)) && (instance.O_c1 != c2)), 105);
@@ -194,8 +194,8 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_O_5_done, 102);
-        assert!((instance.action_X_4_done || instance.bailed_X), 103);
-        assert!((instance.action_X_2_done || instance.bailed_X), 103);
+        assert!(instance.action_X_4_done, 103);
+        assert!(instance.action_X_2_done, 103);
         assert!(instance.action_O_3_done, 103);
         assert!((((((((((c2 == 0) || (c2 == 1)) || (c2 == 2)) || (c2 == 3)) || (c2 == 4)) || (c2 == 5)) || (c2 == 6)) || (c2 == 7)) || (c2 == 8)), 104);
         assert!(((((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != instance.X_c2)) && (instance.X_c1 != c2)) && (instance.O_c1 != instance.X_c2)) && (instance.O_c1 != c2)) && (instance.X_c2 != c2)), 105);
@@ -215,9 +215,9 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_X_6_done, 102);
-        assert!((instance.action_O_5_done || instance.bailed_O), 103);
+        assert!(instance.action_O_5_done, 103);
         assert!(instance.action_X_2_done, 103);
-        assert!((instance.action_O_3_done || instance.bailed_O), 103);
+        assert!(instance.action_O_3_done, 103);
         assert!(instance.action_X_4_done, 103);
         assert!((((((((((c3 == 0) || (c3 == 1)) || (c3 == 2)) || (c3 == 3)) || (c3 == 4)) || (c3 == 5)) || (c3 == 6)) || (c3 == 7)) || (c3 == 8)), 104);
         assert!(((((((((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != instance.X_c2)) && (instance.X_c1 != instance.O_c2)) && (instance.X_c1 != c3)) && (instance.O_c1 != instance.X_c2)) && (instance.O_c1 != instance.O_c2)) && (instance.O_c1 != c3)) && (instance.X_c2 != instance.O_c2)) && (instance.X_c2 != c3)) && (instance.O_c2 != c3)), 105);
@@ -237,10 +237,10 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_O_7_done, 102);
-        assert!((instance.action_X_6_done || instance.bailed_X), 103);
-        assert!((instance.action_X_2_done || instance.bailed_X), 103);
+        assert!(instance.action_X_6_done, 103);
+        assert!(instance.action_X_2_done, 103);
         assert!(instance.action_O_3_done, 103);
-        assert!((instance.action_X_4_done || instance.bailed_X), 103);
+        assert!(instance.action_X_4_done, 103);
         assert!(instance.action_O_5_done, 103);
         assert!((((((((((c3 == 0) || (c3 == 1)) || (c3 == 2)) || (c3 == 3)) || (c3 == 4)) || (c3 == 5)) || (c3 == 6)) || (c3 == 7)) || (c3 == 8)), 104);
         assert!((((((((((((((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != instance.X_c2)) && (instance.X_c1 != instance.O_c2)) && (instance.X_c1 != instance.X_c3)) && (instance.X_c1 != c3)) && (instance.O_c1 != instance.X_c2)) && (instance.O_c1 != instance.O_c2)) && (instance.O_c1 != instance.X_c3)) && (instance.O_c1 != c3)) && (instance.X_c2 != instance.O_c2)) && (instance.X_c2 != instance.X_c3)) && (instance.X_c2 != c3)) && (instance.O_c2 != instance.X_c3)) && (instance.O_c2 != c3)) && (instance.X_c3 != c3)), 105);
@@ -260,11 +260,11 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_X_8_done, 102);
-        assert!((instance.action_O_7_done || instance.bailed_O), 103);
+        assert!(instance.action_O_7_done, 103);
         assert!(instance.action_X_2_done, 103);
-        assert!((instance.action_O_3_done || instance.bailed_O), 103);
+        assert!(instance.action_O_3_done, 103);
         assert!(instance.action_X_4_done, 103);
-        assert!((instance.action_O_5_done || instance.bailed_O), 103);
+        assert!(instance.action_O_5_done, 103);
         assert!(instance.action_X_6_done, 103);
         assert!((((((((((c4 == 0) || (c4 == 1)) || (c4 == 2)) || (c4 == 3)) || (c4 == 4)) || (c4 == 5)) || (c4 == 6)) || (c4 == 7)) || (c4 == 8)), 104);
         assert!((((((((((((((((((((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != instance.X_c2)) && (instance.X_c1 != instance.O_c2)) && (instance.X_c1 != instance.X_c3)) && (instance.X_c1 != instance.O_c3)) && (instance.X_c1 != c4)) && (instance.O_c1 != instance.X_c2)) && (instance.O_c1 != instance.O_c2)) && (instance.O_c1 != instance.X_c3)) && (instance.O_c1 != instance.O_c3)) && (instance.O_c1 != c4)) && (instance.X_c2 != instance.O_c2)) && (instance.X_c2 != instance.X_c3)) && (instance.X_c2 != instance.O_c3)) && (instance.X_c2 != c4)) && (instance.O_c2 != instance.X_c3)) && (instance.O_c2 != instance.O_c3)) && (instance.O_c2 != c4)) && (instance.X_c3 != instance.O_c3)) && (instance.X_c3 != c4)) && (instance.O_c3 != c4)), 105);
@@ -284,12 +284,12 @@ module tictactoe::tictactoe {
             return
         };
         assert!(!instance.action_O_9_done, 102);
-        assert!((instance.action_X_8_done || instance.bailed_X), 103);
-        assert!((instance.action_X_2_done || instance.bailed_X), 103);
+        assert!(instance.action_X_8_done, 103);
+        assert!(instance.action_X_2_done, 103);
         assert!(instance.action_O_3_done, 103);
-        assert!((instance.action_X_4_done || instance.bailed_X), 103);
+        assert!(instance.action_X_4_done, 103);
         assert!(instance.action_O_5_done, 103);
-        assert!((instance.action_X_6_done || instance.bailed_X), 103);
+        assert!(instance.action_X_6_done, 103);
         assert!(instance.action_O_7_done, 103);
         assert!((((((((((c4 == 0) || (c4 == 1)) || (c4 == 2)) || (c4 == 3)) || (c4 == 4)) || (c4 == 5)) || (c4 == 6)) || (c4 == 7)) || (c4 == 8)), 104);
         assert!(((((((((((((((((((((((((((((instance.X_c1 != instance.O_c1) && (instance.X_c1 != instance.X_c2)) && (instance.X_c1 != instance.O_c2)) && (instance.X_c1 != instance.X_c3)) && (instance.X_c1 != instance.O_c3)) && (instance.X_c1 != instance.X_c4)) && (instance.X_c1 != c4)) && (instance.O_c1 != instance.X_c2)) && (instance.O_c1 != instance.O_c2)) && (instance.O_c1 != instance.X_c3)) && (instance.O_c1 != instance.O_c3)) && (instance.O_c1 != instance.X_c4)) && (instance.O_c1 != c4)) && (instance.X_c2 != instance.O_c2)) && (instance.X_c2 != instance.X_c3)) && (instance.X_c2 != instance.O_c3)) && (instance.X_c2 != instance.X_c4)) && (instance.X_c2 != c4)) && (instance.O_c2 != instance.X_c3)) && (instance.O_c2 != instance.O_c3)) && (instance.O_c2 != instance.X_c4)) && (instance.O_c2 != c4)) && (instance.X_c3 != instance.O_c3)) && (instance.X_c3 != instance.X_c4)) && (instance.X_c3 != c4)) && (instance.O_c3 != instance.X_c4)) && (instance.O_c3 != c4)) && (instance.X_c4 != c4)), 105);

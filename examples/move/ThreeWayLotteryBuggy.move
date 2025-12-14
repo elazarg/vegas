@@ -140,7 +140,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Alice_1_done, 102);
-        assert!((instance.action_Issuer_0_done || instance.bailed_Issuer), 103);
+        assert!(instance.action_Issuer_0_done, 103);
         instance.action_Alice_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -155,7 +155,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Bob_2_done, 102);
-        assert!((instance.action_Alice_1_done || instance.bailed_Alice), 103);
+        assert!(instance.action_Alice_1_done, 103);
         instance.action_Bob_2_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -170,7 +170,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Issuer_4_done, 102);
-        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Bob_2_done, 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Issuer_c_hidden = hidden_c;
         instance.done_Issuer_c_hidden = true;
@@ -188,7 +188,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Alice_6_done, 102);
-        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Bob_2_done, 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Alice_c_hidden = hidden_c;
         instance.done_Alice_c_hidden = true;
@@ -224,10 +224,10 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Issuer_5_done, 102);
-        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Bob_2_done, 103);
         assert!(instance.action_Issuer_4_done, 103);
-        assert!((instance.action_Alice_6_done || instance.bailed_Alice), 103);
-        assert!((instance.action_Bob_8_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Alice_6_done, 103);
+        assert!(instance.action_Bob_8_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
         let mut data_c = bcs::to_bytes<u64>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
@@ -249,10 +249,10 @@ module threewaylotterybuggy::threewaylotterybuggy {
             return
         };
         assert!(!instance.action_Alice_7_done, 102);
-        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Bob_2_done, 103);
         assert!(instance.action_Alice_6_done, 103);
-        assert!((instance.action_Issuer_4_done || instance.bailed_Issuer), 103);
-        assert!((instance.action_Bob_8_done || instance.bailed_Bob), 103);
+        assert!(instance.action_Issuer_4_done, 103);
+        assert!(instance.action_Bob_8_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
         let mut data_c = bcs::to_bytes<u64>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
@@ -276,8 +276,8 @@ module threewaylotterybuggy::threewaylotterybuggy {
         assert!(!instance.action_Bob_9_done, 102);
         assert!(instance.action_Bob_2_done, 103);
         assert!(instance.action_Bob_8_done, 103);
-        assert!((instance.action_Issuer_4_done || instance.bailed_Issuer), 103);
-        assert!((instance.action_Alice_6_done || instance.bailed_Alice), 103);
+        assert!(instance.action_Issuer_4_done, 103);
+        assert!(instance.action_Alice_6_done, 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
         let mut data_c = bcs::to_bytes<u64>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);

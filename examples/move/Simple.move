@@ -107,7 +107,7 @@ module simple::simple {
             return
         };
         assert!(!instance.action_B_1_done, 102);
-        assert!((instance.action_A_0_done || instance.bailed_A), 103);
+        assert!(instance.action_A_0_done, 103);
         instance.action_B_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -122,7 +122,7 @@ module simple::simple {
             return
         };
         assert!(!instance.action_A_2_done, 102);
-        assert!((instance.action_B_1_done || instance.bailed_B), 103);
+        assert!(instance.action_B_1_done, 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.A_c_hidden = hidden_c;
         instance.done_A_c_hidden = true;
@@ -140,7 +140,7 @@ module simple::simple {
             return
         };
         assert!(!instance.action_B_3_done, 102);
-        assert!((instance.action_A_2_done || instance.bailed_A), 103);
+        assert!(instance.action_A_2_done, 103);
         instance.B_c = c;
         instance.done_B_c = true;
         instance.action_B_3_done = true;
@@ -157,7 +157,7 @@ module simple::simple {
             return
         };
         assert!(!instance.action_A_4_done, 102);
-        assert!((instance.action_B_3_done || instance.bailed_B), 103);
+        assert!(instance.action_B_3_done, 103);
         assert!(instance.action_A_2_done, 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);

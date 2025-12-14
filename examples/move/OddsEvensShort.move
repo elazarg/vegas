@@ -129,7 +129,7 @@ module oddsevensshort::oddsevensshort {
         };
         assert!(!instance.action_Odd_2_done, 102);
         assert!(instance.action_Odd_1_done, 103);
-        assert!((instance.action_Even_3_done || instance.bailed_Even), 103);
+        assert!(instance.action_Even_3_done, 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
         vector::append<u8>(&mut data_c, &mut salt_bytes_c);
@@ -151,7 +151,7 @@ module oddsevensshort::oddsevensshort {
         };
         assert!(!instance.action_Even_4_done, 102);
         assert!(instance.action_Even_3_done, 103);
-        assert!((instance.action_Odd_1_done || instance.bailed_Odd), 103);
+        assert!(instance.action_Odd_1_done, 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
         let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
         vector::append<u8>(&mut data_c, &mut salt_bytes_c);
