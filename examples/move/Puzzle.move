@@ -46,6 +46,7 @@ module puzzle::puzzle {
 
     public entry fun join_Q<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Q, 100);
+        assert!((coin::value<Asset>(&payment) == 50), 112);
         instance.role_Q = tx_context::sender(ctx);
         instance.joined_Q = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -62,8 +63,11 @@ module puzzle::puzzle {
 
     public entry fun move_Q_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, x: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Q), 101);
+        assert!(instance.joined_Q, 113);
+        assert!(!instance.bailed_Q, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Q = true;
+            return
         };
         assert!(!instance.action_Q_0_done, 102);
         instance.Q_x = x;
@@ -74,11 +78,14 @@ module puzzle::puzzle {
 
     public entry fun move_A_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, p: u64, q: u64) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
+        assert!(instance.joined_A, 113);
+        assert!(!instance.bailed_A, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
+            return
         };
         assert!(!instance.action_A_1_done, 102);
-        assert!(instance.action_Q_0_done, 103);
+        assert!((instance.action_Q_0_done || instance.bailed_Q), 103);
         assert!(((((p * q) == instance.Q_x) && (p != 1)) && (q != 1)), 105);
         instance.A_p = p;
         instance.done_A_p = true;
@@ -89,9 +96,9 @@ module puzzle::puzzle {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_A_1_done, 107);
+        assert!((instance.action_A_1_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_Q = 0;
         total_payout = (total_payout + 0);
         instance.claim_amount_A = 100;

@@ -64,6 +64,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun join_Issuer<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Issuer, 100);
+        assert!((coin::value<Asset>(&payment) == 12), 112);
         instance.role_Issuer = tx_context::sender(ctx);
         instance.joined_Issuer = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -72,6 +73,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun join_Alice<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Alice, 100);
+        assert!((coin::value<Asset>(&payment) == 12), 112);
         instance.role_Alice = tx_context::sender(ctx);
         instance.joined_Alice = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -80,6 +82,7 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun join_Bob<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Bob, 100);
+        assert!((coin::value<Asset>(&payment) == 12), 112);
         instance.role_Bob = tx_context::sender(ctx);
         instance.joined_Bob = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -88,8 +91,11 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Issuer_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        assert!(instance.joined_Issuer, 113);
+        assert!(!instance.bailed_Issuer, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
+            return
         };
         assert!(!instance.action_Issuer_0_done, 102);
         instance.action_Issuer_0_done = true;
@@ -98,33 +104,43 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Alice_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        assert!(instance.joined_Alice, 113);
+        assert!(!instance.bailed_Alice, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
+            return
         };
         assert!(!instance.action_Alice_1_done, 102);
-        assert!(instance.action_Issuer_0_done, 103);
+        assert!((instance.action_Issuer_0_done || instance.bailed_Issuer), 103);
         instance.action_Alice_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
     public entry fun move_Bob_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        assert!(instance.joined_Bob, 113);
+        assert!(!instance.bailed_Bob, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
+            return
         };
         assert!(!instance.action_Bob_2_done, 102);
-        assert!(instance.action_Alice_1_done, 103);
+        assert!((instance.action_Alice_1_done || instance.bailed_Alice), 103);
         instance.action_Bob_2_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
     public entry fun move_Issuer_3<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        assert!(instance.joined_Issuer, 113);
+        assert!(!instance.bailed_Issuer, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
+            return
         };
         assert!(!instance.action_Issuer_4_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Issuer_c_hidden = hidden_c;
         instance.done_Issuer_c_hidden = true;
         instance.action_Issuer_4_done = true;
@@ -133,11 +149,15 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Alice_5<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        assert!(instance.joined_Alice, 113);
+        assert!(!instance.bailed_Alice, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
+            return
         };
         assert!(!instance.action_Alice_6_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Alice_c_hidden = hidden_c;
         instance.done_Alice_c_hidden = true;
         instance.action_Alice_6_done = true;
@@ -146,11 +166,15 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Bob_7<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        assert!(instance.joined_Bob, 113);
+        assert!(!instance.bailed_Bob, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
+            return
         };
         assert!(!instance.action_Bob_8_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Bob_c_hidden = hidden_c;
         instance.done_Bob_c_hidden = true;
         instance.action_Bob_8_done = true;
@@ -159,16 +183,19 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Issuer_4<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Issuer), 101);
+        assert!(instance.joined_Issuer, 113);
+        assert!(!instance.bailed_Issuer, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Issuer = true;
+            return
         };
         assert!(!instance.action_Issuer_5_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
-        assert!(instance.action_Issuer_4_done, 103);
-        assert!(instance.action_Alice_6_done, 103);
-        assert!(instance.action_Bob_8_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((instance.action_Issuer_4_done || instance.bailed_Issuer), 103);
+        assert!((instance.action_Alice_6_done || instance.bailed_Alice), 103);
+        assert!((instance.action_Bob_8_done || instance.bailed_Bob), 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = bcs::to_bytes<u64>(&c);
+        let mut data_c = bcs::to_bytes<u64>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.Issuer_c_hidden), 106);
         instance.Issuer_c = c;
@@ -179,16 +206,19 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Alice_6<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Alice), 101);
+        assert!(instance.joined_Alice, 113);
+        assert!(!instance.bailed_Alice, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Alice = true;
+            return
         };
         assert!(!instance.action_Alice_7_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
-        assert!(instance.action_Alice_6_done, 103);
-        assert!(instance.action_Issuer_4_done, 103);
-        assert!(instance.action_Bob_8_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((instance.action_Alice_6_done || instance.bailed_Alice), 103);
+        assert!((instance.action_Issuer_4_done || instance.bailed_Issuer), 103);
+        assert!((instance.action_Bob_8_done || instance.bailed_Bob), 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = bcs::to_bytes<u64>(&c);
+        let mut data_c = bcs::to_bytes<u64>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.Alice_c_hidden), 106);
         instance.Alice_c = c;
@@ -199,16 +229,19 @@ module threewaylotterybuggy::threewaylotterybuggy {
 
     public entry fun move_Bob_8<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: u64, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Bob), 101);
+        assert!(instance.joined_Bob, 113);
+        assert!(!instance.bailed_Bob, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Bob = true;
+            return
         };
         assert!(!instance.action_Bob_9_done, 102);
-        assert!(instance.action_Bob_2_done, 103);
-        assert!(instance.action_Bob_8_done, 103);
-        assert!(instance.action_Issuer_4_done, 103);
-        assert!(instance.action_Alice_6_done, 103);
+        assert!((instance.action_Bob_2_done || instance.bailed_Bob), 103);
+        assert!((instance.action_Bob_8_done || instance.bailed_Bob), 103);
+        assert!((instance.action_Issuer_4_done || instance.bailed_Issuer), 103);
+        assert!((instance.action_Alice_6_done || instance.bailed_Alice), 103);
         assert!((((c == 1) || (c == 2)) || (c == 3)), 104);
-        let data_c = bcs::to_bytes<u64>(&c);
+        let mut data_c = bcs::to_bytes<u64>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.Bob_c_hidden), 106);
         instance.Bob_c = c;
@@ -218,11 +251,9 @@ module threewaylotterybuggy::threewaylotterybuggy {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_Issuer_5_done, 107);
-        assert!(instance.action_Alice_7_done, 107);
-        assert!(instance.action_Bob_9_done, 107);
+        assert!((((instance.action_Issuer_5_done && instance.action_Alice_7_done) && instance.action_Bob_9_done) || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_Bob = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if ((instance.Alice_c == instance.Bob_c)) 6 else if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12;
         total_payout = (total_payout + if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if ((instance.Alice_c == instance.Bob_c)) 6 else if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) 6 else 24 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 1 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 34 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 2 else if (!instance.done_Issuer_c) 17 else 12);
         instance.claim_amount_Issuer = if (((instance.done_Alice_c && instance.done_Bob_c) && instance.done_Issuer_c)) if ((instance.Alice_c == instance.Bob_c)) 24 else if (((((instance.Alice_c + instance.Bob_c) + instance.Issuer_c) % 2) == 0)) 6 else 6 else if ((!instance.done_Alice_c && !instance.done_Bob_c)) 34 else if ((!instance.done_Alice_c && !instance.done_Issuer_c)) 1 else if ((!instance.done_Bob_c && !instance.done_Issuer_c)) 1 else if (!instance.done_Alice_c) 17 else if (!instance.done_Bob_c) 17 else if (!instance.done_Issuer_c) 2 else 12;

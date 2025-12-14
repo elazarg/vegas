@@ -56,6 +56,9 @@ interface MovePlatform {
     // Escrow operations
     fun zeroBalance(assetType: MoveType): MoveExpr
 
+    // Get value of a coin expression
+    fun coinValue(coinExpr: MoveExpr, assetType: MoveType): MoveExpr
+
     // Convert payment param to balance and join to pot
     // Returns expression or statement to execute join
     fun joinBalanceStmt(

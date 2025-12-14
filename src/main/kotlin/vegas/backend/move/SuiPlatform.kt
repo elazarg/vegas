@@ -79,6 +79,11 @@ object SuiPlatform : MovePlatform {
         return MoveExpr.Call("balance", "zero", listOf(assetType), emptyList())
     }
 
+    override fun coinValue(coinExpr: MoveExpr, assetType: MoveType): MoveExpr {
+        // coin::value(&coin)
+        return MoveExpr.Call("coin", "value", listOf(assetType), listOf(MoveExpr.Borrow(coinExpr, false)))
+    }
+
     override fun joinBalanceStmt(potRef: MoveExpr, paymentVar: MoveExpr, assetType: MoveType): MoveStmt {
         // balance::join(&mut pot, coin::into_balance(payment))
         val intoBalance = MoveExpr.Call(

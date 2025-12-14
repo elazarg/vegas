@@ -205,11 +205,22 @@ private fun buildJoinFunction(role: RoleId, game: GameIR, platform: MovePlatform
         val roleAddr = roleAddrName(role)
         val ctxVar = MoveExpr.Var(platform.contextParamName())
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
+        val deposit = try { game.dag.deposit(role).v } catch (e: Exception) { 0 }
 
         add(MoveStmt.Assert(
             MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoined)),
             100
         ))
+
+        if (deposit > 0) {
+            add(MoveStmt.Assert(
+                MoveExpr.BinOp(MoveBinOp.EQ,
+                    platform.coinValue(MoveExpr.Var("payment"), MoveType.TypeParam("Asset")),
+                    MoveExpr.U64Lit(deposit.toLong())
+                ),
+                112 // EBadDeposit
+            ))
+        }
 
         add(MoveStmt.Assign(
             MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddr),
@@ -279,14 +290,27 @@ private fun buildActionFunction(
         val ctxVar = MoveExpr.Var(platform.contextParamName())
         val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
 
+        // 1. Auth & Liveness
         add(MoveStmt.Assert(
             platform.checkSender(ctxVar, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleAddrName(owner))),
             101
         ))
 
+        // Ensure joined
+        add(MoveStmt.Assert(
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleJoinedName(owner)),
+            113 // ENotJoined
+        ))
+
+        // Ensure not bailed (EVM-style: bailed roles cannot act)
+        add(MoveStmt.Assert(
+            MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(owner))),
+            114 // EPlayerBailed
+        ))
+
         val now = platform.currentTimeExpr(clockVar)
 
-        // Timeout check
+        // Timeout check (Self-bail)
         add(MoveStmt.If(
             MoveExpr.BinOp(MoveBinOp.GT, now, MoveExpr.BinOp(MoveBinOp.ADD,
                 MoveExpr.FieldAccess(MoveExpr.Var("instance"), "last_ts_ms"),
@@ -296,7 +320,8 @@ private fun buildActionFunction(
                 MoveStmt.Assign(
                     MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(owner)),
                     MoveExpr.BoolLit(true)
-                )
+                ),
+                MoveStmt.Return(null) // Return early if bailed
             )
         ))
 
@@ -306,10 +331,17 @@ private fun buildActionFunction(
             102
         ))
 
+        // Deps: Require done OR (dep_owner is bailed)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
+            val depOwner = dag.owner(depId)
+            val depBailed = MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(depOwner))
+
             add(MoveStmt.Assert(
-                MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
+                MoveExpr.BinOp(MoveBinOp.OR,
+                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
+                    depBailed
+                ),
                 103
             ))
         }
@@ -331,6 +363,20 @@ private fun buildActionFunction(
              }
         }
 
+        // 32-byte constraint for commits
+        if (hidden) {
+            spec.params.forEach { p ->
+                val input = MoveExpr.Var(inputParamName(p.name, hidden))
+                add(MoveStmt.Assert(
+                    MoveExpr.BinOp(MoveBinOp.EQ,
+                        MoveExpr.Call("vector", "length", listOf(MoveType.U8), listOf(MoveExpr.Borrow(input, false))),
+                        MoveExpr.U64Lit(32)
+                    ),
+                    115 // EInvalidCommitLength
+                ))
+            }
+        }
+
         if (kind == Visibility.REVEAL) {
              spec.params.forEach { p ->
                  val input = MoveExpr.Var(inputParamName(p.name, false))
@@ -338,7 +384,8 @@ private fun buildActionFunction(
 
                  add(MoveStmt.Let("data_${p.name}", null, MoveExpr.Call("bcs", "to_bytes", listOf(translateType(p.type, platform)), listOf(
                      MoveExpr.Borrow(input, false)
-                 ))))
+                 )), mut = true)) // MUTABLE
+
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(
@@ -393,14 +440,28 @@ private fun buildActionFunction(
 
 private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePlatform): MoveFunction {
     val body = buildList {
-        dag.sinks().forEach { sinkId ->
+        val clockVar = platform.extraActionParams().find { it.name == "clock" }?.let { MoveExpr.Var(it.name) }
+        val now = platform.currentTimeExpr(clockVar)
+
+        val sinksDone = dag.sinks().map { sinkId ->
             val doneField = "action_${sinkId.first.name}_${sinkId.second}_done"
-            add(MoveStmt.Assert(MoveExpr.FieldAccess(MoveExpr.Var("instance"), doneField), 107))
-        }
+            MoveExpr.FieldAccess(MoveExpr.Var("instance"), doneField)
+        }.reduce<MoveExpr, MoveExpr> { a, b -> MoveExpr.BinOp(MoveBinOp.AND, a, b) }
+
+        val timedOut = MoveExpr.BinOp(MoveBinOp.GT, now, MoveExpr.BinOp(MoveBinOp.ADD,
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), "last_ts_ms"),
+                MoveExpr.FieldAccess(MoveExpr.Var("instance"), "timeout_ms")
+        ))
+
+        // Assert sinks done OR timed out
+        add(MoveStmt.Assert(
+            MoveExpr.BinOp(MoveBinOp.OR, sinksDone, timedOut),
+            107
+        ))
 
         add(MoveStmt.Assert(MoveExpr.UnaryOp(MoveUnaryOp.NOT, MoveExpr.FieldAccess(MoveExpr.Var("instance"), "finalized")), 108))
 
-        add(MoveStmt.Let("total_payout", platform.u64Type(), MoveExpr.U64Lit(0)))
+        add(MoveStmt.Let("total_payout", platform.u64Type(), MoveExpr.U64Lit(0), mut = true)) // MUTABLE
 
         game.payoffs.forEach { (role, expr) ->
             val payoutExpr = translateExpr(expr, null, emptySet(), platform)
@@ -430,8 +491,6 @@ private fun buildFinalizeFunction(game: GameIR, dag: ActionDag, platform: MovePl
         visibility = MoveVisibility.PUBLIC_ENTRY,
         params = listOf(
              MoveParam("instance", MoveType.Ref(MoveType.Struct(null, instanceName(), listOf(MoveType.TypeParam("Asset"))), true)),
-             // Finalize might need clock? Original implementation had it but unused?
-             // "finalize(instance, clock, ctx)"
         ) + platform.extraActionParams() + listOf(MoveParam(platform.contextParamName(), platform.contextParamType(true))),
         body = body,
         typeParams = listOf("Asset")

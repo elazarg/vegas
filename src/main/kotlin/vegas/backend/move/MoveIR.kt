@@ -61,7 +61,7 @@ data class MoveParam(val name: String, val type: MoveType)
 // ==========================================
 
 sealed class MoveStmt {
-    data class Let(val name: String, val type: MoveType? = null, val expr: MoveExpr) : MoveStmt()
+    data class Let(val name: String, val type: MoveType? = null, val expr: MoveExpr, val mut: Boolean = false) : MoveStmt()
     data class Assign(val lhs: MoveExpr, val rhs: MoveExpr) : MoveStmt() // *lhs = rhs or variable assignment if lhs is var
     data class Mutate(val lhs: MoveExpr, val rhs: MoveExpr) : MoveStmt() // *lhs = rhs
     data class Return(val expr: MoveExpr?) : MoveStmt()

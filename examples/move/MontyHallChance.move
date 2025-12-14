@@ -50,6 +50,7 @@ module montyhallchance::montyhallchance {
 
     public entry fun join_Guest<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Guest, 100);
+        assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Guest = tx_context::sender(ctx);
         instance.joined_Guest = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -58,8 +59,11 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Host_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
+        assert!(instance.joined_Host, 113);
+        assert!(!instance.bailed_Host, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
+            return
         };
         assert!(!instance.action_Host_0_done, 102);
         instance.action_Host_0_done = true;
@@ -68,22 +72,29 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Guest_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
+        assert!(instance.joined_Guest, 113);
+        assert!(!instance.bailed_Guest, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
+            return
         };
         assert!(!instance.action_Guest_1_done, 102);
-        assert!(instance.action_Host_0_done, 103);
+        assert!((instance.action_Host_0_done || instance.bailed_Host), 103);
         instance.action_Guest_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
     public entry fun move_Host_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_car: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
+        assert!(instance.joined_Host, 113);
+        assert!(!instance.bailed_Host, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
+            return
         };
         assert!(!instance.action_Host_2_done, 102);
-        assert!(instance.action_Guest_1_done, 103);
+        assert!((instance.action_Guest_1_done || instance.bailed_Guest), 103);
+        assert!((vector::length<u8>(&hidden_car) == 32), 115);
         instance.Host_car_hidden = hidden_car;
         instance.done_Host_car_hidden = true;
         instance.action_Host_2_done = true;
@@ -92,11 +103,14 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Guest_3<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, d: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
+        assert!(instance.joined_Guest, 113);
+        assert!(!instance.bailed_Guest, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
+            return
         };
         assert!(!instance.action_Guest_3_done, 102);
-        assert!(instance.action_Host_2_done, 103);
+        assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
         assert!((((d == 0) || (d == 1)) || (d == 2)), 104);
         instance.Guest_d = d;
         instance.done_Guest_d = true;
@@ -106,12 +120,15 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Host_4<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, goat: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
+        assert!(instance.joined_Host, 113);
+        assert!(!instance.bailed_Host, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
+            return
         };
         assert!(!instance.action_Host_4_done, 102);
-        assert!(instance.action_Guest_3_done, 103);
-        assert!(instance.action_Host_2_done, 103);
+        assert!((instance.action_Guest_3_done || instance.bailed_Guest), 103);
+        assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
         assert!((((goat == 0) || (goat == 1)) || (goat == 2)), 104);
         assert!(((goat != instance.Guest_d) && (goat != instance.Host_car)), 105);
         instance.Host_goat = goat;
@@ -122,11 +139,14 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Guest_5<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, switch: bool) {
         assert!((tx_context::sender(ctx) == instance.role_Guest), 101);
+        assert!(instance.joined_Guest, 113);
+        assert!(!instance.bailed_Guest, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Guest = true;
+            return
         };
         assert!(!instance.action_Guest_5_done, 102);
-        assert!(instance.action_Host_4_done, 103);
+        assert!((instance.action_Host_4_done || instance.bailed_Host), 103);
         instance.Guest_switch = switch;
         instance.done_Guest_switch = true;
         instance.action_Guest_5_done = true;
@@ -135,14 +155,17 @@ module montyhallchance::montyhallchance {
 
     public entry fun move_Host_6<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, car: u64, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Host), 101);
+        assert!(instance.joined_Host, 113);
+        assert!(!instance.bailed_Host, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Host = true;
+            return
         };
         assert!(!instance.action_Host_6_done, 102);
-        assert!(instance.action_Guest_5_done, 103);
-        assert!(instance.action_Host_2_done, 103);
+        assert!((instance.action_Guest_5_done || instance.bailed_Guest), 103);
+        assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
         assert!((((car == 0) || (car == 1)) || (car == 2)), 104);
-        let data_car = bcs::to_bytes<u64>(&car);
+        let mut data_car = bcs::to_bytes<u64>(&car);
         vector::append<u8>(&mut data_car, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_car) == instance.Host_car_hidden), 106);
         instance.Host_car = car;
@@ -152,9 +175,9 @@ module montyhallchance::montyhallchance {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_Host_6_done, 107);
+        assert!((instance.action_Host_6_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_Guest = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 120 else 80 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 200 else 0;
         total_payout = (total_payout + if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 120 else 80 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 200 else 0);
         instance.claim_amount_Host = if (((instance.done_Host_car && instance.done_Host_goat) && instance.done_Guest_switch)) if (((instance.Guest_d != instance.Host_car) == instance.Guest_switch)) 80 else 120 else if ((!instance.done_Host_car || !instance.done_Host_goat)) 0 else 200;

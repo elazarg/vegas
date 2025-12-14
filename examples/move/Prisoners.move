@@ -52,6 +52,7 @@ module prisoners::prisoners {
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_A, 100);
+        assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_A = tx_context::sender(ctx);
         instance.joined_A = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -60,6 +61,7 @@ module prisoners::prisoners {
 
     public entry fun join_B<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_B, 100);
+        assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_B = tx_context::sender(ctx);
         instance.joined_B = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -68,8 +70,11 @@ module prisoners::prisoners {
 
     public entry fun move_A_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
+        assert!(instance.joined_A, 113);
+        assert!(!instance.bailed_A, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
+            return
         };
         assert!(!instance.action_A_0_done, 102);
         instance.action_A_0_done = true;
@@ -78,22 +83,29 @@ module prisoners::prisoners {
 
     public entry fun move_B_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_B), 101);
+        assert!(instance.joined_B, 113);
+        assert!(!instance.bailed_B, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
+            return
         };
         assert!(!instance.action_B_1_done, 102);
-        assert!(instance.action_A_0_done, 103);
+        assert!((instance.action_A_0_done || instance.bailed_A), 103);
         instance.action_B_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
 
     public entry fun move_A_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
+        assert!(instance.joined_A, 113);
+        assert!(!instance.bailed_A, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
+            return
         };
         assert!(!instance.action_A_3_done, 102);
-        assert!(instance.action_B_1_done, 103);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.A_c_hidden = hidden_c;
         instance.done_A_c_hidden = true;
         instance.action_A_3_done = true;
@@ -102,11 +114,15 @@ module prisoners::prisoners {
 
     public entry fun move_B_4<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_B), 101);
+        assert!(instance.joined_B, 113);
+        assert!(!instance.bailed_B, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
+            return
         };
         assert!(!instance.action_B_5_done, 102);
-        assert!(instance.action_B_1_done, 103);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.B_c_hidden = hidden_c;
         instance.done_B_c_hidden = true;
         instance.action_B_5_done = true;
@@ -115,14 +131,17 @@ module prisoners::prisoners {
 
     public entry fun move_A_3<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: bool, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
+        assert!(instance.joined_A, 113);
+        assert!(!instance.bailed_A, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
+            return
         };
         assert!(!instance.action_A_4_done, 102);
-        assert!(instance.action_B_1_done, 103);
-        assert!(instance.action_A_3_done, 103);
-        assert!(instance.action_B_5_done, 103);
-        let data_c = bcs::to_bytes<bool>(&c);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
+        assert!((instance.action_A_3_done || instance.bailed_A), 103);
+        assert!((instance.action_B_5_done || instance.bailed_B), 103);
+        let mut data_c = bcs::to_bytes<bool>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.A_c_hidden), 106);
         instance.A_c = c;
@@ -133,14 +152,17 @@ module prisoners::prisoners {
 
     public entry fun move_B_5<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: bool, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_B), 101);
+        assert!(instance.joined_B, 113);
+        assert!(!instance.bailed_B, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_B = true;
+            return
         };
         assert!(!instance.action_B_6_done, 102);
-        assert!(instance.action_B_1_done, 103);
-        assert!(instance.action_B_5_done, 103);
-        assert!(instance.action_A_3_done, 103);
-        let data_c = bcs::to_bytes<bool>(&c);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
+        assert!((instance.action_B_5_done || instance.bailed_B), 103);
+        assert!((instance.action_A_3_done || instance.bailed_A), 103);
+        let mut data_c = bcs::to_bytes<bool>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.B_c_hidden), 106);
         instance.B_c = c;
@@ -150,10 +172,9 @@ module prisoners::prisoners {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_A_4_done, 107);
-        assert!(instance.action_B_6_done, 107);
+        assert!(((instance.action_A_4_done && instance.action_B_6_done) || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_A = if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 0 else if ((!instance.A_c && instance.B_c)) 200 else 90 else if (!instance.done_A_c) 0 else 200;
         total_payout = (total_payout + if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 0 else if ((!instance.A_c && instance.B_c)) 200 else 90 else if (!instance.done_A_c) 0 else 200);
         instance.claim_amount_B = if ((instance.done_A_c && instance.done_B_c)) if ((instance.A_c && instance.B_c)) 100 else if ((instance.A_c && !instance.B_c)) 200 else if ((!instance.A_c && instance.B_c)) 0 else 110 else if (!instance.done_A_c) 200 else 0;

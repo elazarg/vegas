@@ -50,6 +50,7 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun join_Odd<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Odd, 100);
+        assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Odd = tx_context::sender(ctx);
         instance.joined_Odd = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -58,6 +59,7 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun join_Even<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Even, 100);
+        assert!((coin::value<Asset>(&payment) == 100), 112);
         instance.role_Even = tx_context::sender(ctx);
         instance.joined_Even = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -66,10 +68,14 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun move_Odd_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Odd), 101);
+        assert!(instance.joined_Odd, 113);
+        assert!(!instance.bailed_Odd, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Odd = true;
+            return
         };
         assert!(!instance.action_Odd_1_done, 102);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Odd_c_hidden = hidden_c;
         instance.done_Odd_c_hidden = true;
         instance.action_Odd_1_done = true;
@@ -78,10 +84,14 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun move_Even_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, hidden_c: vector<u8>) {
         assert!((tx_context::sender(ctx) == instance.role_Even), 101);
+        assert!(instance.joined_Even, 113);
+        assert!(!instance.bailed_Even, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Even = true;
+            return
         };
         assert!(!instance.action_Even_3_done, 102);
+        assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Even_c_hidden = hidden_c;
         instance.done_Even_c_hidden = true;
         instance.action_Even_3_done = true;
@@ -90,13 +100,16 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun move_Odd_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: bool, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Odd), 101);
+        assert!(instance.joined_Odd, 113);
+        assert!(!instance.bailed_Odd, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Odd = true;
+            return
         };
         assert!(!instance.action_Odd_2_done, 102);
-        assert!(instance.action_Odd_1_done, 103);
-        assert!(instance.action_Even_3_done, 103);
-        let data_c = bcs::to_bytes<bool>(&c);
+        assert!((instance.action_Odd_1_done || instance.bailed_Odd), 103);
+        assert!((instance.action_Even_3_done || instance.bailed_Even), 103);
+        let mut data_c = bcs::to_bytes<bool>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.Odd_c_hidden), 106);
         instance.Odd_c = c;
@@ -107,13 +120,16 @@ module oddsevensshort::oddsevensshort {
 
     public entry fun move_Even_3<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, c: bool, salt: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Even), 101);
+        assert!(instance.joined_Even, 113);
+        assert!(!instance.bailed_Even, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Even = true;
+            return
         };
         assert!(!instance.action_Even_4_done, 102);
-        assert!(instance.action_Even_3_done, 103);
-        assert!(instance.action_Odd_1_done, 103);
-        let data_c = bcs::to_bytes<bool>(&c);
+        assert!((instance.action_Even_3_done || instance.bailed_Even), 103);
+        assert!((instance.action_Odd_1_done || instance.bailed_Odd), 103);
+        let mut data_c = bcs::to_bytes<bool>(&c);
         vector::append<u8>(&mut data_c, bcs::to_bytes<u64>(&salt));
         assert!((hash::keccak256(&data_c) == instance.Even_c_hidden), 106);
         instance.Even_c = c;
@@ -123,10 +139,9 @@ module oddsevensshort::oddsevensshort {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_Odd_2_done, 107);
-        assert!(instance.action_Even_4_done, 107);
+        assert!(((instance.action_Odd_2_done && instance.action_Even_4_done) || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_Even = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100;
         total_payout = (total_payout + if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 126 else 74 else if ((!instance.done_Even_c && instance.done_Odd_c)) 20 else if ((instance.done_Even_c && !instance.done_Odd_c)) 180 else 100);
         instance.claim_amount_Odd = if ((instance.done_Even_c && instance.done_Odd_c)) if ((instance.Even_c == instance.Odd_c)) 74 else 126 else if ((!instance.done_Even_c && instance.done_Odd_c)) 180 else if ((instance.done_Even_c && !instance.done_Odd_c)) 20 else 100;

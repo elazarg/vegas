@@ -40,6 +40,7 @@ module bet::bet {
 
     public entry fun join_Gambler<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_Gambler, 100);
+        assert!((coin::value<Asset>(&payment) == 10), 112);
         instance.role_Gambler = tx_context::sender(ctx);
         instance.joined_Gambler = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -48,8 +49,11 @@ module bet::bet {
 
     public entry fun move_Race_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_Race), 101);
+        assert!(instance.joined_Race, 113);
+        assert!(!instance.bailed_Race, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Race = true;
+            return
         };
         assert!(!instance.action_Race_0_done, 102);
         instance.action_Race_0_done = true;
@@ -58,11 +62,14 @@ module bet::bet {
 
     public entry fun move_Gambler_1<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, bet: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Gambler), 101);
+        assert!(instance.joined_Gambler, 113);
+        assert!(!instance.bailed_Gambler, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Gambler = true;
+            return
         };
         assert!(!instance.action_Gambler_1_done, 102);
-        assert!(instance.action_Race_0_done, 103);
+        assert!((instance.action_Race_0_done || instance.bailed_Race), 103);
         assert!((((bet == 1) || (bet == 2)) || (bet == 3)), 104);
         instance.Gambler_bet = bet;
         instance.done_Gambler_bet = true;
@@ -72,11 +79,14 @@ module bet::bet {
 
     public entry fun move_Race_2<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext, winner: u64) {
         assert!((tx_context::sender(ctx) == instance.role_Race), 101);
+        assert!(instance.joined_Race, 113);
+        assert!(!instance.bailed_Race, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_Race = true;
+            return
         };
         assert!(!instance.action_Race_2_done, 102);
-        assert!(instance.action_Gambler_1_done, 103);
+        assert!((instance.action_Gambler_1_done || instance.bailed_Gambler), 103);
         assert!((((winner == 1) || (winner == 2)) || (winner == 3)), 104);
         instance.Race_winner = winner;
         instance.done_Race_winner = true;
@@ -85,9 +95,9 @@ module bet::bet {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_Race_2_done, 107);
+        assert!((instance.action_Race_2_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_Gambler = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) 20 else 0;
         total_payout = (total_payout + if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) 20 else 0);
         instance.claim_amount_Race = if ((!instance.done_Race_winner || (instance.Race_winner == instance.Gambler_bet))) 0 else 20;

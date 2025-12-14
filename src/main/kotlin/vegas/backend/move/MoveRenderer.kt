@@ -74,8 +74,9 @@ class MoveRenderer {
     private fun renderStmt(stmt: MoveStmt) {
         when (stmt) {
             is MoveStmt.Let -> {
+                val mutKw = if (stmt.mut) "mut " else ""
                 val typeAnn = if (stmt.type != null) ": ${renderType(stmt.type)}" else ""
-                line("let ${stmt.name}$typeAnn = ${renderExpr(stmt.expr)};")
+                line("let $mutKw${stmt.name}$typeAnn = ${renderExpr(stmt.expr)};")
             }
             is MoveStmt.Assign -> {
                 line("${renderExpr(stmt.lhs)} = ${renderExpr(stmt.rhs)};")

@@ -34,6 +34,7 @@ module trivial1::trivial1 {
 
     public entry fun join_A<Asset>(instance: &mut Instance<Asset>, payment: coin::Coin<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!(!instance.joined_A, 100);
+        assert!((coin::value<Asset>(&payment) == 10), 112);
         instance.role_A = tx_context::sender(ctx);
         instance.joined_A = true;
         balance::join<Asset>(&mut instance.pot, coin::into_balance<Asset>(payment));
@@ -42,8 +43,11 @@ module trivial1::trivial1 {
 
     public entry fun move_A_0<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
         assert!((tx_context::sender(ctx) == instance.role_A), 101);
+        assert!(instance.joined_A, 113);
+        assert!(!instance.bailed_A, 114);
         if ((clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))) {
             instance.bailed_A = true;
+            return
         };
         assert!(!instance.action_A_0_done, 102);
         instance.action_A_0_done = true;
@@ -51,9 +55,9 @@ module trivial1::trivial1 {
     }
 
     public entry fun finalize<Asset>(instance: &mut Instance<Asset>, clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
-        assert!(instance.action_A_0_done, 107);
+        assert!((instance.action_A_0_done || (clock::timestamp_ms(clock) > (instance.last_ts_ms + instance.timeout_ms))), 107);
         assert!(!instance.finalized, 108);
-        let total_payout: u64 = 0;
+        let mut total_payout: u64 = 0;
         instance.claim_amount_A = 10;
         total_payout = (total_payout + 10);
         assert!((total_payout <= balance::value<Asset>(&instance.pot)), 109);
