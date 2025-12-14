@@ -158,10 +158,10 @@ module simple::simple {
         };
         assert!(!instance.action_A_4_done, 102);
         assert!((instance.action_B_3_done || instance.bailed_B), 103);
-        assert!((instance.action_A_2_done || instance.bailed_A), 103);
+        assert!(instance.action_A_2_done, 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_c, salt_bytes_c);
+        let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, &mut salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.A_c_hidden), 106);
         instance.A_c = c;
         instance.done_A_c = true;

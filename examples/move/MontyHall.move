@@ -201,13 +201,13 @@ module montyhall::montyhall {
         };
         assert!(!instance.action_Host_6_done, 102);
         assert!((instance.action_Guest_5_done || instance.bailed_Guest), 103);
-        assert!((instance.action_Host_4_done || instance.bailed_Host), 103);
-        assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
+        assert!(instance.action_Host_4_done, 103);
+        assert!(instance.action_Host_2_done, 103);
         assert!((((car == 0) || (car == 1)) || (car == 2)), 104);
         assert!((instance.Host_goat != car), 105);
         let mut data_car = bcs::to_bytes<u64>(&car);
-        let salt_bytes_car = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_car, salt_bytes_car);
+        let mut salt_bytes_car = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_car, &mut salt_bytes_car);
         assert!((hash::keccak256(&data_car) == instance.Host_car_hidden), 106);
         instance.Host_car = car;
         instance.done_Host_car = true;
