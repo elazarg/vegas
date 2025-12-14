@@ -11,6 +11,8 @@
 (define-constant ERR_COMMIT_MISMATCH (err u107))
 (define-constant ERR_ACTION_ALREADY_DONE (err u108))
 (define-constant ERR_DEPENDENCY_NOT_MET (err u109))
+(define-constant ERR_GUARD_FAILED (err u110))
+(define-constant ERR_PAYOUT_TOO_HIGH (err u111))
 
 ;; Data Variables
 (define-data-var initialized bool false)
@@ -44,7 +46,7 @@
 (define-public (register-a)
     (begin
         (asserts! (is-none (var-get role-a)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u10 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u10 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u10))
         (var-set deposit-a u10)
         (var-set role-a (some tx-sender))
@@ -76,13 +78,25 @@
     )
 )
 
+;; Finalize
+(define-public (finalize)
+    (begin
+        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
+        (asserts! true ERR_NOT_OPEN)
+        (map-set claims (unwrap-panic (var-get role-a)) 10)
+        (var-set payoffs-distributed true)
+        (ok true)
+    )
+)
+
 ;; Timeout
 (define-public (timeout)
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if true (begin (map-set claims (unwrap-panic (var-get role-a)) u10) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))
+        (err ERR_NOT_OPEN)
     )
 )
 

@@ -51,6 +51,9 @@ class ClarityBackendTest {
         // Check for timeout
         assertTrue(clarityCode.contains("(define-public (timeout)"))
 
+        // Check for finalize
+        assertTrue(clarityCode.contains("(define-public (finalize)"))
+
         // Check for withdraw
         assertTrue(clarityCode.contains("(define-public (withdraw)"))
     }

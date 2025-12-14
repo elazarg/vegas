@@ -2,6 +2,7 @@ package vegas.backend.clarity
 
 import vegas.RoleId
 import vegas.ir.ActionId
+import vegas.ir.Expr
 import vegas.ir.Type
 
 /**
@@ -13,7 +14,9 @@ internal data class ClarityGame(
     val roles: List<RoleId>,
     val pot: Long,
     val actions: List<ClarityAction>,
-    val timeoutRules: List<TimeoutRule>
+    val timeoutRules: List<TimeoutRule>,
+    val terminalFrontiers: List<Set<ActionId>>,
+    val payoffs: Map<RoleId, Expr>
 )
 
 internal data class ClarityAction(
@@ -25,7 +28,8 @@ internal data class ClarityAction(
     // If reveal: we verify hash and store value.
     // If public: we store value.
     val type: ActionType,
-    val writes: List<ClarityStateVar>
+    val writes: List<ClarityStateVar>,
+    val guard: Expr?
 )
 
 internal sealed class ActionType {

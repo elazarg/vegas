@@ -11,6 +11,8 @@
 (define-constant ERR_COMMIT_MISMATCH (err u107))
 (define-constant ERR_ACTION_ALREADY_DONE (err u108))
 (define-constant ERR_DEPENDENCY_NOT_MET (err u109))
+(define-constant ERR_GUARD_FAILED (err u110))
+(define-constant ERR_PAYOUT_TOO_HIGH (err u111))
 
 ;; Data Variables
 (define-data-var initialized bool false)
@@ -27,6 +29,7 @@
 (define-data-var var-guest-d int 0)
 (define-data-var var-host-goat int 0)
 (define-data-var var-guest-switch bool false)
+(define-data-var var-host-car int 0)
 
 ;; Maps
 (define-map action-done uint bool)
@@ -50,7 +53,7 @@
 (define-public (register-guest)
     (begin
         (asserts! (is-none (var-get role-guest)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u20 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u20 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u20))
         (var-set deposit-guest u20)
         (var-set role-guest (some tx-sender))
@@ -62,7 +65,7 @@
 (define-public (register-host)
     (begin
         (asserts! (is-none (var-get role-host)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u20 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u20 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u20))
         (var-set deposit-host u20)
         (var-set role-host (some tx-sender))
@@ -143,6 +146,7 @@
         (asserts! (is-eq (some tx-sender) (var-get role-host)) ERR_WRONG_ROLE)
         (asserts! (not (is-done u4)) ERR_ACTION_ALREADY_DONE)
         (asserts! (is-done u3) ERR_DEPENDENCY_NOT_MET)
+        (asserts! (not (is-eq goat (var-get var-guest-d))) ERR_GUARD_FAILED)
         (asserts! (or (is-eq goat 0) (is-eq goat 1) (is-eq goat 2)) ERR_INVALID_PARAM)
         (var-set var-host-goat goat)
         (map-set action-done u4 true)
@@ -174,6 +178,7 @@
         (asserts! (is-done u5) ERR_DEPENDENCY_NOT_MET)
         (asserts! (is-done u4) ERR_DEPENDENCY_NOT_MET)
         (asserts! (is-done u2) ERR_DEPENDENCY_NOT_MET)
+        (asserts! (not (is-eq (var-get var-host-goat) car)) ERR_GUARD_FAILED)
         (asserts! (verify-commit
     (unwrap-panic (to-consensus-buff? car))
     car-salt
@@ -187,13 +192,26 @@
     )
 )
 
+;; Finalize
+(define-public (finalize)
+    (begin
+        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
+        (asserts! (and (is-done u2) (is-done u3) (is-done u4) (is-done u5) (is-done u6)) ERR_NOT_OPEN)
+        (map-set claims (unwrap-panic (var-get role-guest)) (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 40 0) (if (not (or (is-done u2) (is-done u6))) 40 0)))
+        (map-set claims (unwrap-panic (var-get role-host)) (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 0 40) (if (not (or (is-done u2) (is-done u6))) 0 40)))
+        (var-set payoffs-distributed true)
+        (ok true)
+    )
+)
+
 ;; Timeout
 (define-public (timeout)
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if (and (is-done u2) (is-done u3) (is-done u4) (is-done u5) (is-done u6)) (begin (map-set claims (unwrap-panic (var-get role-host)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (is-done u3) (is-done u4) (is-done u5) (not (is-done u6))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (is-done u3) (is-done u4) (not (is-done u5))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (is-done u3) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN)))))))
+        (if (and (is-done u2) (is-done u3) (is-done u4) (is-done u5) (not (is-done u6))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (is-done u3) (is-done u4) (not (is-done u5))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (is-done u3) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u2) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-guest)) u40) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))))
     )
 )
 

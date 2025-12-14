@@ -11,6 +11,8 @@
 (define-constant ERR_COMMIT_MISMATCH (err u107))
 (define-constant ERR_ACTION_ALREADY_DONE (err u108))
 (define-constant ERR_DEPENDENCY_NOT_MET (err u109))
+(define-constant ERR_GUARD_FAILED (err u110))
+(define-constant ERR_PAYOUT_TOO_HIGH (err u111))
 
 ;; Data Variables
 (define-data-var initialized bool false)
@@ -26,8 +28,11 @@
 (define-data-var total-pot uint u0)
 
 (define-data-var commit-issuer-c (optional (buff 32)) none)
+(define-data-var var-issuer-c int 1)
 (define-data-var commit-alice-c (optional (buff 32)) none)
+(define-data-var var-alice-c int 1)
 (define-data-var commit-bob-c (optional (buff 32)) none)
+(define-data-var var-bob-c int 1)
 
 ;; Maps
 (define-map action-done uint bool)
@@ -51,7 +56,7 @@
 (define-public (register-alice)
     (begin
         (asserts! (is-none (var-get role-alice)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u12 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u12 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u12))
         (var-set deposit-alice u12)
         (var-set role-alice (some tx-sender))
@@ -63,7 +68,7 @@
 (define-public (register-bob)
     (begin
         (asserts! (is-none (var-get role-bob)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u12 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u12 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u12))
         (var-set deposit-bob u12)
         (var-set role-bob (some tx-sender))
@@ -75,7 +80,7 @@
 (define-public (register-issuer)
     (begin
         (asserts! (is-none (var-get role-issuer)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u12 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u12 tx-sender (unwrap-panic (as-contract tx-sender))))
         (var-set total-pot (+ (var-get total-pot) u12))
         (var-set deposit-issuer u12)
         (var-set role-issuer (some tx-sender))
@@ -244,13 +249,27 @@
     )
 )
 
+;; Finalize
+(define-public (finalize)
+    (begin
+        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
+        (asserts! (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u8) (is-done u4)) ERR_NOT_OPEN)
+        (map-set claims (unwrap-panic (var-get role-bob)) (if (and (and (or (is-done u5) (is-done u6)) (or (is-done u7) (is-done u8))) (or (is-done u3) (is-done u4))) (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 0) 6 (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 1) 24 6)) (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u7) (is-done u8)))) 1 (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u3) (is-done u4)))) 34 (if (and (not (or (is-done u7) (is-done u8))) (not (or (is-done u3) (is-done u4)))) 1 (if (not (or (is-done u5) (is-done u6))) 17 (if (not (or (is-done u7) (is-done u8))) 2 (if (not (or (is-done u3) (is-done u4))) 17 12))))))))
+        (map-set claims (unwrap-panic (var-get role-issuer)) (if (and (and (or (is-done u5) (is-done u6)) (or (is-done u7) (is-done u8))) (or (is-done u3) (is-done u4))) (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 0) 6 (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 1) 6 24)) (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u7) (is-done u8)))) 34 (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u3) (is-done u4)))) 1 (if (and (not (or (is-done u7) (is-done u8))) (not (or (is-done u3) (is-done u4)))) 1 (if (not (or (is-done u5) (is-done u6))) 17 (if (not (or (is-done u7) (is-done u8))) 17 (if (not (or (is-done u3) (is-done u4))) 2 12))))))))
+        (map-set claims (unwrap-panic (var-get role-alice)) (if (and (and (or (is-done u5) (is-done u6)) (or (is-done u7) (is-done u8))) (or (is-done u3) (is-done u4))) (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 0) 24 (if (is-eq (mod (+ (+ (var-get var-issuer-c) (var-get var-alice-c)) (var-get var-bob-c)) 3) 1) 6 6)) (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u7) (is-done u8)))) 1 (if (and (not (or (is-done u5) (is-done u6))) (not (or (is-done u3) (is-done u4)))) 1 (if (and (not (or (is-done u7) (is-done u8))) (not (or (is-done u3) (is-done u4)))) 34 (if (not (or (is-done u5) (is-done u6))) 2 (if (not (or (is-done u7) (is-done u8))) 17 (if (not (or (is-done u3) (is-done u4))) 17 12))))))))
+        (var-set payoffs-distributed true)
+        (ok true)
+    )
+)
+
 ;; Timeout
 (define-public (timeout)
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u8) (is-done u4)) (begin (map-set claims (unwrap-panic (var-get role-alice)) u24) (map-set claims (unwrap-panic (var-get role-bob)) u6) (map-set claims (unwrap-panic (var-get role-issuer)) u6) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u8) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u17) (map-set claims (unwrap-panic (var-get role-bob)) u17) (map-set claims (unwrap-panic (var-get role-issuer)) u2) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u4) (not (is-done u8))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u17) (map-set claims (unwrap-panic (var-get role-bob)) u2) (map-set claims (unwrap-panic (var-get role-issuer)) u17) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u8) (is-done u4) (not (is-done u6))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u2) (map-set claims (unwrap-panic (var-get role-bob)) u17) (map-set claims (unwrap-panic (var-get role-issuer)) u17) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (not (is-done u8)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u34) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u1) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u8) (not (is-done u6)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u34) (map-set claims (unwrap-panic (var-get role-issuer)) u1) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u4) (not (is-done u6)) (not (is-done u8))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (not (is-done u6)) (not (is-done u8)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u3) (not (is-done u7))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u7) (is-done u3) (not (is-done u5))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (not (is-done u7)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u7) (not (is-done u5)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u3) (not (is-done u5)) (not (is-done u7))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (not (is-done u5)) (not (is-done u7)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))))))))))))))
+        (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u8) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u17) (map-set claims (unwrap-panic (var-get role-bob)) u17) (map-set claims (unwrap-panic (var-get role-issuer)) u2) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (is-done u4) (not (is-done u8))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u17) (map-set claims (unwrap-panic (var-get role-bob)) u2) (map-set claims (unwrap-panic (var-get role-issuer)) u17) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u8) (is-done u4) (not (is-done u6))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u2) (map-set claims (unwrap-panic (var-get role-bob)) u17) (map-set claims (unwrap-panic (var-get role-issuer)) u17) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u6) (not (is-done u8)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u34) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u1) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u8) (not (is-done u6)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u34) (map-set claims (unwrap-panic (var-get role-issuer)) u1) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (is-done u4) (not (is-done u6)) (not (is-done u8))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (is-done u3) (not (is-done u6)) (not (is-done u8)) (not (is-done u4))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u7) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (is-done u3) (not (is-done u7))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u7) (is-done u3) (not (is-done u5))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u5) (not (is-done u7)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u7) (not (is-done u5)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (is-done u3) (not (is-done u5)) (not (is-done u7))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (if (and (not (is-done u5)) (not (is-done u7)) (not (is-done u3))) (begin (map-set claims (unwrap-panic (var-get role-alice)) u1) (map-set claims (unwrap-panic (var-get role-bob)) u1) (map-set claims (unwrap-panic (var-get role-issuer)) u34) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN)))))))))))))))
     )
 )
 
