@@ -47,11 +47,13 @@
 (define-private (is-done (id uint))
     (default-to false (map-get? action-done id))
 )
+(define-private (get-contract-principal) (as-contract tx-sender))
+
 ;; Registration
 (define-public (register-a)
     (begin
         (asserts! (is-none (var-get role-a)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u6 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u6 tx-sender (get-contract-principal)))
         (var-set total-pot (+ (var-get total-pot) u6))
         (var-set deposit-a u6)
         (var-set role-a (some tx-sender))
@@ -63,7 +65,7 @@
 (define-public (register-b)
     (begin
         (asserts! (is-none (var-get role-b)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u6 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u6 tx-sender (get-contract-principal)))
         (var-set total-pot (+ (var-get total-pot) u6))
         (var-set deposit-b u6)
         (var-set role-b (some tx-sender))
@@ -161,8 +163,8 @@
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
-        (asserts! (is-done u4) ERR_NOT_OPEN)
-        (asserts! (<= (+ (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 1 (if (not (is-done u3)) 11 (if (not (is-eq (var-get var-a-c) (var-get var-b-c))) 9 3))))) (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 11 (if (not (is-done u3)) 1 (if (is-eq (var-get var-a-c) (var-get var-b-c)) 9 3)))))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
+        (asserts! (and (is-done u0) (is-done u1) (is-done u2) (is-done u3) (is-done u4)) ERR_NOT_OPEN)
+        (asserts! (is-eq (+ (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 1 (if (not (is-done u3)) 11 (if (not (is-eq (var-get var-a-c) (var-get var-b-c))) 9 3))))) (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 11 (if (not (is-done u3)) 1 (if (is-eq (var-get var-a-c) (var-get var-b-c)) 9 3)))))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
         (map-set claims (unwrap-panic (var-get role-a)) (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 1 (if (not (is-done u3)) 11 (if (not (is-eq (var-get var-a-c) (var-get var-b-c))) 9 3))))))
         (map-set claims (unwrap-panic (var-get role-b)) (to-uint (if (and (not (or (is-done u2) (is-done u4))) (not (is-done u3))) 6 (if (not (or (is-done u2) (is-done u4))) 11 (if (not (is-done u3)) 1 (if (is-eq (var-get var-a-c) (var-get var-b-c)) 9 3))))))
         (var-set payoffs-distributed true)
@@ -176,7 +178,7 @@
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if (not (is-done u0)) (begin (map-set claims (unwrap-panic (var-get role-a)) u6) (map-set claims (unwrap-panic (var-get role-b)) u6) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))
+        (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-a)) u6) (map-set claims (unwrap-panic (var-get role-b)) u6) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u3)) (begin (map-set claims (unwrap-panic (var-get role-a)) u6) (map-set claims (unwrap-panic (var-get role-b)) u6) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u4)) (begin (map-set claims (unwrap-panic (var-get role-a)) u1) (map-set claims (unwrap-panic (var-get role-b)) u11) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))
     )
 )
 
@@ -188,7 +190,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))
+        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
         (ok amt)
     )
 )

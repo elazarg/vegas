@@ -26,8 +26,8 @@
 (define-data-var total-pot uint u0)
 
 (define-data-var commit-odd-c (optional (buff 32)) none)
-(define-data-var var-odd-c bool false)
 (define-data-var commit-even-c (optional (buff 32)) none)
+(define-data-var var-odd-c bool false)
 (define-data-var var-even-c bool false)
 
 ;; Maps
@@ -48,11 +48,13 @@
 (define-private (is-done (id uint))
     (default-to false (map-get? action-done id))
 )
+(define-private (get-contract-principal) (as-contract tx-sender))
+
 ;; Registration
 (define-public (register-even)
     (begin
         (asserts! (is-none (var-get role-even)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u100 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u100 tx-sender (get-contract-principal)))
         (var-set total-pot (+ (var-get total-pot) u100))
         (var-set deposit-even u100)
         (var-set role-even (some tx-sender))
@@ -64,7 +66,7 @@
 (define-public (register-odd)
     (begin
         (asserts! (is-none (var-get role-odd)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u100 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u100 tx-sender (get-contract-principal)))
         (var-set total-pot (+ (var-get total-pot) u100))
         (var-set deposit-odd u100)
         (var-set role-odd (some tx-sender))
@@ -97,34 +99,34 @@
     )
 )
 
-(define-public (action-odd-2 (c bool) (c-salt (buff 32)) )
+(define-public (action-even-3 (c (buff 32)) )
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
-        (asserts! (is-eq (some tx-sender) (var-get role-odd)) ERR_WRONG_ROLE)
+        (asserts! (is-eq (some tx-sender) (var-get role-even)) ERR_WRONG_ROLE)
         (asserts! (not (is-done u1)) ERR_ACTION_ALREADY_DONE)
         (asserts! (is-done u0) ERR_DEPENDENCY_NOT_MET)
-        (asserts! (is-done u2) ERR_DEPENDENCY_NOT_MET)
-        (asserts! (verify-commit
-    (unwrap-panic (to-consensus-buff? c))
-    c-salt
-    (unwrap-panic (var-get commit-odd-c))
-) ERR_COMMIT_MISMATCH)
-        (var-set var-odd-c c)
+        (var-set commit-even-c (some c))
         (map-set action-done u1 true)
         (var-set last-progress (get-time))
         (ok true)
     )
 )
 
-(define-public (action-even-3 (c (buff 32)) )
+(define-public (action-odd-2 (c bool) (c-salt (buff 32)) )
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
-        (asserts! (is-eq (some tx-sender) (var-get role-even)) ERR_WRONG_ROLE)
+        (asserts! (is-eq (some tx-sender) (var-get role-odd)) ERR_WRONG_ROLE)
         (asserts! (not (is-done u2)) ERR_ACTION_ALREADY_DONE)
         (asserts! (is-done u1) ERR_DEPENDENCY_NOT_MET)
-        (var-set commit-even-c (some c))
+        (asserts! (is-done u0) ERR_DEPENDENCY_NOT_MET)
+        (asserts! (verify-commit
+    (unwrap-panic (to-consensus-buff? c))
+    c-salt
+    (unwrap-panic (var-get commit-odd-c))
+) ERR_COMMIT_MISMATCH)
+        (var-set var-odd-c c)
         (map-set action-done u2 true)
         (var-set last-progress (get-time))
         (ok true)
@@ -138,6 +140,7 @@
         (asserts! (is-eq (some tx-sender) (var-get role-even)) ERR_WRONG_ROLE)
         (asserts! (not (is-done u3)) ERR_ACTION_ALREADY_DONE)
         (asserts! (is-done u2) ERR_DEPENDENCY_NOT_MET)
+        (asserts! (is-done u1) ERR_DEPENDENCY_NOT_MET)
         (asserts! (is-done u0) ERR_DEPENDENCY_NOT_MET)
         (asserts! (verify-commit
     (unwrap-panic (to-consensus-buff? c))
@@ -156,10 +159,10 @@
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
-        (asserts! (is-done u3) ERR_NOT_OPEN)
-        (asserts! (<= (+ (to-uint (if (and (or (is-done u2) (is-done u3)) (or (is-done u0) (is-done u1))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 126 74) (if (and (not (or (is-done u2) (is-done u3))) (or (is-done u0) (is-done u1))) 20 (if (and (or (is-done u2) (is-done u3)) (not (or (is-done u0) (is-done u1)))) 180 100)))) (to-uint (if (and (or (is-done u2) (is-done u3)) (or (is-done u0) (is-done u1))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 74 126) (if (and (not (or (is-done u2) (is-done u3))) (or (is-done u0) (is-done u1))) 180 (if (and (or (is-done u2) (is-done u3)) (not (or (is-done u0) (is-done u1)))) 20 100))))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
-        (map-set claims (unwrap-panic (var-get role-even)) (to-uint (if (and (or (is-done u2) (is-done u3)) (or (is-done u0) (is-done u1))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 126 74) (if (and (not (or (is-done u2) (is-done u3))) (or (is-done u0) (is-done u1))) 20 (if (and (or (is-done u2) (is-done u3)) (not (or (is-done u0) (is-done u1)))) 180 100)))))
-        (map-set claims (unwrap-panic (var-get role-odd)) (to-uint (if (and (or (is-done u2) (is-done u3)) (or (is-done u0) (is-done u1))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 74 126) (if (and (not (or (is-done u2) (is-done u3))) (or (is-done u0) (is-done u1))) 180 (if (and (or (is-done u2) (is-done u3)) (not (or (is-done u0) (is-done u1)))) 20 100)))))
+        (asserts! (and (is-done u1) (is-done u0) (is-done u3) (is-done u2)) ERR_NOT_OPEN)
+        (asserts! (is-eq (+ (to-uint (if (and (or (is-done u1) (is-done u3)) (or (is-done u0) (is-done u2))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 126 74) (if (and (not (or (is-done u1) (is-done u3))) (or (is-done u0) (is-done u2))) 20 (if (and (or (is-done u1) (is-done u3)) (not (or (is-done u0) (is-done u2)))) 180 100)))) (to-uint (if (and (or (is-done u1) (is-done u3)) (or (is-done u0) (is-done u2))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 74 126) (if (and (not (or (is-done u1) (is-done u3))) (or (is-done u0) (is-done u2))) 180 (if (and (or (is-done u1) (is-done u3)) (not (or (is-done u0) (is-done u2)))) 20 100))))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
+        (map-set claims (unwrap-panic (var-get role-even)) (to-uint (if (and (or (is-done u1) (is-done u3)) (or (is-done u0) (is-done u2))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 126 74) (if (and (not (or (is-done u1) (is-done u3))) (or (is-done u0) (is-done u2))) 20 (if (and (or (is-done u1) (is-done u3)) (not (or (is-done u0) (is-done u2)))) 180 100)))))
+        (map-set claims (unwrap-panic (var-get role-odd)) (to-uint (if (and (or (is-done u1) (is-done u3)) (or (is-done u0) (is-done u2))) (if (is-eq (var-get var-even-c) (var-get var-odd-c)) 74 126) (if (and (not (or (is-done u1) (is-done u3))) (or (is-done u0) (is-done u2))) 180 (if (and (or (is-done u1) (is-done u3)) (not (or (is-done u0) (is-done u2)))) 20 100)))))
         (var-set payoffs-distributed true)
         (ok true)
     )
@@ -171,7 +174,7 @@
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
-        (if (not (is-done u0)) (begin (map-set claims (unwrap-panic (var-get role-even)) u100) (map-set claims (unwrap-panic (var-get role-odd)) u100) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u1)) (begin (map-set claims (unwrap-panic (var-get role-even)) u100) (map-set claims (unwrap-panic (var-get role-odd)) u100) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u3)) (begin (map-set claims (unwrap-panic (var-get role-even)) u20) (map-set claims (unwrap-panic (var-get role-odd)) u180) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))))
+        (if (not (is-done u0)) (begin (map-set claims (unwrap-panic (var-get role-even)) u100) (map-set claims (unwrap-panic (var-get role-odd)) u100) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u1)) (begin (map-set claims (unwrap-panic (var-get role-even)) u100) (map-set claims (unwrap-panic (var-get role-odd)) u100) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u2)) (begin (map-set claims (unwrap-panic (var-get role-even)) u100) (map-set claims (unwrap-panic (var-get role-odd)) u100) (var-set payoffs-distributed true) (ok true)) (if (not (is-done u3)) (begin (map-set claims (unwrap-panic (var-get role-even)) u20) (map-set claims (unwrap-panic (var-get role-odd)) u180) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN)))))
     )
 )
 
@@ -183,7 +186,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))
+        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
         (ok amt)
     )
 )

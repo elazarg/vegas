@@ -42,11 +42,13 @@
 (define-private (is-done (id uint))
     (default-to false (map-get? action-done id))
 )
+(define-private (get-contract-principal) (as-contract tx-sender))
+
 ;; Registration
 (define-public (register-a)
     (begin
         (asserts! (is-none (var-get role-a)) ERR_ALREADY_INITIALIZED)
-        (try! (stx-transfer? u10 tx-sender (as-contract tx-sender)))
+        (try! (stx-transfer? u10 tx-sender (get-contract-principal)))
         (var-set total-pot (+ (var-get total-pot) u10))
         (var-set deposit-a u10)
         (var-set role-a (some tx-sender))
@@ -84,7 +86,7 @@
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (is-done u0) ERR_NOT_OPEN)
-        (asserts! (<= (to-uint 10) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
+        (asserts! (is-eq (to-uint 10) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
         (map-set claims (unwrap-panic (var-get role-a)) (to-uint 10))
         (var-set payoffs-distributed true)
         (ok true)
@@ -109,7 +111,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))
+        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
         (ok amt)
     )
 )

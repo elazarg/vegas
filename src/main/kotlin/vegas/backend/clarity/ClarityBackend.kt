@@ -15,13 +15,14 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
     private val protocol = ClarityCompiler.compile(game, options.defaultTimeout)
     private val sb = StringBuilder()
 
-    // Linearly sorted actions (enforcing sequential execution)
-    // We sort by ID index which is topologically valid from ActionDag
-    private val sortedActions = protocol.actions.sortedBy { it.id.second }
+    // Topologically sorted actions to enforce sequential execution safely
+    private val sortedActions: List<ClarityAction> by lazy {
+        topologicalSort(protocol.actions)
+    }
 
-    private val actionIds: Map<ActionId, Int> = sortedActions
-        .mapIndexed { index, action -> action.id to index }
-        .toMap()
+    private val actionIds: Map<ActionId, Int> by lazy {
+        sortedActions.mapIndexed { index, action -> action.id to index }.toMap()
+    }
 
     private val fieldWriters: Map<FieldRef, List<Int>> by lazy {
         val map = mutableMapOf<FieldRef, MutableList<Int>>()
@@ -49,6 +50,35 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         generateWithdraw()
 
         return sb.toString()
+    }
+
+    private fun topologicalSort(actions: List<ClarityAction>): List<ClarityAction> {
+        val result = mutableListOf<ClarityAction>()
+        val visited = mutableSetOf<ActionId>()
+        val temp = mutableSetOf<ActionId>()
+        val actionMap = actions.associateBy { it.id }
+
+        fun visit(id: ActionId) {
+            if (id in visited) return
+            if (id in temp) error("Cycle detected in ActionDAG")
+            temp.add(id)
+
+            // Dependencies from DAG
+            game.dag.prerequisitesOf(id).forEach { dep ->
+                if (dep in actionMap) visit(dep)
+            }
+
+            temp.remove(id)
+            visited.add(id)
+            result.add(actionMap[id]!!)
+        }
+
+        // Sort by ID to ensure deterministic order among independent nodes
+        actions.sortedBy { it.id.second }.forEach { action ->
+            visit(action.id)
+        }
+
+        return result
     }
 
     private fun generateConstants() {
@@ -130,6 +160,10 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
                 (default-to false (map-get? action-done id))
             )
         """.trimIndent())
+
+        // Helper to get contract principal
+        sb.appendLine("(define-private (get-contract-principal) (as-contract tx-sender))")
+        sb.appendLine()
     }
 
     private fun generateRegistration() {
@@ -144,13 +178,8 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-none (var-get role-$roleName)) ERR_ALREADY_INITIALIZED)")
 
             if (depositAmount > 0) {
-                 // Use (as-contract tx-sender) to get contract principal.
-                 // In Clarity 4, we use (unwrap-panic (as-contract? () tx-sender))?
-                 // Or stick to (as-contract tx-sender) if it's supported (v2 compatibility mode?)
-                 // User says "For Clarity 4... use (as-contract? (with-stx ...))". But that's for switching context.
-                 // To just GET the principal, (as-contract tx-sender) is the standard way in v1/v2.
-                 // In v3+, maybe there's a better way, but (as-contract tx-sender) works.
-                 sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
+                 // Use helper to get contract principal
+                 sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (get-contract-principal)))")
                  sb.appendLine("        (var-set total-pot (+ (var-get total-pot) u$depositAmount))")
                  sb.appendLine("        (var-set deposit-$roleName u$depositAmount)")
             }
@@ -249,15 +278,15 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
             sb.appendLine("        (asserts! (not (is-done u$actionIdUint)) ERR_ACTION_ALREADY_DONE)")
 
-            // Sequential enforcement: depend on previous action
+            // Sequential enforcement: depend on previous action in topo sort
             if (index > 0) {
                 sb.appendLine("        (asserts! (is-done u${index - 1}) ERR_DEPENDENCY_NOT_MET)")
             }
 
-            // Explicit DAG deps (just in case, though sequential covers most)
+            // Explicit DAG deps (usually covered by sequential, but good for robust check)
             action.prereqs.forEach { prereq ->
                 val pid = actionIds[prereq]!!
-                if (pid != index - 1) { // Avoid duplicate check if covered by sequence
+                if (pid != index - 1) {
                     sb.appendLine("        (asserts! (is-done u$pid) ERR_DEPENDENCY_NOT_MET)")
                 }
             }
@@ -285,9 +314,17 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)")
         sb.appendLine("        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)")
 
-        // Terminal conditions: All actions in sequence done
-        val lastActionId = sortedActions.size - 1
-        sb.appendLine("        (asserts! (is-done u$lastActionId) ERR_NOT_OPEN)")
+        // Terminal conditions: Use terminalFrontiers from compiler
+        // Each set in terminalFrontiers is a valid completion
+        val conds = protocol.terminalFrontiers.map { doneSet ->
+            if (doneSet.isEmpty()) "true" else {
+                val checks = doneSet.map { id -> "(is-done u${actionIds[id]!!})" }
+                if (checks.size == 1) checks[0] else "(and ${checks.joinToString(" ")})"
+            }
+        }
+        val terminalCond = if (conds.isEmpty()) "false" else if (conds.size == 1) conds[0] else "(or ${conds.joinToString(" ")})"
+
+        sb.appendLine("        (asserts! $terminalCond ERR_NOT_OPEN)")
 
         // Payoffs (convert int to uint)
         val payouts = protocol.payoffs.mapValues { (_, expr) ->
@@ -295,10 +332,10 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             "(to-uint $intExpr)" // using to-uint directly on int result
         }
 
-        // Sum payouts: (+ p1 (+ p2 ...))
+        // Sum payouts
         if (payouts.isNotEmpty()) {
             val sumExpr = payouts.values.reduce { acc, s -> "(+ $acc $s)" }
-            sb.appendLine("        (asserts! (<= $sumExpr (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)")
+            sb.appendLine("        (asserts! (is-eq $sumExpr (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)")
         }
 
         payouts.forEach { (role, exprStr) ->
@@ -322,40 +359,15 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
         var expr = "(err ERR_NOT_OPEN)"
 
-        // Iterate reversed to build if-else chain
-        // If not done u0 -> resolve 0.
-        // If done u0, not done u1 -> resolve 1.
-        // (if (not (is-done u0)) ... (if (not (is-done u1)) ...))
-
-        // We iterate forwards to build the chain?
-        // (if (not (is-done u0)) Pay0 (if (not (is-done u1)) Pay1 ...))
-
+        // Build "First Undone" check chain (linear based on topo sort)
         val reversedActions = sortedActions.reversed()
-        // But we want: if not u0 ... else if not u1 ...
-        // So we build from end?
-        // If all done -> Error (use finalize).
-        // (if (not (is-done uLast)) PayLast ... (if (not (is-done u0)) Pay0 Error)...)
-        // Wait, standard if/else structure:
-        // (if (not (is-done u0)) Pay0
-        //    (if (not (is-done u1)) Pay1
-        //       ...
-        //       Error))
-
-        // So we iterate forwards. But building a string wrapper?
-        // Recursive string building.
-        // Or loop reversed and wrap `expr`.
-        // Start with `expr = Error`.
-        // Last Action (N): `expr = (if (not (is-done uN)) PayN expr)`
-        // ...
-        // First Action (0): `expr = (if (not (is-done u0)) Pay0 expr)`
 
         for (action in reversedActions) {
             val aid = actionIds[action.id]!!
-            // Payoff for state where this action is enabled but not done.
-            // State = {0..aid-1}.
             val prevSet = sortedActions.take(aid).map { it.id }.toSet()
             val payoff = protocol.abortPayoffs[prevSet]
 
+            // If payoff exists for this state, generate branch
             if (payoff != null) {
                 val payBlock = StringBuilder()
                 payBlock.append("(begin ")
@@ -367,9 +379,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
                 payBlock.append("(var-set payoffs-distributed true) (ok true))")
 
                 expr = "(if (not (is-done u$aid)) $payBlock $expr)"
-            } else {
-                // If no payoff found (shouldn't happen in valid Vegas game), keep strict.
-                // Or maybe this action is not strategic?
             }
         }
         sb.appendLine("        $expr")
@@ -388,17 +397,7 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("    )")
         sb.appendLine("        (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)")
         sb.appendLine("        (map-set claims recipient u0)")
-
-        if (options.clarityVersion >= 4) {
-            // Correct syntax: (as-contract? (stx-transfer? ...) (with-stx ...)) ?
-            // User: "argument order/form matters... expects allowance list to wrap the body".
-            // Snippet from search: (as-contract? ((with-stx amount)) expr...)
-            // So: (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient)))
-            sb.appendLine("        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))")
-        } else {
-            sb.appendLine("        (try! (as-contract (stx-transfer? amt tx-sender recipient)))")
-        }
-
+        sb.appendLine("        (try! (as-contract (stx-transfer? amt tx-sender recipient)))")
         sb.appendLine("        (ok amt)")
         sb.appendLine("    )")
         sb.appendLine(")")
