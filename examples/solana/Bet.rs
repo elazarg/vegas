@@ -20,12 +20,10 @@ pub mod bet {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         } else {
-             require!(false, ErrorCode::NotTimedOut);
-         }
+         require!(game.joined[0 as usize], ErrorCode::NotJoined);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[0 as usize] = true;
         Ok(())
     }
 
@@ -33,12 +31,10 @@ pub mod bet {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         } else {
-             require!(false, ErrorCode::NotTimedOut);
-         }
+         require!(game.joined[1 as usize], ErrorCode::NotJoined);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[1 as usize] = true;
         Ok(())
     }
 
@@ -61,6 +57,7 @@ pub mod bet {
             10,
          )?;
          game.pot_total = (game.pot_total + 10);
+         game.deposited[1 as usize] = (game.deposited[1 as usize] + 10);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
@@ -88,6 +85,7 @@ pub mod bet {
             10,
          )?;
          game.pot_total = (game.pot_total + 10);
+         game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
@@ -128,8 +126,8 @@ pub mod bet {
          let p_Gambler: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 20 } else { 0 })) as u64;
          let p_Race: u64 = (std::cmp::max(0, if (!(game.done_Race_winner) || (game.Race_winner == game.Gambler_bet)) { 0 } else { 20 })) as u64;
          if (((0 + p_Gambler) + p_Race) > game.pot_total) {
-             game.claim_amount[0 as usize] = 10;
-             game.claim_amount[1 as usize] = 10;
+             game.claim_amount[0 as usize] = game.deposited[0 as usize];
+             game.claim_amount[1 as usize] = game.deposited[1 as usize];
          } else {
              game.claim_amount[0 as usize] = p_Gambler;
              game.claim_amount[1 as usize] = p_Race;
@@ -147,6 +145,10 @@ pub mod bet {
          {
              let amount = game.claim_amount[0];
              if amount > 0 {
+                 let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                      return err!(ErrorCode::InsufficientFunds);
+                 }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
                  **signer.to_account_info().try_borrow_mut_lamports()? += amount;
              }
@@ -163,6 +165,10 @@ pub mod bet {
          {
              let amount = game.claim_amount[1];
              if amount > 0 {
+                 let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                      return err!(ErrorCode::InsufficientFunds);
+                 }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
                  **signer.to_account_info().try_borrow_mut_lamports()? += amount;
              }
@@ -267,6 +273,7 @@ pub struct GameState {
     pub game_id: u64,
     pub roles: [Pubkey; 2],
     pub joined: [bool; 2],
+    pub deposited: [u64; 2],
     pub last_ts: i64,
     pub bailed: [bool; 2],
     pub action_done: [bool; 3],
@@ -308,6 +315,8 @@ pub enum ErrorCode {
     GameFinalized,
     #[msg("Invalid amount")]
     BadAmount,
+    #[msg("Insufficient funds including rent")]
+    InsufficientFunds,
     #[msg("Guard condition failed")]
     GuardFailed,
 }

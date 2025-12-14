@@ -20,12 +20,10 @@ pub mod prisoners {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         } else {
-             require!(false, ErrorCode::NotTimedOut);
-         }
+         require!(game.joined[0 as usize], ErrorCode::NotJoined);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[0 as usize] = true;
         Ok(())
     }
 
@@ -33,12 +31,10 @@ pub mod prisoners {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         } else {
-             require!(false, ErrorCode::NotTimedOut);
-         }
+         require!(game.joined[1 as usize], ErrorCode::NotJoined);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[1 as usize] = true;
         Ok(())
     }
 
@@ -61,6 +57,7 @@ pub mod prisoners {
             100,
          )?;
          game.pot_total = (game.pot_total + 100);
+         game.deposited[0 as usize] = (game.deposited[0 as usize] + 100);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
@@ -88,6 +85,7 @@ pub mod prisoners {
             100,
          )?;
          game.pot_total = (game.pot_total + 100);
+         game.deposited[1 as usize] = (game.deposited[1 as usize] + 100);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
@@ -203,8 +201,8 @@ pub mod prisoners {
          let p_A: u64 = (std::cmp::max(0, if (game.done_A_c && game.done_B_c) { if (game.A_c && game.B_c) { 100 } else { if (game.A_c && !(game.B_c)) { 0 } else { if (!(game.A_c) && game.B_c) { 200 } else { 90 } } } } else { if !(game.done_A_c) { 0 } else { 200 } })) as u64;
          let p_B: u64 = (std::cmp::max(0, if (game.done_A_c && game.done_B_c) { if (game.A_c && game.B_c) { 100 } else { if (game.A_c && !(game.B_c)) { 200 } else { if (!(game.A_c) && game.B_c) { 0 } else { 110 } } } } else { if !(game.done_A_c) { 200 } else { 0 } })) as u64;
          if (((0 + p_A) + p_B) > game.pot_total) {
-             game.claim_amount[0 as usize] = 100;
-             game.claim_amount[1 as usize] = 100;
+             game.claim_amount[0 as usize] = game.deposited[0 as usize];
+             game.claim_amount[1 as usize] = game.deposited[1 as usize];
          } else {
              game.claim_amount[0 as usize] = p_A;
              game.claim_amount[1 as usize] = p_B;
@@ -222,6 +220,10 @@ pub mod prisoners {
          {
              let amount = game.claim_amount[0];
              if amount > 0 {
+                 let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                      return err!(ErrorCode::InsufficientFunds);
+                 }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
                  **signer.to_account_info().try_borrow_mut_lamports()? += amount;
              }
@@ -238,6 +240,10 @@ pub mod prisoners {
          {
              let amount = game.claim_amount[1];
              if amount > 0 {
+                 let rent_balance = Rent::get()?.minimum_balance(8 + GameState::INIT_SPACE);
+                 if **game.to_account_info().lamports.borrow() - amount < rent_balance {
+                      return err!(ErrorCode::InsufficientFunds);
+                 }
                  **game.to_account_info().try_borrow_mut_lamports()? -= amount;
                  **signer.to_account_info().try_borrow_mut_lamports()? += amount;
              }
@@ -371,6 +377,7 @@ pub struct GameState {
     pub game_id: u64,
     pub roles: [Pubkey; 2],
     pub joined: [bool; 2],
+    pub deposited: [u64; 2],
     pub last_ts: i64,
     pub bailed: [bool; 2],
     pub action_done: [bool; 6],
@@ -416,6 +423,8 @@ pub enum ErrorCode {
     GameFinalized,
     #[msg("Invalid amount")]
     BadAmount,
+    #[msg("Insufficient funds including rent")]
+    InsufficientFunds,
     #[msg("Guard condition failed")]
     GuardFailed,
 }
