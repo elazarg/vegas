@@ -131,39 +131,19 @@ internal object ClarityCompiler {
         var currentConfig = canonInitial
         var currentDone = initialDone
 
-        // Identify index in sortedActions to start from
-        // Assuming initialDone matches prefix of sortedActions?
-        // Or we just skip actions in initialDone.
-        // Since we sort topologically, and initialDone are joins (roots), they should be at start.
-
         // Loop through actions
         for (action in sortedActions) {
             if (action.id in currentDone) continue
 
-            // At this point, we are at state 'currentDone'.
-            // The next expected action is 'action'.
-            // It MUST be enabled in the DAG/Semantics if our topological sort is valid and game is playable.
-            // Check if enabled?
             val moves = semantics.enabledMoves(currentConfig)
-            // Find move for this action
             val move = moves.filterIsInstance<Label.Play>()
                 .find { (it.tag as? PlayTag.Action)?.actionId == action.id }
 
-            if (move == null) {
-                // This implies topological sort violated game rules?
-                // Or maybe action is not reachable?
-                // Or maybe `initialDone` logic is tricky.
-                // Assuming valid game, this shouldn't happen.
-                // But for safety:
-                break
-            }
+            if (move == null) break
 
-            // Calculate Abort Payoff for *this* state (where 'action' is missing).
-            // Active player is action.owner.
-            val abortPayoff = resolveAbortScenario(semantics, game, currentConfig, action.owner, roles, pot)
+            val abortPayoff = resolveAbortScenario(semantics, game, currentConfig, currentDone, action.owner, roles, pot)
             frontierPayoffs[currentDone] = abortPayoff
 
-            // Apply move to advance
             val next = applyMove(currentConfig, move)
             val (canonNext, canonDone) = canonicalize(semantics, next, roles)
 
@@ -171,7 +151,6 @@ internal object ClarityCompiler {
             currentDone = currentDone + action.id + canonDone
         }
 
-        // After loop, check if terminal
         if (currentConfig.isTerminal()) {
             terminalFrontiers.add(currentDone)
         }
@@ -245,23 +224,41 @@ internal object ClarityCompiler {
         semantics: GameSemantics,
         game: GameIR,
         config: Configuration,
+        doneActions: Set<ActionId>,
         quitter: RoleId,
         players: List<RoleId>,
         pot: Long
     ): Map<RoleId, Long> {
-        // Construct "Super Quit" delta: overwrite ALL fields of the quitter with Quit.
         val allFields = game.dag.actions
-            .filter { game.dag.owner(it) == quitter }
+            .filter { game.dag.owner(it) == quitter && it !in doneActions }
             .flatMap { game.dag.writes(it) }
             .toSet()
 
         val quitDelta = allFields.associateWith { vegas.ir.Expr.Const.Quit }
-
         val quitLabel = Label.Play(quitter, quitDelta, PlayTag.Quit)
 
         var current = applyMove(config, quitLabel)
         current = canonicalize(semantics, current, players).first
 
-        return resolvePayoff(game, current, players, pot)
+        val calculatedPayoffs = resolvePayoff(game, current, players, pot)
+
+        // Strict Quit Policy: Quitter forfeits everything to the remaining players.
+        if (players.size > 1 && (calculatedPayoffs[quitter] ?: 0L) > 0L) {
+             val quitterAmt = calculatedPayoffs[quitter]!!
+             val others = players - quitter
+             val bonus = quitterAmt / others.size
+             val remainder = quitterAmt % others.size
+
+             val newPayoffs = calculatedPayoffs.toMutableMap()
+             newPayoffs[quitter] = 0L
+
+             others.forEachIndexed { idx, role ->
+                 val extra = if (idx == 0) remainder else 0L
+                 newPayoffs[role] = (newPayoffs[role] ?: 0L) + bonus + extra
+             }
+             return newPayoffs
+        }
+
+        return calculatedPayoffs
     }
 }

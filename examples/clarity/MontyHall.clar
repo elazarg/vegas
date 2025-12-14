@@ -17,6 +17,7 @@
 ;; Data Variables
 (define-data-var initialized bool false)
 (define-data-var last-progress uint u0)
+(define-data-var first-dep-time uint u0)
 (define-data-var payoffs-distributed bool false)
 
 (define-data-var role-guest (optional principal) none)
@@ -49,7 +50,7 @@
 (define-private (is-done (id uint))
     (default-to false (map-get? action-done id))
 )
-(define-private (get-contract-principal) (as-contract tx-sender))
+(define-private (get-contract-principal) (unwrap-panic (as-contract? () tx-sender)))
 
 ;; Registration
 (define-public (register-guest)
@@ -59,6 +60,7 @@
         (var-set total-pot (+ (var-get total-pot) u20))
         (var-set deposit-guest u20)
         (var-set role-guest (some tx-sender))
+        (if (is-eq (var-get first-dep-time) u0) (var-set first-dep-time (get-time)) true)
         (check-initialization)
         (ok true)
     )
@@ -71,6 +73,7 @@
         (var-set total-pot (+ (var-get total-pot) u20))
         (var-set deposit-host u20)
         (var-set role-host (some tx-sender))
+        (if (is-eq (var-get first-dep-time) u0) (var-set first-dep-time (get-time)) true)
         (check-initialization)
         (ok true)
     )
@@ -85,6 +88,40 @@
             (map-set action-done u1 true)
         )
         true
+    )
+)
+
+;; Cancel
+(define-public (cancel-uninitialized)
+    (begin
+        (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+        (asserts! (> (var-get first-dep-time) u0) ERR_NOT_OPEN)
+        (asserts! (>= (get-time) (+ (var-get first-dep-time) u100)) ERR_TIMEOUT_NOT_READY)
+        (match (var-get role-guest) r
+            (let ((amt (var-get deposit-guest)))
+                (if (> amt u0)
+                    (unwrap-panic (as-contract? ((with-stx amt)) (unwrap-panic (stx-transfer? amt tx-sender r))))
+                    true
+                )
+            )
+            true
+        )
+        (match (var-get role-host) r
+            (let ((amt (var-get deposit-host)))
+                (if (> amt u0)
+                    (unwrap-panic (as-contract? ((with-stx amt)) (unwrap-panic (stx-transfer? amt tx-sender r))))
+                    true
+                )
+            )
+            true
+        )
+        (var-set total-pot u0)
+        (var-set role-guest none)
+        (var-set deposit-guest u0)
+        (var-set role-host none)
+        (var-set deposit-host u0)
+        (var-set first-dep-time u0)
+        (ok true)
     )
 )
 
@@ -176,10 +213,10 @@
     (begin
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
-        (asserts! (and (is-done u0) (is-done u1) (is-done u2) (is-done u3) (is-done u4) (is-done u5) (is-done u6)) ERR_NOT_OPEN)
-        (asserts! (is-eq (+ (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 40 0) (if (not (or (is-done u2) (is-done u6))) 40 0))) (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 0 40) (if (not (or (is-done u2) (is-done u6))) 0 40)))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
-        (map-set claims (unwrap-panic (var-get role-guest)) (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 40 0) (if (not (or (is-done u2) (is-done u6))) 40 0))))
-        (map-set claims (unwrap-panic (var-get role-host)) (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 0 40) (if (not (or (is-done u2) (is-done u6))) 0 40))))
+        (asserts! (is-done u6) ERR_NOT_OPEN)
+        (asserts! (is-eq (+ (unwrap-panic (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 40 0) (if (not (or (is-done u2) (is-done u6))) 40 0)))) (unwrap-panic (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 0 40) (if (not (or (is-done u2) (is-done u6))) 0 40))))) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
+        (map-set claims (unwrap-panic (var-get role-guest)) (unwrap-panic (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 40 0) (if (not (or (is-done u2) (is-done u6))) 40 0)))))
+        (map-set claims (unwrap-panic (var-get role-host)) (unwrap-panic (to-uint (if (and (or (is-done u2) (is-done u6)) (is-done u5)) (if (is-eq (not (is-eq (var-get var-guest-d) (var-get var-host-car))) (var-get var-guest-switch)) 0 40) (if (not (or (is-done u2) (is-done u6))) 0 40)))))
         (var-set payoffs-distributed true)
         (ok true)
     )
@@ -203,7 +240,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
+        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))
         (ok amt)
     )
 )

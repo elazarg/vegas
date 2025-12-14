@@ -132,7 +132,11 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             )
         """.trimIndent())
 
-        sb.appendLine("(define-private (get-contract-principal) (as-contract tx-sender))")
+        if (options.clarityVersion >= 4) {
+            sb.appendLine("(define-private (get-contract-principal) (unwrap-panic (as-contract? () tx-sender)))")
+        } else {
+            sb.appendLine("(define-private (get-contract-principal) (as-contract tx-sender))")
+        }
         sb.appendLine()
     }
 
@@ -148,11 +152,8 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-none (var-get role-$roleName)) ERR_ALREADY_INITIALIZED)")
 
             if (depositAmount > 0) {
-                 if (options.clarityVersion >= 4) {
-                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (unwrap-panic (as-contract? () tx-sender))))")
-                 } else {
-                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
-                 }
+                 // Use helper to get contract principal
+                 sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (get-contract-principal)))")
                  sb.appendLine("        (var-set total-pot (+ (var-get total-pot) u$depositAmount))")
                  sb.appendLine("        (var-set deposit-$roleName u$depositAmount)")
             }
@@ -196,7 +197,24 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (asserts! (>= (get-time) (+ (var-get first-dep-time) u${options.defaultTimeout})) ERR_TIMEOUT_NOT_READY)")
 
         protocol.roles.forEach { role ->
-            sb.appendLine("        (match (var-get role-${kebab(role.name)}) r (as-contract (stx-transfer? (var-get deposit-${kebab(role.name)}) tx-sender r)) (ok true))")
+            val roleVar = "role-${kebab(role.name)}"
+            val depVar = "deposit-${kebab(role.name)}"
+
+            sb.appendLine("        (match (var-get $roleVar) r")
+            sb.appendLine("            (let ((amt (var-get $depVar)))")
+            sb.appendLine("                (if (> amt u0)")
+            if (options.clarityVersion >= 4) {
+                // Nested unwrap for Clarity 4: (as-contract? (stx-transfer?)) returns (response (response bool uint) uint)
+                // We need 'bool' result for the match branch.
+                sb.appendLine("                    (unwrap-panic (as-contract? ((with-stx amt)) (unwrap-panic (stx-transfer? amt tx-sender r))))")
+            } else {
+                sb.appendLine("                    (unwrap-panic (as-contract (stx-transfer? amt tx-sender r)))")
+            }
+            sb.appendLine("                    true")
+            sb.appendLine("                )")
+            sb.appendLine("            )")
+            sb.appendLine("            true")
+            sb.appendLine("        )")
         }
 
         sb.appendLine("        (var-set total-pot u0)")
@@ -321,7 +339,7 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
         val payouts = protocol.payoffs.mapValues { (_, expr) ->
             val intExpr = translateExpr(expr, ::getFieldWriters)
-            "(to-uint $intExpr)"
+            "(unwrap-panic (to-uint $intExpr))"
         }
 
         if (payouts.isNotEmpty()) {

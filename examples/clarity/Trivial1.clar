@@ -17,6 +17,7 @@
 ;; Data Variables
 (define-data-var initialized bool false)
 (define-data-var last-progress uint u0)
+(define-data-var first-dep-time uint u0)
 (define-data-var payoffs-distributed bool false)
 
 (define-data-var role-a (optional principal) none)
@@ -42,7 +43,7 @@
 (define-private (is-done (id uint))
     (default-to false (map-get? action-done id))
 )
-(define-private (get-contract-principal) (as-contract tx-sender))
+(define-private (get-contract-principal) (unwrap-panic (as-contract? () tx-sender)))
 
 ;; Registration
 (define-public (register-a)
@@ -52,6 +53,7 @@
         (var-set total-pot (+ (var-get total-pot) u10))
         (var-set deposit-a u10)
         (var-set role-a (some tx-sender))
+        (if (is-eq (var-get first-dep-time) u0) (var-set first-dep-time (get-time)) true)
         (check-initialization)
         (ok true)
     )
@@ -68,6 +70,29 @@
     )
 )
 
+;; Cancel
+(define-public (cancel-uninitialized)
+    (begin
+        (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+        (asserts! (> (var-get first-dep-time) u0) ERR_NOT_OPEN)
+        (asserts! (>= (get-time) (+ (var-get first-dep-time) u100)) ERR_TIMEOUT_NOT_READY)
+        (match (var-get role-a) r
+            (let ((amt (var-get deposit-a)))
+                (if (> amt u0)
+                    (unwrap-panic (as-contract? ((with-stx amt)) (unwrap-panic (stx-transfer? amt tx-sender r))))
+                    true
+                )
+            )
+            true
+        )
+        (var-set total-pot u0)
+        (var-set role-a none)
+        (var-set deposit-a u0)
+        (var-set first-dep-time u0)
+        (ok true)
+    )
+)
+
 ;; Actions
 ;; Finalize
 (define-public (finalize)
@@ -75,8 +100,8 @@
         (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
         (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
         (asserts! (is-done u0) ERR_NOT_OPEN)
-        (asserts! (is-eq (to-uint 10) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
-        (map-set claims (unwrap-panic (var-get role-a)) (to-uint 10))
+        (asserts! (is-eq (unwrap-panic (to-uint 10)) (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)
+        (map-set claims (unwrap-panic (var-get role-a)) (unwrap-panic (to-uint 10)))
         (var-set payoffs-distributed true)
         (ok true)
     )
@@ -100,7 +125,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
+        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))
         (ok amt)
     )
 )
