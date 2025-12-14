@@ -125,7 +125,7 @@ module oddsevens::oddsevens {
         };
         assert!(!instance.action_Odd_2_done, 102);
         assert!(instance.action_Odd_0_done, 103);
-        assert!(instance.action_Even_0_done, 103);
+        assert!((instance.action_Even_0_done || instance.bailed_Even), 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Odd_c_hidden = hidden_c;
         instance.done_Odd_c_hidden = true;
@@ -143,7 +143,7 @@ module oddsevens::oddsevens {
             return
         };
         assert!(!instance.action_Even_4_done, 102);
-        assert!(instance.action_Odd_0_done, 103);
+        assert!((instance.action_Odd_0_done || instance.bailed_Odd), 103);
         assert!(instance.action_Even_0_done, 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.Even_c_hidden = hidden_c;
@@ -163,12 +163,12 @@ module oddsevens::oddsevens {
         };
         assert!(!instance.action_Odd_3_done, 102);
         assert!(instance.action_Odd_0_done, 103);
-        assert!(instance.action_Even_0_done, 103);
+        assert!((instance.action_Even_0_done || instance.bailed_Even), 103);
         assert!(instance.action_Odd_2_done, 103);
-        assert!(instance.action_Even_4_done, 103);
+        assert!((instance.action_Even_4_done || instance.bailed_Even), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_c, &mut salt_bytes_c);
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.Odd_c_hidden), 106);
         instance.Odd_c = c;
         instance.done_Odd_c = true;
@@ -186,13 +186,13 @@ module oddsevens::oddsevens {
             return
         };
         assert!(!instance.action_Even_5_done, 102);
-        assert!(instance.action_Odd_0_done, 103);
+        assert!((instance.action_Odd_0_done || instance.bailed_Odd), 103);
         assert!(instance.action_Even_0_done, 103);
         assert!(instance.action_Even_4_done, 103);
-        assert!(instance.action_Odd_2_done, 103);
+        assert!((instance.action_Odd_2_done || instance.bailed_Odd), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_c, &mut salt_bytes_c);
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.Even_c_hidden), 106);
         instance.Even_c = c;
         instance.done_Even_c = true;

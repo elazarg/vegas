@@ -80,7 +80,7 @@ module bet::bet {
             return
         };
         assert!(!instance.action_Gambler_1_done, 102);
-        assert!(instance.action_Race_0_done, 103);
+        assert!((instance.action_Race_0_done || instance.bailed_Race), 103);
         assert!((((bet == 1) || (bet == 2)) || (bet == 3)), 104);
         instance.Gambler_bet = bet;
         instance.done_Gambler_bet = true;
@@ -98,7 +98,7 @@ module bet::bet {
             return
         };
         assert!(!instance.action_Race_2_done, 102);
-        assert!(instance.action_Gambler_1_done, 103);
+        assert!((instance.action_Gambler_1_done || instance.bailed_Gambler), 103);
         assert!((((winner == 1) || (winner == 2)) || (winner == 3)), 104);
         instance.Race_winner = winner;
         instance.done_Race_winner = true;

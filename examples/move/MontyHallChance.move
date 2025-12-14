@@ -90,7 +90,7 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Guest_1_done, 102);
-        assert!(instance.action_Host_0_done, 103);
+        assert!((instance.action_Host_0_done || instance.bailed_Host), 103);
         instance.action_Guest_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -105,7 +105,7 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Host_2_done, 102);
-        assert!(instance.action_Guest_1_done, 103);
+        assert!((instance.action_Guest_1_done || instance.bailed_Guest), 103);
         assert!((vector::length<u8>(&hidden_car) == 32), 115);
         instance.Host_car_hidden = hidden_car;
         instance.done_Host_car_hidden = true;
@@ -123,7 +123,7 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Guest_3_done, 102);
-        assert!(instance.action_Host_2_done, 103);
+        assert!((instance.action_Host_2_done || instance.bailed_Host), 103);
         assert!((((d == 0) || (d == 1)) || (d == 2)), 104);
         instance.Guest_d = d;
         instance.done_Guest_d = true;
@@ -141,7 +141,7 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Host_4_done, 102);
-        assert!(instance.action_Guest_3_done, 103);
+        assert!((instance.action_Guest_3_done || instance.bailed_Guest), 103);
         assert!(instance.action_Host_2_done, 103);
         assert!((((goat == 0) || (goat == 1)) || (goat == 2)), 104);
         assert!(((goat != instance.Guest_d) && (goat != instance.Host_car)), 105);
@@ -161,7 +161,7 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Guest_5_done, 102);
-        assert!(instance.action_Host_4_done, 103);
+        assert!((instance.action_Host_4_done || instance.bailed_Host), 103);
         instance.Guest_switch = switch;
         instance.done_Guest_switch = true;
         instance.action_Guest_5_done = true;
@@ -178,12 +178,12 @@ module montyhallchance::montyhallchance {
             return
         };
         assert!(!instance.action_Host_6_done, 102);
-        assert!(instance.action_Guest_5_done, 103);
+        assert!((instance.action_Guest_5_done || instance.bailed_Guest), 103);
         assert!(instance.action_Host_2_done, 103);
         assert!((((car == 0) || (car == 1)) || (car == 2)), 104);
         let mut data_car = bcs::to_bytes<u64>(&car);
-        let mut salt_bytes_car = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_car, &mut salt_bytes_car);
+        let salt_bytes_car = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_car, salt_bytes_car);
         assert!((hash::keccak256(&data_car) == instance.Host_car_hidden), 106);
         instance.Host_car = car;
         instance.done_Host_car = true;

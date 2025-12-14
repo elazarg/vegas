@@ -105,7 +105,7 @@ module puzzle::puzzle {
             return
         };
         assert!(!instance.action_A_1_done, 102);
-        assert!(instance.action_Q_0_done, 103);
+        assert!((instance.action_Q_0_done || instance.bailed_Q), 103);
         assert!(((((p * q) == instance.Q_x) && (p != 1)) && (q != 1)), 105);
         instance.A_p = p;
         instance.done_A_p = true;

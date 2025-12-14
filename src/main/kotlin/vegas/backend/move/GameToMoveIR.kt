@@ -393,13 +393,28 @@ private fun buildActionFunction(
             102
         ))
 
-        // Deps: Require strict done (no bail skipping)
+        // Deps: Require done OR (dep_owner is bailed)
         dag.prerequisitesOf(id).forEach { depId ->
             val depDoneField = "action_${depId.first.name}_${depId.second}_done"
-            add(MoveStmt.Assert(
-                MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
-                103
-            ))
+            val depOwner = dag.owner(depId)
+
+            if (depOwner == owner) {
+                // Self-dependency: I am not bailed, so just check done
+                add(MoveStmt.Assert(
+                    MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
+                    103
+                ))
+            } else {
+                // Cross-dependency: Check done OR they bailed
+                val depBailed = MoveExpr.FieldAccess(MoveExpr.Var("instance"), roleBailedName(depOwner))
+                add(MoveStmt.Assert(
+                    MoveExpr.BinOp(MoveBinOp.OR,
+                        MoveExpr.FieldAccess(MoveExpr.Var("instance"), depDoneField),
+                        depBailed
+                    ),
+                    103
+                ))
+            }
         }
 
         if (!hidden) {
@@ -442,14 +457,15 @@ private fun buildActionFunction(
                      MoveExpr.Borrow(input, false)
                  )), mut = true))
 
+                 // Fix: Assign bytes of salt to a variable before append
                  add(MoveStmt.Let("salt_bytes_${p.name}", null,
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false))),
-                     mut = true
+                     mut = false // Immutable
                  ))
 
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
                      MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), true),
-                     MoveExpr.Borrow(MoveExpr.Var("salt_bytes_${p.name}"), true) // MUTABLE REFERENCE
+                     MoveExpr.Var("salt_bytes_${p.name}") // Pass by value
                  ))))
 
                  val hash = platform.hash(MoveExpr.Borrow(MoveExpr.Var("data_${p.name}"), false))

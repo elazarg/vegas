@@ -110,7 +110,7 @@ module prisoners::prisoners {
             return
         };
         assert!(!instance.action_B_1_done, 102);
-        assert!(instance.action_A_0_done, 103);
+        assert!((instance.action_A_0_done || instance.bailed_A), 103);
         instance.action_B_1_done = true;
         instance.last_ts_ms = clock::timestamp_ms(clock);
     }
@@ -125,7 +125,7 @@ module prisoners::prisoners {
             return
         };
         assert!(!instance.action_A_3_done, 102);
-        assert!(instance.action_B_1_done, 103);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
         assert!((vector::length<u8>(&hidden_c) == 32), 115);
         instance.A_c_hidden = hidden_c;
         instance.done_A_c_hidden = true;
@@ -161,12 +161,12 @@ module prisoners::prisoners {
             return
         };
         assert!(!instance.action_A_4_done, 102);
-        assert!(instance.action_B_1_done, 103);
+        assert!((instance.action_B_1_done || instance.bailed_B), 103);
         assert!(instance.action_A_3_done, 103);
-        assert!(instance.action_B_5_done, 103);
+        assert!((instance.action_B_5_done || instance.bailed_B), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_c, &mut salt_bytes_c);
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.A_c_hidden), 106);
         instance.A_c = c;
         instance.done_A_c = true;
@@ -186,10 +186,10 @@ module prisoners::prisoners {
         assert!(!instance.action_B_6_done, 102);
         assert!(instance.action_B_1_done, 103);
         assert!(instance.action_B_5_done, 103);
-        assert!(instance.action_A_3_done, 103);
+        assert!((instance.action_A_3_done || instance.bailed_A), 103);
         let mut data_c = bcs::to_bytes<bool>(&c);
-        let mut salt_bytes_c = bcs::to_bytes<u64>(&salt);
-        vector::append<u8>(&mut data_c, &mut salt_bytes_c);
+        let salt_bytes_c = bcs::to_bytes<u64>(&salt);
+        vector::append<u8>(&mut data_c, salt_bytes_c);
         assert!((hash::keccak256(&data_c) == instance.B_c_hidden), 106);
         instance.B_c = c;
         instance.done_B_c = true;
