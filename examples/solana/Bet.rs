@@ -9,34 +9,29 @@ pub mod bet {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
-         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = now;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
     pub fn timeout_Gambler(ctx: Context<Timeout_Gambler>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
     pub fn timeout_Race(ctx: Context<Timeout_Race>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
@@ -44,6 +39,10 @@ pub mod bet {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -59,20 +58,24 @@ pub mod bet {
             10,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 10);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = now;
          game.last_ts = now;
         Ok(())
     }
 
-    pub fn move_Gambler_1(ctx: Context<Move_Gambler_1>, bet: i64) -> Result<()> {
+    pub fn move_Gambler_1(ctx: Context<Move_Gambler_1>, bet: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         require!((((bet == 1) || (bet == 2)) || (bet == 3)), ErrorCode::GuardFailed);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -88,14 +91,6 @@ pub mod bet {
             10,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
-         require!((((bet == 1) || (bet == 2)) || (bet == 3)), ErrorCode::GuardFailed);
          game.Gambler_bet = bet;
          game.done_Gambler_bet = true;
          game.action_done[1 as usize] = true;
@@ -104,19 +99,19 @@ pub mod bet {
         Ok(())
     }
 
-    pub fn move_Race_2(ctx: Context<Move_Race_2>, winner: i64) -> Result<()> {
+    pub fn move_Race_2(ctx: Context<Move_Race_2>, winner: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((winner == 1) || (winner == 2)) || (winner == 3)), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.Race_winner = winner;
          game.done_Race_winner = true;
          game.action_done[2 as usize] = true;
@@ -209,8 +204,6 @@ pub struct Timeout_Gambler<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -218,8 +211,6 @@ pub struct Timeout_Race<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -233,7 +224,7 @@ pub struct Move_Race_0<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(bet: i64)]
+#[instruction(bet: u8)]
 pub struct Move_Gambler_1<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -244,7 +235,7 @@ pub struct Move_Gambler_1<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(winner: i64)]
+#[instruction(winner: u8)]
 pub struct Move_Race_2<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -297,9 +288,9 @@ pub struct GameState {
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],
-    pub Gambler_bet: i64,
+    pub Gambler_bet: u8,
     pub done_Gambler_bet: bool,
-    pub Race_winner: i64,
+    pub Race_winner: u8,
     pub done_Race_winner: bool,
 }
 

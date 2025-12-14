@@ -9,34 +9,29 @@ pub mod tictactoe {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
-         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = now;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
     pub fn timeout_O(ctx: Context<Timeout_O>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
     pub fn timeout_X(ctx: Context<Timeout_X>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
@@ -44,6 +39,10 @@ pub mod tictactoe {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -59,10 +58,6 @@ pub mod tictactoe {
             100,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 100);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = now;
          game.last_ts = now;
@@ -73,6 +68,13 @@ pub mod tictactoe {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -88,32 +90,25 @@ pub mod tictactoe {
             100,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 100);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
          game.action_done[1 as usize] = true;
          game.action_ts[1 as usize] = now;
          game.last_ts = now;
         Ok(())
     }
 
-    pub fn move_X_2(ctx: Context<Move_X_2>, c1: i64) -> Result<()> {
+    pub fn move_X_2(ctx: Context<Move_X_2>, c1: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((c1 == 0) || (c1 == 1)) || (c1 == 4)), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.X_c1 = c1;
          game.done_X_c1 = true;
          game.action_done[2 as usize] = true;
@@ -122,19 +117,19 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_O_3(ctx: Context<Move_O_3>, c1: i64) -> Result<()> {
+    pub fn move_O_3(ctx: Context<Move_O_3>, c1: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          require!(((((((c1 == 1) || (c1 == 3)) || (c1 == 4)) || (c1 == 5)) || (c1 == 9)) && (game.X_c1 != c1)), ErrorCode::GuardFailed);
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.O_c1 = c1;
          game.done_O_c1 = true;
          game.action_done[3 as usize] = true;
@@ -143,20 +138,20 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_X_4(ctx: Context<Move_X_4>, c2: i64) -> Result<()> {
+    pub fn move_X_4(ctx: Context<Move_X_4>, c2: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          }
          require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c2 == 0) || (c2 == 1)) || (c2 == 2)) || (c2 == 3)) || (c2 == 4)) || (c2 == 5)) || (c2 == 6)) || (c2 == 7)) || (c2 == 8)) && (((game.X_c1 != game.O_c1) && (game.X_c1 != c2)) && (game.O_c1 != c2))), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.X_c2 = c2;
          game.done_X_c2 = true;
          game.action_done[4 as usize] = true;
@@ -165,14 +160,13 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_O_5(ctx: Context<Move_O_5>, c2: i64) -> Result<()> {
+    pub fn move_O_5(ctx: Context<Move_O_5>, c2: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
@@ -182,6 +176,7 @@ pub mod tictactoe {
          }
          require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c2 == 0) || (c2 == 1)) || (c2 == 2)) || (c2 == 3)) || (c2 == 4)) || (c2 == 5)) || (c2 == 6)) || (c2 == 7)) || (c2 == 8)) && ((((((game.X_c1 != game.O_c1) && (game.X_c1 != game.X_c2)) && (game.X_c1 != c2)) && (game.O_c1 != game.X_c2)) && (game.O_c1 != c2)) && (game.X_c2 != c2))), ErrorCode::GuardFailed);
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.O_c2 = c2;
          game.done_O_c2 = true;
          game.action_done[5 as usize] = true;
@@ -190,14 +185,13 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_X_6(ctx: Context<Move_X_6>, c3: i64) -> Result<()> {
+    pub fn move_X_6(ctx: Context<Move_X_6>, c3: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[6 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
@@ -208,6 +202,7 @@ pub mod tictactoe {
          }
          require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c3 == 0) || (c3 == 1)) || (c3 == 2)) || (c3 == 3)) || (c3 == 4)) || (c3 == 5)) || (c3 == 6)) || (c3 == 7)) || (c3 == 8)) && ((((((((((game.X_c1 != game.O_c1) && (game.X_c1 != game.X_c2)) && (game.X_c1 != game.O_c2)) && (game.X_c1 != c3)) && (game.O_c1 != game.X_c2)) && (game.O_c1 != game.O_c2)) && (game.O_c1 != c3)) && (game.X_c2 != game.O_c2)) && (game.X_c2 != c3)) && (game.O_c2 != c3))), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.X_c3 = c3;
          game.done_X_c3 = true;
          game.action_done[6 as usize] = true;
@@ -216,14 +211,13 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_O_7(ctx: Context<Move_O_7>, c3: i64) -> Result<()> {
+    pub fn move_O_7(ctx: Context<Move_O_7>, c3: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[7 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[6 as usize], ErrorCode::DependencyNotMet);
@@ -237,6 +231,7 @@ pub mod tictactoe {
          }
          require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c3 == 0) || (c3 == 1)) || (c3 == 2)) || (c3 == 3)) || (c3 == 4)) || (c3 == 5)) || (c3 == 6)) || (c3 == 7)) || (c3 == 8)) && (((((((((((((((game.X_c1 != game.O_c1) && (game.X_c1 != game.X_c2)) && (game.X_c1 != game.O_c2)) && (game.X_c1 != game.X_c3)) && (game.X_c1 != c3)) && (game.O_c1 != game.X_c2)) && (game.O_c1 != game.O_c2)) && (game.O_c1 != game.X_c3)) && (game.O_c1 != c3)) && (game.X_c2 != game.O_c2)) && (game.X_c2 != game.X_c3)) && (game.X_c2 != c3)) && (game.O_c2 != game.X_c3)) && (game.O_c2 != c3)) && (game.X_c3 != c3))), ErrorCode::GuardFailed);
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.O_c3 = c3;
          game.done_O_c3 = true;
          game.action_done[7 as usize] = true;
@@ -245,14 +240,13 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_X_8(ctx: Context<Move_X_8>, c4: i64) -> Result<()> {
+    pub fn move_X_8(ctx: Context<Move_X_8>, c4: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[8 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[7 as usize], ErrorCode::DependencyNotMet);
@@ -267,6 +261,7 @@ pub mod tictactoe {
          }
          require!(game.action_done[6 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c4 == 0) || (c4 == 1)) || (c4 == 2)) || (c4 == 3)) || (c4 == 4)) || (c4 == 5)) || (c4 == 6)) || (c4 == 7)) || (c4 == 8)) && (((((((((((((((((((((game.X_c1 != game.O_c1) && (game.X_c1 != game.X_c2)) && (game.X_c1 != game.O_c2)) && (game.X_c1 != game.X_c3)) && (game.X_c1 != game.O_c3)) && (game.X_c1 != c4)) && (game.O_c1 != game.X_c2)) && (game.O_c1 != game.O_c2)) && (game.O_c1 != game.X_c3)) && (game.O_c1 != game.O_c3)) && (game.O_c1 != c4)) && (game.X_c2 != game.O_c2)) && (game.X_c2 != game.X_c3)) && (game.X_c2 != game.O_c3)) && (game.X_c2 != c4)) && (game.O_c2 != game.X_c3)) && (game.O_c2 != game.O_c3)) && (game.O_c2 != c4)) && (game.X_c3 != game.O_c3)) && (game.X_c3 != c4)) && (game.O_c3 != c4))), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.X_c4 = c4;
          game.done_X_c4 = true;
          game.action_done[8 as usize] = true;
@@ -275,14 +270,13 @@ pub mod tictactoe {
         Ok(())
     }
 
-    pub fn move_O_9(ctx: Context<Move_O_9>, c4: i64) -> Result<()> {
+    pub fn move_O_9(ctx: Context<Move_O_9>, c4: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[9 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[8 as usize], ErrorCode::DependencyNotMet);
@@ -300,6 +294,7 @@ pub mod tictactoe {
          }
          require!(game.action_done[7 as usize], ErrorCode::DependencyNotMet);
          require!(((((((((((c4 == 0) || (c4 == 1)) || (c4 == 2)) || (c4 == 3)) || (c4 == 4)) || (c4 == 5)) || (c4 == 6)) || (c4 == 7)) || (c4 == 8)) && ((((((((((((((((((((((((((((game.X_c1 != game.O_c1) && (game.X_c1 != game.X_c2)) && (game.X_c1 != game.O_c2)) && (game.X_c1 != game.X_c3)) && (game.X_c1 != game.O_c3)) && (game.X_c1 != game.X_c4)) && (game.X_c1 != c4)) && (game.O_c1 != game.X_c2)) && (game.O_c1 != game.O_c2)) && (game.O_c1 != game.X_c3)) && (game.O_c1 != game.O_c3)) && (game.O_c1 != game.X_c4)) && (game.O_c1 != c4)) && (game.X_c2 != game.O_c2)) && (game.X_c2 != game.X_c3)) && (game.X_c2 != game.O_c3)) && (game.X_c2 != game.X_c4)) && (game.X_c2 != c4)) && (game.O_c2 != game.X_c3)) && (game.O_c2 != game.O_c3)) && (game.O_c2 != game.X_c4)) && (game.O_c2 != c4)) && (game.X_c3 != game.O_c3)) && (game.X_c3 != game.X_c4)) && (game.X_c3 != c4)) && (game.O_c3 != game.X_c4)) && (game.O_c3 != c4)) && (game.X_c4 != c4))), ErrorCode::GuardFailed);
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.O_c4 = c4;
          game.done_O_c4 = true;
          game.action_done[9 as usize] = true;
@@ -392,8 +387,6 @@ pub struct Timeout_O<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -401,8 +394,6 @@ pub struct Timeout_X<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -426,7 +417,7 @@ pub struct Move_O_1<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c1: i64)]
+#[instruction(c1: u8)]
 pub struct Move_X_2<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -436,7 +427,7 @@ pub struct Move_X_2<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c1: i64)]
+#[instruction(c1: u8)]
 pub struct Move_O_3<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -446,7 +437,7 @@ pub struct Move_O_3<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c2: i64)]
+#[instruction(c2: u8)]
 pub struct Move_X_4<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -456,7 +447,7 @@ pub struct Move_X_4<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c2: i64)]
+#[instruction(c2: u8)]
 pub struct Move_O_5<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -466,7 +457,7 @@ pub struct Move_O_5<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c3: i64)]
+#[instruction(c3: u8)]
 pub struct Move_X_6<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -476,7 +467,7 @@ pub struct Move_X_6<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c3: i64)]
+#[instruction(c3: u8)]
 pub struct Move_O_7<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -486,7 +477,7 @@ pub struct Move_O_7<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c4: i64)]
+#[instruction(c4: u8)]
 pub struct Move_X_8<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -496,7 +487,7 @@ pub struct Move_X_8<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(c4: i64)]
+#[instruction(c4: u8)]
 pub struct Move_O_9<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -549,21 +540,21 @@ pub struct GameState {
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],
-    pub X_c1: i64,
+    pub X_c1: u8,
     pub done_X_c1: bool,
-    pub O_c1: i64,
+    pub O_c1: u8,
     pub done_O_c1: bool,
-    pub X_c2: i64,
+    pub X_c2: u8,
     pub done_X_c2: bool,
-    pub O_c2: i64,
+    pub O_c2: u8,
     pub done_O_c2: bool,
-    pub X_c3: i64,
+    pub X_c3: u8,
     pub done_X_c3: bool,
-    pub O_c3: i64,
+    pub O_c3: u8,
     pub done_O_c3: bool,
-    pub X_c4: i64,
+    pub X_c4: u8,
     pub done_X_c4: bool,
-    pub O_c4: i64,
+    pub O_c4: u8,
     pub done_O_c4: bool,
 }
 

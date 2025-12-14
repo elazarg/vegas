@@ -9,34 +9,29 @@ pub mod montyhall {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
-         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = now;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
     pub fn timeout_Guest(ctx: Context<Timeout_Guest>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
     pub fn timeout_Host(ctx: Context<Timeout_Host>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
@@ -44,6 +39,10 @@ pub mod montyhall {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -59,10 +58,6 @@ pub mod montyhall {
             20,
          )?;
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 20);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = now;
          game.last_ts = now;
@@ -73,6 +68,13 @@ pub mod montyhall {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -88,13 +90,6 @@ pub mod montyhall {
             20,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 20);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
          game.action_done[1 as usize] = true;
          game.action_ts[1 as usize] = now;
          game.last_ts = now;
@@ -105,14 +100,14 @@ pub mod montyhall {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.Host_car_hidden = hidden_car;
          game.done_Host_car_hidden = true;
          game.action_done[2 as usize] = true;
@@ -121,19 +116,19 @@ pub mod montyhall {
         Ok(())
     }
 
-    pub fn move_Guest_3(ctx: Context<Move_Guest_3>, d: i64) -> Result<()> {
+    pub fn move_Guest_3(ctx: Context<Move_Guest_3>, d: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          require!((((d == 0) || (d == 1)) || (d == 2)), ErrorCode::GuardFailed);
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.Guest_d = d;
          game.done_Guest_d = true;
          game.action_done[3 as usize] = true;
@@ -142,19 +137,19 @@ pub mod montyhall {
         Ok(())
     }
 
-    pub fn move_Host_4(ctx: Context<Move_Host_4>, goat: i64) -> Result<()> {
+    pub fn move_Host_4(ctx: Context<Move_Host_4>, goat: u8) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          }
          require!(((((goat == 0) || (goat == 1)) || (goat == 2)) && (goat != game.Guest_d)), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.Host_goat = goat;
          game.done_Host_goat = true;
          game.action_done[4 as usize] = true;
@@ -167,14 +162,14 @@ pub mod montyhall {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
+         require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          game.Guest_switch = switch;
          game.done_Guest_switch = true;
          game.action_done[5 as usize] = true;
@@ -183,14 +178,13 @@ pub mod montyhall {
         Ok(())
     }
 
-    pub fn move_Host_6(ctx: Context<Move_Host_6>, car: i64, salt: u64) -> Result<()> {
+    pub fn move_Host_6(ctx: Context<Move_Host_6>, car: u8, salt: u64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[6 as usize]), ErrorCode::AlreadyDone);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
@@ -198,6 +192,7 @@ pub mod montyhall {
          require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          require!(((((car == 0) || (car == 1)) || (car == 2)) && (game.Host_goat != car)), ErrorCode::GuardFailed);
+         require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          {
              let val_bytes = (car).to_be_bytes();
              let salt_bytes = salt.to_be_bytes();
@@ -296,8 +291,6 @@ pub struct Timeout_Guest<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -305,8 +298,6 @@ pub struct Timeout_Host<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -340,7 +331,7 @@ pub struct Move_Host_2<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(d: i64)]
+#[instruction(d: u8)]
 pub struct Move_Guest_3<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -350,7 +341,7 @@ pub struct Move_Guest_3<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(goat: i64)]
+#[instruction(goat: u8)]
 pub struct Move_Host_4<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -370,7 +361,7 @@ pub struct Move_Guest_5<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(car: i64, salt: u64)]
+#[instruction(car: u8, salt: u64)]
 pub struct Move_Host_6<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
@@ -423,13 +414,13 @@ pub struct GameState {
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],
-    pub Host_car: i64,
+    pub Host_car: u8,
     pub done_Host_car: bool,
     pub Host_car_hidden: [u8; 32],
     pub done_Host_car_hidden: bool,
-    pub Guest_d: i64,
+    pub Guest_d: u8,
     pub done_Guest_d: bool,
-    pub Host_goat: i64,
+    pub Host_goat: u8,
     pub done_Host_goat: bool,
     pub Guest_switch: bool,
     pub done_Guest_switch: bool,

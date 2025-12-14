@@ -9,22 +9,19 @@ pub mod trivial1 {
     pub fn init_instance(ctx: Context<Init_instance>, game_id: u64, timeout: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
-         let now: i64 = Clock::get()?.unix_timestamp;
          game.game_id = game_id;
          game.timeout = timeout;
-         game.last_ts = now;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
     pub fn timeout_A(ctx: Context<Timeout_A>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          let now: i64 = Clock::get()?.unix_timestamp;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!((now > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
-         game.last_ts = now;
         Ok(())
     }
 
@@ -32,6 +29,10 @@ pub mod trivial1 {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         let now: i64 = Clock::get()?.unix_timestamp;
+         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
+         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -47,10 +48,6 @@ pub mod trivial1 {
             10,
          )?;
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
-         let now: i64 = Clock::get()?.unix_timestamp;
-         require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
-         require!((now <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
-         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = now;
          game.last_ts = now;
@@ -116,8 +113,6 @@ pub struct Timeout_A<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
