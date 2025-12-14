@@ -460,7 +460,7 @@ private fun buildActionFunction(
                  // Fix: Assign bytes of salt to a variable before append
                  add(MoveStmt.Let("salt_bytes_${p.name}", null,
                      MoveExpr.Call("bcs", "to_bytes", listOf(platform.u64Type()), listOf(MoveExpr.Borrow(salt, false))),
-                     mut = false // Immutable
+                     mut = false // Immutable, pass by value
                  ))
 
                  add(MoveStmt.ExprStmt(MoveExpr.Call("vector", "append", listOf(MoveType.U8), listOf(
