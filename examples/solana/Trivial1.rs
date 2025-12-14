@@ -12,18 +12,18 @@ pub mod trivial1 {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
-         game.pot_total = 0;
         Ok(())
     }
 
     pub fn timeout_A_0(ctx: Context<Timeout_A_0>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
+         game.action_done[0 as usize] = true;
+         game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
@@ -46,11 +46,14 @@ pub mod trivial1 {
             ),
             10,
          )?;
-         game.pot_total = (game.pot_total + 10);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 10);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -65,6 +68,10 @@ pub mod trivial1 {
     let lamports = **game.to_account_info().lamports.borrow();
     lamports.saturating_sub(rent)
 };
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
          require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, 10)) as u64;
          if ((0 + p_A) > spendable_pot) {
@@ -116,8 +123,6 @@ pub struct Timeout_A_0<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
-    #[account(mut)]
-    pub _signer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -160,7 +165,6 @@ pub struct GameState {
     pub action_done: [bool; 1],
     pub action_ts: [i64; 1],
     pub timeout: i64,
-    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 1],
     pub claim_amount: [u64; 1],
