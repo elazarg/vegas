@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract OddsEvens {
     enum Role { None, Odd, Even }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Even_0 = 0;
     uint256 constant public ACTION_Odd_0 = 1;
     uint256 constant public ACTION_Odd_2 = 2;
@@ -32,52 +34,49 @@ contract OddsEvens {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Odd_1() public payable by(Role.None) action(Role.Odd, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+
+    
+    function move_Odd_1() public payable by(Role.Odd) action(Role.Odd, 0) {
         require((!done_Odd), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Odd;
@@ -85,7 +84,7 @@ contract OddsEvens {
         done_Odd = true;
     }
     
-    function move_Even_0() public payable by(Role.None) action(Role.Even, 0) {
+    function move_Even_0() public payable by(Role.Even) action(Role.Even, 0) {
         require((!done_Even), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Even;
@@ -115,7 +114,7 @@ contract OddsEvens {
         done_Even_c = true;
     }
     
-    function withdraw_Even() public by(Role.Even) action(Role.Even, 6) depends(Role.Odd, 3) depends(Role.Even, 5) {
+    function withdraw_Even() public {
         require((!claimed_Even), "already claimed");
         claimed_Even = true;
         int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 126 : 74) : (((!done_Even_c) && done_Odd_c) ? 20 : ((done_Even_c && (!done_Odd_c)) ? 180 : 100)));
@@ -125,7 +124,7 @@ contract OddsEvens {
         }
     }
     
-    function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 7) depends(Role.Odd, 3) depends(Role.Even, 5) {
+    function withdraw_Odd() public {
         require((!claimed_Odd), "already claimed");
         claimed_Odd = true;
         int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 74 : 126) : (((!done_Even_c) && done_Odd_c) ? 180 : ((done_Even_c && (!done_Odd_c)) ? 20 : 100)));

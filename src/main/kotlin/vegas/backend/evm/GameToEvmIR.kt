@@ -14,11 +14,13 @@ import vegas.backend.evm.EvmType.*
  */
 fun compileToEvm(game: GameIR): EvmContract {
     val dag = game.dag
+    val policy = game.policy as? EvmQuitPolicy ?: error("Policy does not support EVM")
+
     val linearization = linearizeDag(dag)
-    val storage = buildStorage(game, dag, linearization)
+    val storage = buildStorage(game, dag, linearization, policy)
 
     val gameActions = dag.topo().map { actionId ->
-        buildAction(actionId, dag, linearization)
+        buildAction(actionId, dag, linearization, policy)
     }
 
     // Build per-role withdraw actions
@@ -39,6 +41,8 @@ fun compileToEvm(game: GameIR): EvmContract {
         events = emptyList(),
         actions = actions,
         initialization = init,
+        helpers = policy.helpers(),
+        modifiers = policy.solidityModifiersDefinition()
     )
 }
 
@@ -81,13 +85,17 @@ fun inputParam(param: VarId, hidden: Boolean): String {
 private fun buildStorage(
     g: GameIR,
     dag: ActionDag,
-    linearization: Map<ActionId, Int>
+    linearization: Map<ActionId, Int>,
+    policy: EvmQuitPolicy
 ): List<EvmStorageSlot> = buildList {
 
     // Infrastructure
-    add(EvmStorageSlot("lastTs", Uint256))
+    // lastTs removed (handled by policy if needed, but we keep actionDone here as core)
     add(EvmStorageSlot("actionDone", Mapping(EnumType(roleEnumName), Mapping(Uint256, Bool))))
     add(EvmStorageSlot("actionTimestamp", Mapping(EnumType(roleEnumName), Mapping(Uint256, Uint256))))
+
+    // Policy Storage
+    addAll(policy.storage())
 
     // Action Constants
     linearization.forEach { (id, idx) ->
@@ -146,7 +154,8 @@ private fun buildRoleEnum(g: GameIR): EvmEnum {
 private fun buildAction(
     id: ActionId,
     dag: ActionDag,
-    linearization: Map<ActionId, Int>
+    linearization: Map<ActionId, Int>,
+    policy: EvmQuitPolicy
 ): EvmAction {
     val meta = dag.meta(id)
     val idx = linearization.getValue(id)
@@ -184,8 +193,17 @@ private fun buildAction(
     } else {
         listOf()
     }
+
+    // Dependencies (still needed for structural metadata, but logic is handled by policy)
+    val dependencies = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
+
     // 3c. Body Logic
     val body = buildList {
+        // Guards (moved to body)
+        guards.forEach { g ->
+            add(Require(g, "domain"))
+        }
+
         // Join Logic (Deposit, Role assignment)
         if (spec.join != null) {
             val role = meta.struct.owner
@@ -251,8 +269,6 @@ private fun buildAction(
         }
     }
 
-    // 3c. Dependencies & Metadata
-    val dependencies = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
     // Simplistic check for terminality: if it's the last index, or explicitly marked in GameIR?
     // For now, we assume the backend calculates FINAL_ACTION based on max index.
     val isTerminal = false // The backend calculates this based on DAG topology usually
@@ -265,8 +281,11 @@ private fun buildAction(
         payable = (spec.join?.deposit?.v ?: 0) > 0,
         dependencies = dependencies,
         isTerminal = isTerminal,
-        guards = guards,
-        body = body
+        guards = emptyList(), // Guards moved to body to control ordering
+        body = body,
+        checks = policy.preActionChecks(meta.struct.owner, id, dependencies),
+        modifiers = policy.actionModifiers(meta.struct.owner, id, dependencies),
+        updates = policy.postActionLogic(meta.struct.owner, id)
     )
 }
 

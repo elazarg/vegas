@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract ThreeWayLottery {
     enum Role { None, Issuer, Alice, Bob }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Issuer_0 = 0;
     uint256 constant public ACTION_Alice_1 = 1;
     uint256 constant public ACTION_Bob_2 = 2;
@@ -42,52 +44,49 @@ contract ThreeWayLottery {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Issuer_0() public payable by(Role.None) action(Role.Issuer, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+    
+
+    function move_Issuer_0() public payable by(Role.Issuer) action(Role.Issuer, 0) {
         require((!done_Issuer), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Issuer;
@@ -95,7 +94,7 @@ contract ThreeWayLottery {
         done_Issuer = true;
     }
     
-    function move_Alice_1() public payable by(Role.None) action(Role.Alice, 1) depends(Role.Issuer, 0) {
+    function move_Alice_1() public payable by(Role.Alice) action(Role.Alice, 1) depends(Role.Issuer, 0) {
         require((!done_Alice), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Alice;
@@ -103,7 +102,7 @@ contract ThreeWayLottery {
         done_Alice = true;
     }
     
-    function move_Bob_2() public payable by(Role.None) action(Role.Bob, 2) depends(Role.Alice, 1) {
+    function move_Bob_2() public payable by(Role.Bob) action(Role.Bob, 2) depends(Role.Alice, 1) {
         require((!done_Bob), "already joined");
         require((msg.value == 12), "bad stake");
         roles[msg.sender] = Role.Bob;
@@ -147,7 +146,7 @@ contract ThreeWayLottery {
         done_Bob_c = true;
     }
     
-    function withdraw_Bob() public by(Role.Bob) action(Role.Bob, 9) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+    function withdraw_Bob() public {
         require((!claimed_Bob), "already claimed");
         claimed_Bob = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 24 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 34 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 2 : ((!done_Issuer_c) ? 17 : 12)))))));
@@ -157,7 +156,7 @@ contract ThreeWayLottery {
         }
     }
     
-    function withdraw_Issuer() public by(Role.Issuer) action(Role.Issuer, 10) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+    function withdraw_Issuer() public {
         require((!claimed_Issuer), "already claimed");
         claimed_Issuer = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 6 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 24)) : (((!done_Alice_c) && (!done_Bob_c)) ? 34 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 1 : ((!done_Alice_c) ? 17 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 2 : 12)))))));
@@ -167,7 +166,7 @@ contract ThreeWayLottery {
         }
     }
     
-    function withdraw_Alice() public by(Role.Alice) action(Role.Alice, 11) depends(Role.Issuer, 5) depends(Role.Alice, 7) depends(Role.Bob, 9) {
+    function withdraw_Alice() public {
         require((!claimed_Alice), "already claimed");
         claimed_Alice = true;
         int256 payout = (((done_Alice_c && done_Bob_c) && done_Issuer_c) ? (((((Issuer_c + Alice_c) + Bob_c) % 3) == 0) ? 24 : (((((Issuer_c + Alice_c) + Bob_c) % 3) == 1) ? 6 : 6)) : (((!done_Alice_c) && (!done_Bob_c)) ? 1 : (((!done_Alice_c) && (!done_Issuer_c)) ? 1 : (((!done_Bob_c) && (!done_Issuer_c)) ? 34 : ((!done_Alice_c) ? 2 : ((!done_Bob_c) ? 17 : ((!done_Issuer_c) ? 17 : 12)))))));

@@ -3,9 +3,11 @@ pragma solidity ^0.8.31;
 contract MontyHallChance {
     enum Role { None, Guest, Host }
     
-    uint256 public lastTs;
     mapping(Role => mapping(uint256 => bool)) public actionDone;
     mapping(Role => mapping(uint256 => uint256)) public actionTimestamp;
+    uint256 public lastTs;
+    uint256 constant public TIMEOUT = 86400;
+    mapping(Role => bool) public bailed;
     uint256 constant public ACTION_Host_0 = 0;
     uint256 constant public ACTION_Guest_1 = 1;
     uint256 constant public ACTION_Host_2 = 2;
@@ -35,52 +37,49 @@ contract MontyHallChance {
         revert("direct ETH not allowed");
     }
     
-    uint256 constant public TIMEOUT = 86400;
-    
-    mapping(Role => bool) private bailed;
-    
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
-    modifier action(Role role, uint256 actionId) {
-        require((!actionDone[role][actionId]), "already done");
-        actionDone[role][actionId] = true;
-        _;
-        actionTimestamp[role][actionId] = block.timestamp;
-        lastTs = block.timestamp;
-    }
-    
-    modifier by(Role role) {
-        require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
-        require(!bailed[role], "you bailed");
-        _;
-    }
-    
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
-    }
-    
     constructor() {
         lastTs = block.timestamp;
     }
     
-    function move_Host_0() public payable by(Role.None) action(Role.Host, 0) {
+    function _check_timestamp(Role _role) internal {
+        if ((_role == Role.None))
+         {
+            return;
+        }
+        if ((block.timestamp > (lastTs + _TIMEOUT)))
+         {
+            bailed[_role] = true;
+            lastTs = block.timestamp;
+        }
+    }
+    
+
+    modifier by(Role role) {
+        require((roles[msg.sender] == _role), "bad role");
+        _check_timestamp(_role);
+        require((!bailed[_role]), "you bailed");
+        _;
+    }
+
+    modifier action(Role role, uint256 actionId) {
+        require((!actionDone[_role][_actionId]), "already done");
+        actionDone[_role][_actionId] = true;
+        _;
+        actionTimestamp[_role][_actionId] = block.timestamp;
+        lastTs = block.timestamp;
+    }
+
+    modifier depends(Role role, uint256 actionId) {
+        _check_timestamp(_role);
+        if ((!bailed[_role]))
+         {
+            require(actionDone[_role][_actionId], "dependency not satisfied");
+        }
+        _;
+    }
+    
+
+    function move_Host_0() public payable by(Role.Host) action(Role.Host, 0) {
         require((!done_Host), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Host;
@@ -88,7 +87,7 @@ contract MontyHallChance {
         done_Host = true;
     }
     
-    function move_Guest_1() public payable by(Role.None) action(Role.Guest, 1) depends(Role.Host, 0) {
+    function move_Guest_1() public payable by(Role.Guest) action(Role.Guest, 1) depends(Role.Host, 0) {
         require((!done_Guest), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.Guest;
@@ -126,7 +125,7 @@ contract MontyHallChance {
         done_Host_car = true;
     }
     
-    function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 7) depends(Role.Host, 6) {
+    function withdraw_Guest() public {
         require((!claimed_Guest), "already claimed");
         claimed_Guest = true;
         int256 payout = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 120 : 80) : (((!done_Host_car) || (!done_Host_goat)) ? 200 : 0));
@@ -136,7 +135,7 @@ contract MontyHallChance {
         }
     }
     
-    function withdraw_Host() public by(Role.Host) action(Role.Host, 8) depends(Role.Host, 6) {
+    function withdraw_Host() public {
         require((!claimed_Host), "already claimed");
         claimed_Host = true;
         int256 payout = (((done_Host_car && done_Host_goat) && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 80 : 120) : (((!done_Host_car) || (!done_Host_goat)) ? 0 : 200));
