@@ -11,6 +11,9 @@ import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
+import vegas.backend.move.compileToMove
+import vegas.backend.move.MoveRenderer
+import vegas.backend.move.SuiPlatform
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -76,6 +79,9 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "scr", "scribble") { prog ->
                 val ir = compileToIR(prog)
                 genScribbleFromIR(ir)
+            },
+            TestCase(example, "move", "move") { prog ->
+                MoveRenderer().render(compileToMove(compileToIR(prog), SuiPlatform))
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
