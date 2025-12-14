@@ -19,12 +19,15 @@ internal object ClarityCompiler {
         val potAmount = computePot(game, game.roles)
 
         // 2. Build Actions
-        val actions = game.dag.actions.sortedBy { it.second }.map { actionId ->
+        val rawActions = game.dag.actions.sortedBy { it.second }.map { actionId ->
             buildAction(game, actionId)
         }
 
-        // 3. Explore State Space
-        val (abortPayoffs, terminalFrontiers, initialDone) = exploreStateSpace(game, rolesSorted, potAmount)
+        // Sort Topologically
+        val actions = topologicalSort(game, rawActions)
+
+        // 3. Explore State Space (Linear Sequence)
+        val (abortPayoffs, terminalFrontiers, initialDone) = exploreLinearStateSpace(game, rolesSorted, potAmount, actions)
 
         return ClarityGame(
             name = game.name,
@@ -36,6 +39,34 @@ internal object ClarityCompiler {
             terminalFrontiers = terminalFrontiers,
             payoffs = game.payoffs
         )
+    }
+
+    private fun topologicalSort(game: GameIR, actions: List<ClarityAction>): List<ClarityAction> {
+        val result = mutableListOf<ClarityAction>()
+        val visited = mutableSetOf<ActionId>()
+        val temp = mutableSetOf<ActionId>()
+        val actionMap = actions.associateBy { it.id }
+
+        fun visit(id: ActionId) {
+            if (id in visited) return
+            if (id in temp) throw ClarityCompilationException("Cycle detected in ActionDAG")
+            temp.add(id)
+
+            game.dag.prerequisitesOf(id).forEach { dep ->
+                if (dep in actionMap) visit(dep)
+            }
+
+            temp.remove(id)
+            visited.add(id)
+            result.add(actionMap[id]!!)
+        }
+
+        // Sort by ID to ensure deterministic order among independent nodes
+        actions.sortedBy { it.id.second }.forEach { action ->
+            visit(action.id)
+        }
+
+        return result
     }
 
     private fun buildAction(game: GameIR, actionId: ActionId): ClarityAction {
@@ -83,64 +114,69 @@ internal object ClarityCompiler {
         )
     }
 
-    private fun exploreStateSpace(
+    private fun exploreLinearStateSpace(
         game: GameIR,
         roles: List<RoleId>,
-        pot: Long
+        pot: Long,
+        sortedActions: List<ClarityAction>
     ): Triple<Map<Set<ActionId>, Map<RoleId, Long>>, List<Set<ActionId>>, Set<ActionId>> {
         val semantics = GameSemantics(game)
 
         val frontierPayoffs = mutableMapOf<Set<ActionId>, Map<RoleId, Long>>()
-        val terminalFrontiers = mutableSetOf<Set<ActionId>>()
-
-        val visited = mutableSetOf<Set<ActionId>>()
-        val queue = ArrayDeque<Pair<Configuration, Set<ActionId>>>()
+        val terminalFrontiers = mutableListOf<Set<ActionId>>()
 
         val initial = Configuration.initial(game)
         val (canonInitial, initialDone) = canonicalize(semantics, initial, roles)
-        queue.add(canonInitial to initialDone)
-        visited.add(initialDone)
 
-        while (queue.isNotEmpty()) {
-            val (config, done) = queue.remove()
-            val moves = semantics.enabledMoves(config)
+        var currentConfig = canonInitial
+        var currentDone = initialDone
 
-            val strategic = moves.filterIsInstance<Label.Play>()
-                .filter { it.tag != PlayTag.Quit && it.role in roles }
-            val quit = moves.filterIsInstance<Label.Play>()
-                .filter { it.tag == PlayTag.Quit && it.role in roles }
+        // Identify index in sortedActions to start from
+        // Assuming initialDone matches prefix of sortedActions?
+        // Or we just skip actions in initialDone.
+        // Since we sort topologically, and initialDone are joins (roots), they should be at start.
 
-            if (config.isTerminal() || (strategic.isEmpty() && quit.isEmpty())) {
-                terminalFrontiers.add(done)
-                continue
+        // Loop through actions
+        for (action in sortedActions) {
+            if (action.id in currentDone) continue
+
+            // At this point, we are at state 'currentDone'.
+            // The next expected action is 'action'.
+            // It MUST be enabled in the DAG/Semantics if our topological sort is valid and game is playable.
+            // Check if enabled?
+            val moves = semantics.enabledMoves(currentConfig)
+            // Find move for this action
+            val move = moves.filterIsInstance<Label.Play>()
+                .find { (it.tag as? PlayTag.Action)?.actionId == action.id }
+
+            if (move == null) {
+                // This implies topological sort violated game rules?
+                // Or maybe action is not reachable?
+                // Or maybe `initialDone` logic is tricky.
+                // Assuming valid game, this shouldn't happen.
+                // But for safety:
+                break
             }
 
-            // Calculate abort payoff
-            val active = if (strategic.isNotEmpty()) {
-                strategic.minByOrNull { it.role.name }!!.role
-            } else {
-                quit.minByOrNull { it.role.name }!!.role
-            }
+            // Calculate Abort Payoff for *this* state (where 'action' is missing).
+            // Active player is action.owner.
+            val abortPayoff = resolveAbortScenario(semantics, game, currentConfig, action.owner, roles, pot)
+            frontierPayoffs[currentDone] = abortPayoff
 
-            val abortPayoff = resolveAbortScenario(semantics, game, config, active, roles, pot)
-            frontierPayoffs[done] = abortPayoff
+            // Apply move to advance
+            val next = applyMove(currentConfig, move)
+            val (canonNext, canonDone) = canonicalize(semantics, next, roles)
 
-            // Explore
-            for (move in strategic) {
-                val next = applyMove(config, move)
-                val (canonNext, canonDone) = canonicalize(semantics, next, roles)
-
-                val actionId = (move.tag as PlayTag.Action).actionId
-                val nextDone = done + actionId + canonDone
-
-                if (nextDone !in visited) {
-                    visited.add(nextDone)
-                    queue.add(canonNext to nextDone)
-                }
-            }
+            currentConfig = canonNext
+            currentDone = currentDone + action.id + canonDone
         }
 
-        return Triple(frontierPayoffs, terminalFrontiers.toList(), initialDone)
+        // After loop, check if terminal
+        if (currentConfig.isTerminal()) {
+            terminalFrontiers.add(currentDone)
+        }
+
+        return Triple(frontierPayoffs, terminalFrontiers, initialDone)
     }
 
     private fun computePot(game: GameIR, players: Set<RoleId>): Long {
@@ -214,7 +250,6 @@ internal object ClarityCompiler {
         pot: Long
     ): Map<RoleId, Long> {
         // Construct "Super Quit" delta: overwrite ALL fields of the quitter with Quit.
-        // This ensures the payoff function sees them as undefined, triggering correct forfeit logic.
         val allFields = game.dag.actions
             .filter { game.dag.owner(it) == quitter }
             .flatMap { game.dag.writes(it) }
@@ -222,7 +257,6 @@ internal object ClarityCompiler {
 
         val quitDelta = allFields.associateWith { vegas.ir.Expr.Const.Quit }
 
-        // Create synthetic quit label
         val quitLabel = Label.Play(quitter, quitDelta, PlayTag.Quit)
 
         var current = applyMove(config, quitLabel)

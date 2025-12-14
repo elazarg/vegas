@@ -15,14 +15,11 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
     private val protocol = ClarityCompiler.compile(game, options.defaultTimeout)
     private val sb = StringBuilder()
 
-    // Topologically sorted actions to enforce sequential execution safely
-    private val sortedActions: List<ClarityAction> by lazy {
-        topologicalSort(protocol.actions)
-    }
+    private val sortedActions = protocol.actions
 
-    private val actionIds: Map<ActionId, Int> by lazy {
-        sortedActions.mapIndexed { index, action -> action.id to index }.toMap()
-    }
+    private val actionIds: Map<ActionId, Int> = sortedActions
+        .mapIndexed { index, action -> action.id to index }
+        .toMap()
 
     private val fieldWriters: Map<FieldRef, List<Int>> by lazy {
         val map = mutableMapOf<FieldRef, MutableList<Int>>()
@@ -44,41 +41,13 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         generateMaps()
         generateHelpers()
         generateRegistration()
+        generateCancel()
         generateActions()
         generateFinalize()
         generateTimeout()
         generateWithdraw()
 
         return sb.toString()
-    }
-
-    private fun topologicalSort(actions: List<ClarityAction>): List<ClarityAction> {
-        val result = mutableListOf<ClarityAction>()
-        val visited = mutableSetOf<ActionId>()
-        val temp = mutableSetOf<ActionId>()
-        val actionMap = actions.associateBy { it.id }
-
-        fun visit(id: ActionId) {
-            if (id in visited) return
-            if (id in temp) error("Cycle detected in ActionDAG")
-            temp.add(id)
-
-            // Dependencies from DAG
-            game.dag.prerequisitesOf(id).forEach { dep ->
-                if (dep in actionMap) visit(dep)
-            }
-
-            temp.remove(id)
-            visited.add(id)
-            result.add(actionMap[id]!!)
-        }
-
-        // Sort by ID to ensure deterministic order among independent nodes
-        actions.sortedBy { it.id.second }.forEach { action ->
-            visit(action.id)
-        }
-
-        return result
     }
 
     private fun generateConstants() {
@@ -102,6 +71,7 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine(";; Data Variables")
         sb.appendLine("(define-data-var initialized bool false)")
         sb.appendLine("(define-data-var last-progress uint u0)")
+        sb.appendLine("(define-data-var first-dep-time uint u0)")
         sb.appendLine("(define-data-var payoffs-distributed bool false)")
         sb.appendLine()
 
@@ -161,7 +131,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             )
         """.trimIndent())
 
-        // Helper to get contract principal
         sb.appendLine("(define-private (get-contract-principal) (as-contract tx-sender))")
         sb.appendLine()
     }
@@ -178,13 +147,17 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-none (var-get role-$roleName)) ERR_ALREADY_INITIALIZED)")
 
             if (depositAmount > 0) {
-                 // Use helper to get contract principal
-                 sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (get-contract-principal)))")
+                 if (options.clarityVersion >= 4) {
+                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (unwrap-panic (as-contract? () tx-sender))))")
+                 } else {
+                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
+                 }
                  sb.appendLine("        (var-set total-pot (+ (var-get total-pot) u$depositAmount))")
                  sb.appendLine("        (var-set deposit-$roleName u$depositAmount)")
             }
 
             sb.appendLine("        (var-set role-$roleName (some tx-sender))")
+            sb.appendLine("        (if (is-eq (var-get first-dep-time) u0) (var-set first-dep-time (get-time)) true)")
             sb.appendLine("        (check-initialization)")
             sb.appendLine("        (ok true)")
             sb.appendLine("    )")
@@ -202,15 +175,40 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (begin")
         sb.appendLine("            (var-set initialized true)")
         sb.appendLine("            (var-set last-progress (get-time))")
-
-        // Mark implicitly done actions (e.g. parameter-less joins)
         protocol.initialDone.forEach { actionId ->
             val uintId = actionIds[actionId]!!
             sb.appendLine("            (map-set action-done u$uintId true)")
         }
-
         sb.appendLine("        )")
         sb.appendLine("        true")
+        sb.appendLine("    )")
+        sb.appendLine(")")
+        sb.appendLine()
+    }
+
+    private fun generateCancel() {
+        sb.appendLine(";; Cancel")
+        sb.appendLine("(define-public (cancel-uninitialized)")
+        sb.appendLine("    (begin")
+        sb.appendLine("        (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)")
+        sb.appendLine("        (asserts! (> (var-get first-dep-time) u0) ERR_NOT_OPEN)")
+        sb.appendLine("        (asserts! (>= (get-time) (+ (var-get first-dep-time) u${options.defaultTimeout})) ERR_TIMEOUT_NOT_READY)")
+
+        protocol.roles.forEach { role ->
+            sb.appendLine("        (match (var-get role-${kebab(role.name)}) r (as-contract (stx-transfer? (var-get deposit-${kebab(role.name)}) tx-sender r)) (ok true))")
+        }
+
+        sb.appendLine("        (var-set total-pot u0)")
+        // Reset roles? Or just leave funds drained.
+        // If funds drained, total-pot is 0.
+        // We should probably allow re-registration or permanent disable?
+        // Usually reset.
+        protocol.roles.forEach { role ->
+            sb.appendLine("        (var-set role-${kebab(role.name)} none)")
+            sb.appendLine("        (var-set deposit-${kebab(role.name)} u0)")
+        }
+        sb.appendLine("        (var-set first-dep-time u0)")
+        sb.appendLine("        (ok true)")
         sb.appendLine("    )")
         sb.appendLine(")")
         sb.appendLine()
@@ -222,7 +220,7 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sortedActions.forEachIndexed { index, action ->
             if (action.id in protocol.initialDone) return@forEachIndexed
 
-            val actionIdUint = index // actionIds[action.id] is index
+            val actionIdUint = index
             val actionName = "action-${kebab(action.owner.name)}-${action.id.second}"
 
             val funcParams = mutableListOf<String>()
@@ -287,12 +285,10 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
             sb.appendLine("        (asserts! (not (is-done u$actionIdUint)) ERR_ACTION_ALREADY_DONE)")
 
-            // Sequential enforcement: depend on previous action in topo sort
             if (index > 0) {
                 sb.appendLine("        (asserts! (is-done u${index - 1}) ERR_DEPENDENCY_NOT_MET)")
             }
 
-            // Explicit DAG deps (usually covered by sequential, but good for robust check)
             action.prereqs.forEach { prereq ->
                 val pid = actionIds[prereq]!!
                 if (pid != index - 1) {
@@ -323,25 +319,14 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)")
         sb.appendLine("        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)")
 
-        // Terminal conditions: Use terminalFrontiers from compiler
-        // Each set in terminalFrontiers is a valid completion
-        val conds = protocol.terminalFrontiers.map { doneSet ->
-            if (doneSet.isEmpty()) "true" else {
-                val checks = doneSet.map { id -> "(is-done u${actionIds[id]!!})" }
-                if (checks.size == 1) checks[0] else "(and ${checks.joinToString(" ")})"
-            }
-        }
-        val terminalCond = if (conds.isEmpty()) "false" else if (conds.size == 1) conds[0] else "(or ${conds.joinToString(" ")})"
+        val lastActionId = sortedActions.size - 1
+        sb.appendLine("        (asserts! (is-done u$lastActionId) ERR_NOT_OPEN)")
 
-        sb.appendLine("        (asserts! $terminalCond ERR_NOT_OPEN)")
-
-        // Payoffs (convert int to uint)
         val payouts = protocol.payoffs.mapValues { (_, expr) ->
             val intExpr = translateExpr(expr, ::getFieldWriters)
-            "(to-uint $intExpr)" // using to-uint directly on int result
+            "(to-uint $intExpr)"
         }
 
-        // Sum payouts
         if (payouts.isNotEmpty()) {
             val sumExpr = payouts.values.reduce { acc, s -> "(+ $acc $s)" }
             sb.appendLine("        (asserts! (is-eq $sumExpr (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)")
@@ -369,14 +354,18 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         var expr = "(err ERR_NOT_OPEN)"
 
         // Build "First Undone" check chain (linear based on topo sort)
+        // exploreLinearStateSpace generates payoffs for missing action
         val reversedActions = sortedActions.reversed()
 
         for (action in reversedActions) {
             val aid = actionIds[action.id]!!
+            // Payoff for state where this action is enabled (previous actions done) but this one is NOT done.
+            // State = {0..aid-1}.
+            // This set IS populated by exploreLinearStateSpace if reachable linearly.
+            // Since sortedActions IS the linear path, exploreLinearStateSpace guarantees these sets exist.
             val prevSet = sortedActions.take(aid).map { it.id }.toSet()
             val payoff = protocol.abortPayoffs[prevSet]
 
-            // If payoff exists for this state, generate branch
             if (payoff != null) {
                 val payBlock = StringBuilder()
                 payBlock.append("(begin ")
@@ -406,7 +395,13 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("    )")
         sb.appendLine("        (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)")
         sb.appendLine("        (map-set claims recipient u0)")
-        sb.appendLine("        (try! (as-contract (stx-transfer? amt tx-sender recipient)))")
+
+        if (options.clarityVersion >= 4) {
+            sb.appendLine("        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))")
+        } else {
+            sb.appendLine("        (try! (as-contract (stx-transfer? amt tx-sender recipient)))")
+        }
+
         sb.appendLine("        (ok amt)")
         sb.appendLine("    )")
         sb.appendLine(")")
