@@ -33,12 +33,16 @@ class ClarityBackendTest {
 
         // Check for commit/reveal expansion
         // Should have commit vars
-        assertTrue(clarityCode.contains("(define-data-var commit-odd-c (buff 32) 0x)"))
-        assertTrue(clarityCode.contains("(define-data-var commit-even-c (buff 32) 0x)"))
+        assertTrue(clarityCode.contains("(define-data-var commit-odd-c (optional (buff 32)) none)"))
+        assertTrue(clarityCode.contains("(define-data-var commit-even-c (optional (buff 32)) none)"))
 
         // Check for reveal vars (values)
         assertTrue(clarityCode.contains("(define-data-var var-odd-c bool false)"))
         assertTrue(clarityCode.contains("(define-data-var var-even-c bool false)"))
+
+        // Check for map
+        assertTrue(clarityCode.contains("(define-map action-done uint bool)"))
+        assertFalse(clarityCode.contains("(define-data-var state uint"))
 
         // Check for registration functions
         assertTrue(clarityCode.contains("(define-public (register-odd"))

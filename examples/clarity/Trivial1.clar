@@ -4,16 +4,16 @@
 (define-constant ERR_NOT_INITIALIZED (err u100))
 (define-constant ERR_ALREADY_INITIALIZED (err u101))
 (define-constant ERR_WRONG_ROLE (err u102))
-(define-constant ERR_WRONG_STATE (err u103))
-(define-constant ERR_NOT_OPEN (err u104))
-(define-constant ERR_TIMEOUT_NOT_READY (err u105))
-(define-constant ERR_NOTHING_TO_WITHDRAW (err u106))
-(define-constant ERR_INVALID_PARAM (err u107))
-(define-constant ERR_COMMIT_MISMATCH (err u108))
+(define-constant ERR_NOT_OPEN (err u103))
+(define-constant ERR_TIMEOUT_NOT_READY (err u104))
+(define-constant ERR_NOTHING_TO_WITHDRAW (err u105))
+(define-constant ERR_INVALID_PARAM (err u106))
+(define-constant ERR_COMMIT_MISMATCH (err u107))
+(define-constant ERR_ACTION_ALREADY_DONE (err u108))
+(define-constant ERR_DEPENDENCY_NOT_MET (err u109))
 
 ;; Data Variables
 (define-data-var initialized bool false)
-(define-data-var state uint u0)
 (define-data-var last-progress uint u0)
 (define-data-var payoffs-distributed bool false)
 
@@ -22,7 +22,8 @@
 (define-data-var total-pot uint u0)
 
 
-;; Claims Map
+;; Maps
+(define-map action-done uint bool)
 (define-map claims principal uint)
 
 ;; Helpers
@@ -35,6 +36,9 @@
 )
 (define-private (verify-commit (val (buff 128)) (salt (buff 32)) (comm (buff 32)))
     (is-eq (sha256 (concat val salt)) comm)
+)
+(define-private (is-done (id uint))
+    (default-to false (map-get? action-done id))
 )
 ;; Registration
 (define-public (register-a)
@@ -60,22 +64,28 @@
 )
 
 ;; Actions
-;; Timeout
-(define-public (timeout)
-    (let ((st (var-get state)))
-        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
-        (if (is-eq st u0) (resolve-timeout-0) (err ERR_WRONG_STATE))
-    )
-)
-
-(define-private (resolve-timeout-0)
+(define-public (action-a-0  )
     (begin
-        (map-set claims (unwrap-panic (var-get role-a)) u10)
-        (var-set payoffs-distributed true)
+        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+        (asserts! (not (var-get payoffs-distributed)) ERR_NOT_OPEN)
+        (asserts! (is-eq (some tx-sender) (var-get role-a)) ERR_WRONG_ROLE)
+        (asserts! (not (is-done u0)) ERR_ACTION_ALREADY_DONE)
+        (map-set action-done u0 true)
+        (var-set last-progress (get-time))
         (ok true)
     )
 )
+
+;; Timeout
+(define-public (timeout)
+    (begin
+        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)
+        (asserts! (check-timeout u100) ERR_TIMEOUT_NOT_READY)
+        (if true (begin (map-set claims (unwrap-panic (var-get role-a)) u10) (var-set payoffs-distributed true) (ok true)) (err ERR_NOT_OPEN))
+    )
+)
+
 ;; Withdraw
 (define-public (withdraw)
     (let (
@@ -84,7 +94,7 @@
     )
         (asserts! (> amt u0) ERR_NOTHING_TO_WITHDRAW)
         (map-set claims recipient u0)
-        (try! (as-contract (stx-transfer? amt tx-sender recipient)))
+        (try! (as-contract? (stx-transfer? amt tx-sender recipient) (with-stx amt)))
         (ok amt)
     )
 )

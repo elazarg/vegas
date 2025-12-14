@@ -2,191 +2,159 @@ package vegas.backend.clarity
 
 import java.util.ArrayDeque
 import vegas.RoleId
-import vegas.FieldRef
+import vegas.ir.GameIR
+import vegas.ir.ActionId
+import vegas.ir.Type
+import vegas.ir.Visibility
+import vegas.ir.asInt
 import vegas.semantics.*
-import vegas.ir.*
 
 class ClarityCompilationException(message: String) : Exception(message)
 
 internal object ClarityCompiler {
 
-    // Helper class to group concrete configurations by their public projection
-    data class PublicConfiguration(
-        val frontier: Any, // FrontierMachine (reference equality is sufficient for serialized execution)
-        val history: History,
-        val partial: FrontierAssignmentSlice
-    )
-
-    fun compile(game: GameIR, defaultTimeout: Long): ClarityProtocol {
+    fun compile(game: GameIR, defaultTimeout: Long): ClarityGame {
+        // 1. Roles
         val rolesSorted = game.roles.sortedBy { it.name }
-        val semantics = GameSemantics(game)
         val potAmount = computePot(game, game.roles)
 
-        val mapConcreteToStateId = mutableMapOf<Configuration, Int>()
-        val mapPublicToStateId = mutableMapOf<PublicConfiguration, Int>()
-        val protocolStates = mutableMapOf<Int, ClarityState>()
-        val queue = ArrayDeque<Configuration>()
-        var nextStateId = -1
-
-        // Initial State
-        val initialConfig = Configuration.initial(game)
-        val rootConfig = canonicalize(semantics, initialConfig, rolesSorted)
-
-        fun getOrEnqueue(c: Configuration): Int {
-            // Check if this concrete config is already visited
-            if (c in mapConcreteToStateId) return mapConcreteToStateId[c]!!
-
-            val pub = project(c)
-            val id = if (pub in mapPublicToStateId) {
-                mapPublicToStateId[pub]!!
-            } else {
-                val newId = ++nextStateId
-                mapPublicToStateId[pub] = newId
-                newId
-            }
-
-            mapConcreteToStateId[c] = id
-            // Always enqueue concrete config to ensure we explore its specific hidden branches
-            queue.add(c)
-            return id
+        // 2. Build Actions
+        val actions = game.dag.actions.sortedBy { it.second }.map { actionId ->
+            buildAction(game, actionId)
         }
 
-        val rootId = getOrEnqueue(rootConfig)
+        // 3. Explore State Space for Timeout Rules
+        val timeoutRules = computeTimeoutRules(game, rolesSorted, potAmount)
 
-        while (queue.isNotEmpty()) {
-            val config = queue.remove()
-            val id = mapConcreteToStateId[config]!!
-
-            // If we already processed this StateId (from another concrete config),
-            // we typically still need to process this config to find *new* transitions
-            // (e.g. Reveal T vs Reveal F).
-            // But we must merge them into the existing state.
-            // The `protocolStates` map will be updated.
-
-            val moves = semantics.enabledMoves(config)
-
-            // Strategic moves
-            val strategicMoves = moves.filter {
-                it is Label.Play && it.tag != PlayTag.Quit && it.role in rolesSorted
-            }
-
-            if (strategicMoves.isEmpty()) {
-                // Terminal or Forced Abort
-                handleTerminalOrAbort(game, semantics, config, id, moves, rolesSorted, potAmount, protocolStates, defaultTimeout)
-            } else {
-                // Strategic State
-                // Deterministic Scheduling: Pick first role
-                val actors = strategicMoves.map { (it as Label.Play).role }.distinct().sortedBy { it.name }
-                val activePlayer = actors.first()
-                val activePlayerMoves = strategicMoves.filter { (it as Label.Play).role == activePlayer }
-
-                // Abort Balance (use concrete config, assume consistent across public state)
-                val abortBalance = resolveAbortScenario(
-                    semantics, game, config, activePlayer, rolesSorted, potAmount
-                )
-
-                // Process transitions
-                val newTransitions = activePlayerMoves.map { move ->
-                    val rawNext = applyMove(config, move)
-                    val canonNext = canonicalize(semantics, rawNext, rolesSorted)
-                    val nextId = getOrEnqueue(canonNext)
-                    ClarityTransition(move, nextId)
-                }
-
-                // Merge with existing transitions for this state
-                val existingState = protocolStates[id]
-                if (existingState == null) {
-                    protocolStates[id] = ClarityState(id, activePlayer, newTransitions, abortBalance, defaultTimeout)
-                } else {
-                    // We might be discovering new branches (e.g. Reveal F)
-                    // Combine transitions. simple list concat?
-                    // Deduplicate based on Label + NextStateId
-                    val allTrans = (existingState.transitions + newTransitions).distinct()
-
-                    // Verify consistency of activePlayer and abortBalance
-                    if (existingState.activePlayer != activePlayer) {
-                         // This shouldn't happen with serialized execution and public state projection
-                         // unless different hidden histories lead to different active players?
-                         // With perfect recall and serialized scheduling, it should be fine.
-                    }
-
-                    protocolStates[id] = existingState.copy(transitions = allTrans)
-                }
-            }
-        }
-
-        return ClarityProtocol(
+        return ClarityGame(
             name = game.name,
             roles = rolesSorted,
-            states = protocolStates,
-            rootStateId = rootId,
-            totalPot = potAmount
+            pot = potAmount,
+            actions = actions,
+            timeoutRules = timeoutRules
         )
     }
 
-    private fun handleTerminalOrAbort(
+    private fun buildAction(game: GameIR, actionId: ActionId): ClarityAction {
+        val owner = game.dag.owner(actionId)
+        val spec = game.dag.spec(actionId)
+        val kind = game.dag.kind(actionId)
+        val visMap = game.dag.visibilityOf(actionId)
+
+        val params = spec.params.map { param ->
+            val fieldRef = vegas.FieldRef(owner, param.name)
+            val vis = visMap[fieldRef]!!
+            ClarityParam(
+                name = param.name.name,
+                type = param.type,
+                isSalt = (vis == Visibility.REVEAL)
+            )
+        }
+
+        val writes = spec.params.map { param ->
+            val fieldRef = vegas.FieldRef(owner, param.name)
+            val vis = visMap[fieldRef]!!
+            ClarityStateVar(
+                name = "${owner.name}-${param.name.name}",
+                type = param.type,
+                isCommit = (vis == Visibility.COMMIT)
+            )
+        }
+
+        val type = when (kind) {
+            Visibility.COMMIT -> ActionType.Commit
+            Visibility.REVEAL -> ActionType.Reveal("")
+            Visibility.PUBLIC -> ActionType.Public
+        }
+
+        return ClarityAction(
+            id = actionId,
+            owner = owner,
+            prereqs = game.dag.prerequisitesOf(actionId),
+            params = params,
+            type = type,
+            writes = writes
+        )
+    }
+
+    private fun computeTimeoutRules(
+        game: GameIR,
+        roles: List<RoleId>,
+        pot: Long
+    ): List<TimeoutRule> {
+        val semantics = GameSemantics(game)
+
+        val frontierPayoffs = mutableMapOf<Set<ActionId>, Map<RoleId, Long>>()
+        val frontierForbidden = mutableMapOf<Set<ActionId>, MutableSet<ActionId>>()
+
+        val visited = mutableSetOf<Set<ActionId>>()
+        val queue = ArrayDeque<Pair<Configuration, Set<ActionId>>>()
+
+        val initial = Configuration.initial(game)
+        val canonInitial = canonicalize(semantics, initial, roles)
+        queue.add(canonInitial to emptySet())
+        visited.add(emptySet())
+
+        while (queue.isNotEmpty()) {
+            val (config, done) = queue.remove()
+
+            val payoff = resolveFrontierPayoff(game, semantics, config, roles, pot)
+            frontierPayoffs[done] = payoff
+
+            val moves = semantics.enabledMoves(config)
+            val strategicMoves = moves.filterIsInstance<Label.Play>()
+                .filter { it.tag != PlayTag.Quit && it.role in roles }
+
+            val enabledActions = strategicMoves.mapNotNull {
+                (it.tag as? PlayTag.Action)?.actionId
+            }.toSet()
+
+            frontierForbidden.getOrPut(done) { mutableSetOf() }.addAll(enabledActions)
+
+            for (move in strategicMoves) {
+                val next = applyMove(config, move)
+                val canonNext = canonicalize(semantics, next, roles)
+
+                val actionId = (move.tag as PlayTag.Action).actionId
+                val nextDone = done + actionId
+
+                if (nextDone !in visited) {
+                    visited.add(nextDone)
+                    queue.add(canonNext to nextDone)
+                }
+            }
+        }
+
+        return frontierPayoffs.map { (done, payoff) ->
+            TimeoutRule(
+                required = done,
+                forbidden = frontierForbidden[done] ?: emptySet(),
+                payoff = payoff
+            )
+        }.sortedByDescending { it.required.size }
+    }
+
+    private fun resolveFrontierPayoff(
         game: GameIR,
         semantics: GameSemantics,
         config: Configuration,
-        id: Int,
-        moves: List<Label>,
-        rolesSorted: List<RoleId>,
-        potAmount: Long,
-        protocolStates: MutableMap<Int, ClarityState>,
-        defaultTimeout: Long
-    ) {
-        // If state already exists, we assume it's consistent.
-        if (id in protocolStates) return
+        roles: List<RoleId>,
+        pot: Long
+    ): Map<RoleId, Long> {
+         if (config.isTerminal()) {
+             return resolvePayoff(game, config, roles, pot)
+         }
 
-        if (config.isTerminal()) {
-            val finalBalance = resolvePayoff(game, config, rolesSorted, potAmount)
-            protocolStates[id] = ClarityState(id, null, emptyList(), finalBalance, 0)
-        } else {
-            val quitMoves = moves.filterIsInstance<Label.Play>()
-                .filter { it.tag == PlayTag.Quit && it.role in rolesSorted }
+         val moves = semantics.enabledMoves(config)
+         val strategic = moves.filterIsInstance<Label.Play>().filter { it.tag != PlayTag.Quit && it.role in roles }
 
-            if (quitMoves.isNotEmpty()) {
-                val quitter = quitMoves.minByOrNull { it.role.name }!!.role
-                val finalBalance = resolveAbortScenario(
-                    semantics, game, config, quitter, rolesSorted, potAmount
-                )
-                protocolStates[id] = ClarityState(id, null, emptyList(), finalBalance, 0)
-            } else {
-                // Deadlock
-                try {
-                    val finalBalance = resolvePayoff(game, config, rolesSorted, potAmount)
-                    protocolStates[id] = ClarityState(id, null, emptyList(), finalBalance, 0)
-                } catch (e: Exception) {
-                    // Skip or throw
-                }
-            }
-        }
+         if (strategic.isEmpty()) {
+             return resolvePayoff(game, config, roles, pot)
+         }
+
+         val active = strategic.minByOrNull { it.role.name }!!.role
+         return resolveAbortScenario(semantics, game, config, active, roles, pot)
     }
-
-    // --- Projection Logic ---
-
-    private fun project(c: Configuration): PublicConfiguration {
-        return PublicConfiguration(
-            frontier = c.frontier,
-            history = projectHistory(c.history),
-            partial = projectSlice(c.partialFrontierAssignment)
-        )
-    }
-
-    private fun projectHistory(h: History): History {
-        val pLast = projectSlice(h.lastFrontier)
-        val pPast = h.past?.let { projectHistory(it) }
-        // We reuse History class but with Opaque values
-        return History(pLast, pPast)
-    }
-
-    private fun projectSlice(slice: FrontierAssignmentSlice): FrontierAssignmentSlice {
-        return slice.mapValues { (_, v) ->
-            if (v is Expr.Const.Hidden) Expr.Const.Opaque else v
-        }
-    }
-
-    // --- Helpers (copied/adapted) ---
 
     private fun computePot(game: GameIR, players: Set<RoleId>): Long {
         val dag = game.dag
@@ -244,7 +212,6 @@ internal object ClarityCompiler {
             payoffs[role] = amount
             sum += amount
         }
-        // normalization/checks?
         return payoffs
     }
 
@@ -260,7 +227,7 @@ internal object ClarityCompiler {
         val moves = semantics.enabledMoves(current)
         val quitLabel = moves.find {
             it is Label.Play && it.role == quitter && it.tag == PlayTag.Quit
-        } ?: return emptyMap()
+        } ?: return resolvePayoff(game, current, players, pot)
 
         current = applyMove(current, quitLabel)
         current = canonicalize(semantics, current, players)
