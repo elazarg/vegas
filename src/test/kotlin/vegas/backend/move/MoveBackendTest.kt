@@ -31,8 +31,8 @@ class MoveBackendTest : StringSpec({
         rendered shouldContain "fun finalize"
         rendered shouldContain "fun claim_A"
 
-        // Check for Sui-specifics
-        rendered shouldContain "sui::transfer::share_object"
-        rendered shouldContain "sui::clock::timestamp_ms"
+        // Check for Sui-specifics (using aliases now)
+        rendered shouldContain "transfer::share_object"
+        rendered shouldContain "clock::timestamp_ms"
     }
 })
