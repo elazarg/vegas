@@ -12,7 +12,6 @@ pub mod montyhall {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
-         game.pot_total = 0;
         Ok(())
     }
 
@@ -54,14 +53,10 @@ pub mod montyhall {
             ),
             20,
          )?;
-         game.pot_total = (game.pot_total + 20);
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 20);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          game.action_done[0 as usize] = true;
          game.action_ts[0 as usize] = Clock::get()?.unix_timestamp;
          game.last_ts = Clock::get()?.unix_timestamp;
@@ -86,18 +81,10 @@ pub mod montyhall {
             ),
             20,
          )?;
-         game.pot_total = (game.pot_total + 20);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 20);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -113,15 +100,8 @@ pub mod montyhall {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
@@ -139,15 +119,8 @@ pub mod montyhall {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
@@ -166,15 +139,8 @@ pub mod montyhall {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
          }
@@ -193,15 +159,8 @@ pub mod montyhall {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
@@ -219,23 +178,16 @@ pub mod montyhall {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[6 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if !(game.bailed[1 as usize]) {
-             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
          }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
          }
-         if !(game.bailed[0 as usize]) {
-             require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          require!(((((car == 0) || (car == 1)) || (car == 2)) && (game.Host_goat != car)), ErrorCode::GuardFailed);
          {
@@ -260,14 +212,6 @@ pub mod montyhall {
     let lamports = **game.to_account_info().lamports.borrow();
     lamports.saturating_sub(rent)
 };
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          require!((game.action_done[6 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          let p_Guest: u64 = (std::cmp::max(0, if (game.done_Host_car && game.done_Guest_switch) { if ((game.Guest_d != game.Host_car) == game.Guest_switch) { 40 } else { 0 } } else { if !(game.done_Host_car) { 40 } else { 0 } })) as u64;
          let p_Host: u64 = (std::cmp::max(0, if (game.done_Host_car && game.done_Guest_switch) { if ((game.Guest_d != game.Host_car) == game.Guest_switch) { 0 } else { 40 } } else { if !(game.done_Host_car) { 0 } else { 40 } })) as u64;
@@ -468,7 +412,6 @@ pub struct GameState {
     pub action_done: [bool; 7],
     pub action_ts: [i64; 7],
     pub timeout: i64,
-    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],

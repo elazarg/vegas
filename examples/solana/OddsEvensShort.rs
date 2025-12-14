@@ -12,7 +12,6 @@ pub mod oddsevensshort {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
-         game.pot_total = 0;
         Ok(())
     }
 
@@ -54,14 +53,10 @@ pub mod oddsevensshort {
             ),
             100,
          )?;
-         game.pot_total = (game.pot_total + 100);
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 100);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          game.Odd_c_hidden = hidden_c;
          game.done_Odd_c_hidden = true;
          game.action_done[0 as usize] = true;
@@ -88,14 +83,10 @@ pub mod oddsevensshort {
             ),
             100,
          )?;
-         game.pot_total = (game.pot_total + 100);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 100);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          game.Even_c_hidden = hidden_c;
          game.done_Even_c_hidden = true;
          game.action_done[2 as usize] = true;
@@ -110,15 +101,8 @@ pub mod oddsevensshort {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[1 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -145,20 +129,13 @@ pub mod oddsevensshort {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!((game.roles[0 as usize] == signer.key()), ErrorCode::Unauthorized);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
+         require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
          require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
-         }
-         if !(game.bailed[0 as usize]) {
-             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
          }
          {
              let val_bytes = (c as u8).to_be_bytes();
@@ -182,14 +159,6 @@ pub mod oddsevensshort {
     let lamports = **game.to_account_info().lamports.borrow();
     lamports.saturating_sub(rent)
 };
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[0 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-             game.last_ts = Clock::get()?.unix_timestamp;
-         }
          require!((game.action_done[1 as usize] || game.bailed[1 as usize]), ErrorCode::NotFinalized);
          require!((game.action_done[3 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_Even: u64 = (std::cmp::max(0, if (game.done_Even_c && game.done_Odd_c) { if (game.Even_c == game.Odd_c) { 126 } else { 74 } } else { if (!(game.done_Even_c) && game.done_Odd_c) { 20 } else { if (game.done_Even_c && !(game.done_Odd_c)) { 180 } else { 100 } } })) as u64;
@@ -363,7 +332,6 @@ pub struct GameState {
     pub action_done: [bool; 4],
     pub action_ts: [i64; 4],
     pub timeout: i64,
-    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],
