@@ -190,6 +190,7 @@ private fun buildTimeoutActionInstruction(
     linearization: Map<ActionId, Int>,
     roleMap: Map<RoleId, Int>
 ): SolanaInstruction {
+    val meta = dag.meta(id)
     val idx = linearization.getValue(id)
     val owner = dag.owner(id)
     val roleIdx = roleMap[owner]!!
@@ -198,6 +199,11 @@ private fun buildTimeoutActionInstruction(
     body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("GameFinalized", "Game already finalized")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyDone", "Already bailed")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
+
+    // Check joined if this is not a join action
+    if (meta.spec.join == null) {
+        body.add(Require(Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong())), SolanaError("NotJoined", "Player not joined")))
+    }
 
     // Check timeout condition
     body.add(Require(
@@ -219,8 +225,9 @@ private fun buildTimeoutActionInstruction(
         ))
     }
 
-    // Set bailed = true. Do NOT update last_ts.
+    // Set bailed = true AND update last_ts to prevent cascades
     body.add(Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)))
+    body.add(Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp))
 
     val ownerName = owner.name
     return SolanaInstruction(

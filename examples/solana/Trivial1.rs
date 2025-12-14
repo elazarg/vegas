@@ -24,6 +24,7 @@ pub mod trivial1 {
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 

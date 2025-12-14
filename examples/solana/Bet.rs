@@ -24,6 +24,7 @@ pub mod bet {
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[1 as usize] = true;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
@@ -38,6 +39,7 @@ pub mod bet {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
          game.bailed[0 as usize] = true;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
@@ -47,11 +49,13 @@ pub mod bet {
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
          require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         require!(game.joined[1 as usize], ErrorCode::NotJoined);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          if !(game.bailed[0 as usize]) {
              require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
          }
          game.bailed[1 as usize] = true;
+         game.last_ts = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
