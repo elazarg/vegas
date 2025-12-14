@@ -23,7 +23,7 @@ internal fun eval(readField: (FieldRef)-> Expr.Const, e: Expr): Expr.Const {
         is Expr.Field -> readField(x.field)
         is Expr.IsDefined -> {
             val v = readField(x.field)
-            BoolVal(v !is Quit && v !is Hidden && v !is Opaque)
+            BoolVal(v !is Quit)
         }
 
         // arithmetic

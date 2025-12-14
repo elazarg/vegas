@@ -17,7 +17,7 @@ import shutil
 from pathlib import Path
 
 # Backend directories to process
-BACKENDS = ["gambit", "graphviz", "lightning", "smt", "solidity", "vyper"]
+BACKENDS = ["clarity", "gambit", "graphviz", "lightning", "smt", "solidity", "vyper"]
 
 def copy_test_outputs():
     """Copy non-.diff files from test-diffs/BACKEND/ to examples/BACKEND/"""

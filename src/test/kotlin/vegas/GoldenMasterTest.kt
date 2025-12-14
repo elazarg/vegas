@@ -12,6 +12,8 @@ import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
+import vegas.backend.clarity.genClarity
+import vegas.backend.clarity.ClarityCompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -37,19 +39,19 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
+        Example("Bet", disableBackend = setOf("lightning", "clarity")), // Not 2-player (has random role)
         Example("MontyHall", disableBackend = setOf()),
-        Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
+        Example("MontyHallChance", disableBackend = setOf("lightning", "clarity")), // Has randomness + utility semantics
         Example("OddsEvens", disableBackend = setOf()),
         Example("OddsEvensShort", disableBackend = setOf()),
         Example("Prisoners", disableBackend = setOf()),
         Example("Simple", disableBackend = setOf()),
         Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
-        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Unbounded int
-        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning", "clarity")), // Unbounded int
+        Example("ThreeWayLottery", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning", "clarity")), // Not 2-player (3 players)
+        Example("TicTacToe", disableBackend = setOf("gambit", "lightning", "clarity")), // Complex game
     )
 
     val testCases = exampleFiles.flatMap { example ->
@@ -76,6 +78,9 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "scr", "scribble") { prog ->
                 val ir = compileToIR(prog)
                 genScribbleFromIR(ir)
+            },
+            TestCase(example, "clar", "clarity") { prog ->
+                genClarity(compileToIR(prog))
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -119,6 +124,13 @@ class GoldenMasterTest : FreeSpec({
                     // Lightning backend compilation failure - check if expected
                     if (testCase.backend == "lightning" && testCase.example.name in testCase.example.disableBackend) {
                         println("Skipped (Lightning): ${testCase.example.name} - ${e.message}")
+                    } else {
+                        throw e
+                    }
+                } catch (e: ClarityCompilationException) {
+                    // Clarity backend compilation failure - check if expected
+                    if (testCase.backend == "clarity" && testCase.example.name in testCase.example.disableBackend) {
+                        println("Skipped (Clarity): ${testCase.example.name} - ${e.message}")
                     } else {
                         throw e
                     }
