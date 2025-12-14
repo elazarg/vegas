@@ -96,9 +96,9 @@ internal object ClarityCompiler {
         val queue = ArrayDeque<Pair<Configuration, Set<ActionId>>>()
 
         val initial = Configuration.initial(game)
-        val canonInitial = canonicalize(semantics, initial, roles)
-        queue.add(canonInitial to emptySet())
-        visited.add(emptySet())
+        val (canonInitial, initialDone) = canonicalize(semantics, initial, roles)
+        queue.add(canonInitial to initialDone)
+        visited.add(initialDone)
 
         while (queue.isNotEmpty()) {
             val (config, done) = queue.remove()
@@ -127,10 +127,11 @@ internal object ClarityCompiler {
             // Explore
             for (move in strategic) {
                 val next = applyMove(config, move)
-                val canonNext = canonicalize(semantics, next, roles)
+                val (canonNext, canonDone) = canonicalize(semantics, next, roles)
 
                 val actionId = (move.tag as PlayTag.Action).actionId
-                val nextDone = done + actionId
+                // We add actionId (from Play) AND any actions completed by Finalize (canonDone)
+                val nextDone = done + actionId + canonDone
 
                 if (nextDone !in visited) {
                     visited.add(nextDone)
@@ -160,28 +161,31 @@ internal object ClarityCompiler {
 
     private fun canonicalize(
         semantics: GameSemantics, start: Configuration, players: List<RoleId>
-    ): Configuration {
+    ): Pair<Configuration, Set<ActionId>> {
         var current = start
+        val done = mutableSetOf<ActionId>()
+
         while (true) {
-            if (current.isTerminal()) return current
+            if (current.isTerminal()) return current to done
             val moves = semantics.enabledMoves(current)
             val hasStrategic = moves.any {
                 it is Label.Play && it.tag != PlayTag.Quit && it.role in players
             }
-            if (hasStrategic) return current
+            if (hasStrategic) return current to done
             val hasQuit = moves.any {
                 it is Label.Play && it.tag == PlayTag.Quit && it.role in players
             }
-            if (hasQuit) return current
+            if (hasQuit) return current to done
 
             val systemMoves = moves
-            if (systemMoves.isEmpty()) return current
+            if (systemMoves.isEmpty()) return current to done
 
             val finalize = systemMoves.find { it is Label.FinalizeFrontier }
             if (finalize != null) {
+                done.addAll(current.enabled())
                 current = applyMove(current, finalize)
             } else {
-                 return current
+                 return current to done
             }
         }
     }
@@ -216,7 +220,7 @@ internal object ClarityCompiler {
         } ?: return resolvePayoff(game, current, players, pot)
 
         current = applyMove(current, quitLabel)
-        current = canonicalize(semantics, current, players)
+        current = canonicalize(semantics, current, players).first
 
         while (!current.isTerminal()) {
             val m = semantics.enabledMoves(current)
@@ -225,7 +229,7 @@ internal object ClarityCompiler {
                 .minByOrNull { it.role.name }
             if (nextQuit == null) break
             current = applyMove(current, nextQuit)
-            current = canonicalize(semantics, current, players)
+            current = canonicalize(semantics, current, players).first
         }
         return resolvePayoff(game, current, players, pot)
     }
