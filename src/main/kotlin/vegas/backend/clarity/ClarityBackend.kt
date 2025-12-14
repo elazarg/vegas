@@ -15,6 +15,7 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
     private val protocol = ClarityCompiler.compile(game, options.defaultTimeout)
     private val sb = StringBuilder()
 
+    // Linearly sorted actions (enforcing sequential execution)
     private val sortedActions = protocol.actions
 
     private val actionIds: Map<ActionId, Int> = sortedActions
@@ -199,10 +200,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         }
 
         sb.appendLine("        (var-set total-pot u0)")
-        // Reset roles? Or just leave funds drained.
-        // If funds drained, total-pot is 0.
-        // We should probably allow re-registration or permanent disable?
-        // Usually reset.
         protocol.roles.forEach { role ->
             sb.appendLine("        (var-set role-${kebab(role.name)} none)")
             sb.appendLine("        (var-set deposit-${kebab(role.name)} u0)")
@@ -353,16 +350,10 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
         var expr = "(err ERR_NOT_OPEN)"
 
-        // Build "First Undone" check chain (linear based on topo sort)
-        // exploreLinearStateSpace generates payoffs for missing action
         val reversedActions = sortedActions.reversed()
 
         for (action in reversedActions) {
             val aid = actionIds[action.id]!!
-            // Payoff for state where this action is enabled (previous actions done) but this one is NOT done.
-            // State = {0..aid-1}.
-            // This set IS populated by exploreLinearStateSpace if reachable linearly.
-            // Since sortedActions IS the linear path, exploreLinearStateSpace guarantees these sets exist.
             val prevSet = sortedActions.take(aid).map { it.id }.toSet()
             val payoff = protocol.abortPayoffs[prevSet]
 
