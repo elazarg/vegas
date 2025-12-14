@@ -180,12 +180,14 @@ private fun buildInitInstruction(stateStruct: SolanaAccountStruct): SolanaInstru
 }
 
 private fun emitCheckTimestamp(roleIdx: Int): List<SolanaStmt> {
-    // Only set bailed, do NOT update last_ts here
+    // If timed out: set bailed AND reset last_ts to now.
+    // This ensures subsequent checks in the same tx see the new time and don't mass-bail.
     return listOf(
         SolanaStmt.If(
             Binary(BinaryOp.GT, ClockTimestamp, Binary(BinaryOp.ADD, FieldAccess(Var("game"), "last_ts"), FieldAccess(Var("game"), "timeout"))),
             listOf(
-                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true))
+                Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)),
+                Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
             )
         )
     )
@@ -232,6 +234,9 @@ private fun buildActionInstruction(
 
     val body = mutableListOf<SolanaStmt>()
 
+    // Safety check: is_finalized
+    body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("AlreadyDone", "Game already finalized")))
+
     // 1. Role Check
     if (spec.join != null) {
         body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "joined"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyJoined", "Already joined")))
@@ -248,19 +253,26 @@ private fun buildActionInstruction(
         body.add(Require(Binary(BinaryOp.EQ, Index(FieldAccess(Var("game"), "roles"), IntLit(roleIdx.toLong())), MethodCall(Var("signer"), "key", emptyList())), SolanaError("Unauthorized", "Unauthorized")))
     }
 
-    // 2. Timeout Check (Actor)
-    body.addAll(emitCheckTimestamp(roleIdx))
+    // 2. Timeout Checks (Actor + Dependencies)
+    // Deduplicate logic: Check Actor, then Dep Owners.
+    val preds = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
+    val predOwners = preds.map { roleMap[dag.owner(it)]!! }
+    val ownersToCheck = (listOf(roleIdx) + predOwners).distinct()
+
+    ownersToCheck.forEach { r ->
+        body.addAll(emitCheckTimestamp(r))
+    }
+
+    // require!(!game.bailed[roleIdx], Timeout)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
     // 3. One-Shot Check
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
 
     // 4. Dependency Checks
-    dag.prerequisitesOf(id).forEach { pred ->
+    preds.forEach { pred ->
         val predIdx = linearization.getValue(pred)
         val predOwner = roleMap[dag.owner(pred)]!!
-
-        body.addAll(emitCheckTimestamp(predOwner))
 
         body.add(SolanaStmt.If(
             Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(predOwner.toLong()))),
@@ -294,8 +306,8 @@ private fun buildActionInstruction(
              val cast = if (p.type is Type.BoolType) " as u8" else ""
              body.add(SolanaStmt.Code("""
                  {
-                     let val_bytes = ($inputName$cast).to_le_bytes();
-                     let salt_bytes = salt.to_le_bytes();
+                     let val_bytes = ($inputName$cast).to_be_bytes();
+                     let salt_bytes = salt.to_be_bytes();
                      let hash = anchor_lang::solana_program::keccak::hashv(&[&val_bytes, &salt_bytes]).0;
                      require!(hash == game.$commitStorage, ErrorCode::InvalidReveal);
                  }
@@ -332,6 +344,8 @@ private fun buildFinalizeInstruction(
     roleMap: Map<RoleId, Int>
 ): SolanaInstruction {
     val body = mutableListOf<SolanaStmt>()
+
+    body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("AlreadyDone", "Game already finalized")))
 
     // Check timeouts for ALL roles to ensure liveness
     roles.forEach { role ->
@@ -386,9 +400,6 @@ private fun buildFinalizeInstruction(
 
 private fun buildClaimInstruction(role: RoleId, roleIdx: Int): SolanaInstruction {
     val body = mutableListOf<SolanaStmt>()
-
-    // Check timeouts? Finalize should handle it. Claim depends on finalize.
-    // So just checks are enough.
 
     body.add(Require(FieldAccess(Var("game"), "is_finalized"), SolanaError("NotFinalized", "Not finalized")))
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "claimed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyClaimed", "Already claimed")))

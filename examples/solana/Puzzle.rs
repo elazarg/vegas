@@ -21,6 +21,7 @@ pub mod puzzle {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
         let vault = &mut ctx.accounts.vault;
+         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
          require!(!(game.joined[1 as usize]), ErrorCode::AlreadyJoined);
          game.roles[1 as usize] = signer.key();
          game.joined[1 as usize] = true;
@@ -38,6 +39,7 @@ pub mod puzzle {
          game.pot_total = (game.pot_total + 50);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
@@ -52,17 +54,20 @@ pub mod puzzle {
     pub fn move_A_1(ctx: Context<Move_A_1>, p: i64, q: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
+         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
+         }
+         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
+             game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
-         if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
-             game.bailed[1 as usize] = true;
-         }
          if !(game.bailed[1 as usize]) {
              require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
          }
@@ -79,11 +84,14 @@ pub mod puzzle {
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
+         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[1 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!((game.action_done[1 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_Q: u64 = (std::cmp::max(0, 0)) as u64;

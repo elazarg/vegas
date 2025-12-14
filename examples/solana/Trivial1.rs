@@ -21,6 +21,7 @@ pub mod trivial1 {
         let game = &mut ctx.accounts.game;
         let signer = &mut ctx.accounts.signer;
         let vault = &mut ctx.accounts.vault;
+         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
          require!(!(game.joined[0 as usize]), ErrorCode::AlreadyJoined);
          game.roles[0 as usize] = signer.key();
          game.joined[0 as usize] = true;
@@ -38,6 +39,7 @@ pub mod trivial1 {
          game.pot_total = (game.pot_total + 10);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
@@ -49,8 +51,10 @@ pub mod trivial1 {
 
     pub fn finalize(ctx: Context<Finalize>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
+         require!(!(game.is_finalized), ErrorCode::AlreadyDone);
          if (Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)) {
              game.bailed[0 as usize] = true;
+             game.last_ts = Clock::get()?.unix_timestamp;
          }
          require!((game.action_done[0 as usize] || game.bailed[0 as usize]), ErrorCode::NotFinalized);
          let p_A: u64 = (std::cmp::max(0, 10)) as u64;
