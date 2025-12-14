@@ -81,6 +81,7 @@ private fun buildStateStruct(
     fields.add(SolanaField("action_done", Array(Bool, nActions)))
     fields.add(SolanaField("action_ts", Array(I64, nActions)))
     fields.add(SolanaField("timeout", I64))
+    fields.add(SolanaField("pot_total", U64))
     fields.add(SolanaField("is_finalized", Bool))
     fields.add(SolanaField("claimed", Array(Bool, nRoles)))
     fields.add(SolanaField("claim_amount", Array(U64, nRoles)))
@@ -145,8 +146,8 @@ private fun buildInstructions(
 
     list.add(buildInitInstruction(stateStruct))
 
-    roles.forEach { role ->
-        list.add(buildTimeoutInstruction(role, roleMap))
+    dag.topo().forEach { id ->
+        list.add(buildTimeoutActionInstruction(id, dag, linearization, roleMap))
     }
 
     dag.topo().forEach { id ->
@@ -177,18 +178,26 @@ private fun buildInitInstruction(stateStruct: SolanaAccountStruct): SolanaInstru
         body = listOf(
             Assign(FieldAccess(Var("game"), "game_id"), Var("game_id")),
             Assign(FieldAccess(Var("game"), "timeout"), Var("timeout")),
-            Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp)
+            Assign(FieldAccess(Var("game"), "last_ts"), ClockTimestamp),
+            Assign(FieldAccess(Var("game"), "pot_total"), IntLit(0)),
         )
     )
 }
 
-private fun buildTimeoutInstruction(role: RoleId, roleMap: Map<RoleId, Int>): SolanaInstruction {
-    val roleIdx = roleMap[role]!!
+private fun buildTimeoutActionInstruction(
+    id: ActionId,
+    dag: ActionDag,
+    linearization: Map<ActionId, Int>,
+    roleMap: Map<RoleId, Int>
+): SolanaInstruction {
+    val idx = linearization.getValue(id)
+    val owner = dag.owner(id)
+    val roleIdx = roleMap[owner]!!
     val body = mutableListOf<SolanaStmt>()
 
     body.add(Require(Unary(UnaryOp.NOT, FieldAccess(Var("game"), "is_finalized")), SolanaError("GameFinalized", "Game already finalized")))
-    // Timeout allowed even if not joined (handles no-show)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("AlreadyDone", "Already bailed")))
+    body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "action_done"), IntLit(idx.toLong()))), SolanaError("AlreadyDone", "Action already performed")))
 
     // Check timeout condition
     body.add(Require(
@@ -196,16 +205,31 @@ private fun buildTimeoutInstruction(role: RoleId, roleMap: Map<RoleId, Int>): So
         SolanaError("NotTimedOut", "Not timed out")
     ))
 
+    // Check dependencies (Action must be ENABLED to be timed out)
+    dag.prerequisitesOf(id).forEach { pred ->
+        val predIdx = linearization.getValue(pred)
+        val predOwner = roleMap[dag.owner(pred)]!!
+
+        body.add(SolanaStmt.If(
+            Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(predOwner.toLong()))),
+            listOf(Require(
+                Index(FieldAccess(Var("game"), "action_done"), IntLit(predIdx.toLong())),
+                SolanaError("DependencyNotMet", "Dependency not met")
+            ))
+        ))
+    }
+
     // Set bailed = true. Do NOT update last_ts.
     body.add(Assign(Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong())), BoolLit(true)))
 
+    val ownerName = owner.name
     return SolanaInstruction(
-        name = "timeout_${role.name}",
+        name = "timeout_${ownerName}_$idx",
         accounts = listOf(
             SolanaAccountMeta("game", "Account<'info, GameState>", isMut = true, constraints = listOf(
                 "#[account(seeds = [b\"game\", game.game_id.to_le_bytes().as_ref()], bump)]"
             )),
-            SolanaAccountMeta("_signer", "Signer<'info>", isMut = true) // Payer for tx, prefixed to suppress unused warning
+            SolanaAccountMeta("_signer", "Signer<'info>", isMut = true) // Payer for tx
         ),
         params = emptyList(),
         body = body
@@ -263,6 +287,7 @@ private fun buildActionInstruction(
         if (deposit > 0) {
              body.add(SolanaStmt.Comment("Deposit $deposit lamports"))
              body.add(SolanaStmt.TransferSol(from = "signer", to = "game", amount = IntLit(deposit)))
+             body.add(Assign(FieldAccess(Var("game"), "pot_total"), Binary(BinaryOp.ADD, FieldAccess(Var("game"), "pot_total"), IntLit(deposit))))
              // Track deposit
              body.add(Assign(Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())),
                  Binary(BinaryOp.ADD, Index(FieldAccess(Var("game"), "deposited"), IntLit(roleIdx.toLong())), IntLit(deposit))))
@@ -272,6 +297,7 @@ private fun buildActionInstruction(
     }
 
     // 2. Timeout Check (Actor)
+    // require!(!game.bailed[roleIdx], Timeout)
     body.add(Require(Unary(UnaryOp.NOT, Index(FieldAccess(Var("game"), "bailed"), IntLit(roleIdx.toLong()))), SolanaError("Timeout", "Action timed out")))
 
     // STRICT TIMEOUT: now <= last_ts + timeout
@@ -370,7 +396,8 @@ private fun buildFinalizeInstruction(
         }
     """.trimIndent())))
 
-    // Check action completeness
+    // No automatic timeout checks. Dependencies must be resolved (done or bailed).
+
     dag.sinks().forEach { sink ->
         val idx = linearization.getValue(sink)
         val owner = roleMap[dag.owner(sink)]!!

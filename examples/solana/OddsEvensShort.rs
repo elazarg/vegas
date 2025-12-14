@@ -12,26 +12,63 @@ pub mod oddsevensshort {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
+         game.pot_total = 0;
         Ok(())
     }
 
-    pub fn timeout_Even(ctx: Context<Timeout_Even>, ) -> Result<()> {
+    pub fn timeout_Odd_0(ctx: Context<Timeout_Odd_0>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Even_2(ctx: Context<Timeout_Even_2>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
         Ok(())
     }
 
-    pub fn timeout_Odd(ctx: Context<Timeout_Odd>, ) -> Result<()> {
+    pub fn timeout_Odd_1(ctx: Context<Timeout_Odd_1>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
          game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Even_3(ctx: Context<Timeout_Even_3>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
         Ok(())
     }
 
@@ -53,6 +90,7 @@ pub mod oddsevensshort {
             ),
             100,
          )?;
+         game.pot_total = (game.pot_total + 100);
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 100);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -83,6 +121,7 @@ pub mod oddsevensshort {
             ),
             100,
          )?;
+         game.pot_total = (game.pot_total + 100);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 100);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -232,7 +271,7 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Even<'info> {
+pub struct Timeout_Odd_0<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -241,7 +280,25 @@ pub struct Timeout_Even<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Odd<'info> {
+pub struct Timeout_Even_2<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Odd_1<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Even_3<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -332,6 +389,7 @@ pub struct GameState {
     pub action_done: [bool; 4],
     pub action_ts: [i64; 4],
     pub timeout: i64,
+    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],

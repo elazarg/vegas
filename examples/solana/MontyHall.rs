@@ -12,25 +12,107 @@ pub mod montyhall {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
+         game.pot_total = 0;
         Ok(())
     }
 
-    pub fn timeout_Guest(ctx: Context<Timeout_Guest>, ) -> Result<()> {
-        let game = &mut ctx.accounts.game;
-        let _signer = &mut ctx.accounts._signer;
-         require!(!(game.is_finalized), ErrorCode::GameFinalized);
-         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
-         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
-         game.bailed[0 as usize] = true;
-        Ok(())
-    }
-
-    pub fn timeout_Host(ctx: Context<Timeout_Host>, ) -> Result<()> {
+    pub fn timeout_Host_0(ctx: Context<Timeout_Host_0>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Guest_1(ctx: Context<Timeout_Guest_1>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Host_2(ctx: Context<Timeout_Host_2>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Guest_3(ctx: Context<Timeout_Guest_3>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Host_4(ctx: Context<Timeout_Host_4>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Guest_5(ctx: Context<Timeout_Guest_5>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[5 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_Host_6(ctx: Context<Timeout_Host_6>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[6 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[5 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[4 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
          game.bailed[1 as usize] = true;
         Ok(())
     }
@@ -53,6 +135,7 @@ pub mod montyhall {
             ),
             20,
          )?;
+         game.pot_total = (game.pot_total + 20);
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 20);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -81,6 +164,7 @@ pub mod montyhall {
             ),
             20,
          )?;
+         game.pot_total = (game.pot_total + 20);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 20);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -284,7 +368,7 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Guest<'info> {
+pub struct Timeout_Host_0<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -293,7 +377,52 @@ pub struct Timeout_Guest<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_Host<'info> {
+pub struct Timeout_Guest_1<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Host_2<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Guest_3<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Host_4<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Guest_5<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_Host_6<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -412,6 +541,7 @@ pub struct GameState {
     pub action_done: [bool; 7],
     pub action_ts: [i64; 7],
     pub timeout: i64,
+    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],

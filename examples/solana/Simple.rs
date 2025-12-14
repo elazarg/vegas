@@ -12,26 +12,77 @@ pub mod simple {
          game.game_id = game_id;
          game.timeout = timeout;
          game.last_ts = Clock::get()?.unix_timestamp;
+         game.pot_total = 0;
         Ok(())
     }
 
-    pub fn timeout_A(ctx: Context<Timeout_A>, ) -> Result<()> {
+    pub fn timeout_A_0(ctx: Context<Timeout_A_0>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[0 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
          game.bailed[0 as usize] = true;
         Ok(())
     }
 
-    pub fn timeout_B(ctx: Context<Timeout_B>, ) -> Result<()> {
+    pub fn timeout_B_1(ctx: Context<Timeout_B_1>, ) -> Result<()> {
         let game = &mut ctx.accounts.game;
         let _signer = &mut ctx.accounts._signer;
          require!(!(game.is_finalized), ErrorCode::GameFinalized);
          require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[1 as usize]), ErrorCode::AlreadyDone);
          require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[0 as usize], ErrorCode::DependencyNotMet);
+         }
          game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_A_2(ctx: Context<Timeout_A_2>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[2 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[1 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_B_3(ctx: Context<Timeout_B_3>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[1 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[3 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[1 as usize] = true;
+        Ok(())
+    }
+
+    pub fn timeout_A_4(ctx: Context<Timeout_A_4>, ) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        let _signer = &mut ctx.accounts._signer;
+         require!(!(game.is_finalized), ErrorCode::GameFinalized);
+         require!(!(game.bailed[0 as usize]), ErrorCode::AlreadyDone);
+         require!(!(game.action_done[4 as usize]), ErrorCode::AlreadyDone);
+         require!((Clock::get()?.unix_timestamp > (game.last_ts + game.timeout)), ErrorCode::NotTimedOut);
+         if !(game.bailed[1 as usize]) {
+             require!(game.action_done[3 as usize], ErrorCode::DependencyNotMet);
+         }
+         if !(game.bailed[0 as usize]) {
+             require!(game.action_done[2 as usize], ErrorCode::DependencyNotMet);
+         }
+         game.bailed[0 as usize] = true;
         Ok(())
     }
 
@@ -53,6 +104,7 @@ pub mod simple {
             ),
             6,
          )?;
+         game.pot_total = (game.pot_total + 6);
          game.deposited[0 as usize] = (game.deposited[0 as usize] + 6);
          require!(!(game.bailed[0 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -81,6 +133,7 @@ pub mod simple {
             ),
             6,
          )?;
+         game.pot_total = (game.pot_total + 6);
          game.deposited[1 as usize] = (game.deposited[1 as usize] + 6);
          require!(!(game.bailed[1 as usize]), ErrorCode::Timeout);
          require!((Clock::get()?.unix_timestamp <= (game.last_ts + game.timeout)), ErrorCode::Timeout);
@@ -240,7 +293,7 @@ pub struct Init_instance<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_A<'info> {
+pub struct Timeout_A_0<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -249,7 +302,34 @@ pub struct Timeout_A<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Timeout_B<'info> {
+pub struct Timeout_B_1<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_A_2<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_B_3<'info> {
+    #[account(mut)]
+    #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
+    pub game: Account<'info, GameState>,
+    #[account(mut)]
+    pub _signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Timeout_A_4<'info> {
     #[account(mut)]
     #[account(seeds = [b"game", game.game_id.to_le_bytes().as_ref()], bump)]
     pub game: Account<'info, GameState>,
@@ -348,6 +428,7 @@ pub struct GameState {
     pub action_done: [bool; 5],
     pub action_ts: [i64; 5],
     pub timeout: i64,
+    pub pot_total: u64,
     pub is_finalized: bool,
     pub claimed: [bool; 2],
     pub claim_amount: [u64; 2],
