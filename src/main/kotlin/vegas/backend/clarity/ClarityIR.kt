@@ -14,7 +14,7 @@ internal data class ClarityGame(
     val roles: List<RoleId>,
     val pot: Long,
     val actions: List<ClarityAction>,
-    val timeoutRules: List<TimeoutRule>,
+    val abortPayoffs: Map<Set<ActionId>, Map<RoleId, Long>>, // DoneSet -> Payoff
     val terminalFrontiers: List<Set<ActionId>>,
     val payoffs: Map<RoleId, Expr>
 )
@@ -48,10 +48,4 @@ internal data class ClarityStateVar(
     val name: String,
     val type: Type, // If Commit, this is Buff 32 (implicit)
     val isCommit: Boolean
-)
-
-internal data class TimeoutRule(
-    val required: Set<ActionId>, // Actions that MUST be done
-    val forbidden: Set<ActionId>, // Actions that MUST NOT be done (to distinguish from next frontier)
-    val payoff: Map<RoleId, Long>
 )

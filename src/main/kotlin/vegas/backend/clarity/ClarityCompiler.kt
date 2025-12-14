@@ -24,14 +24,14 @@ internal object ClarityCompiler {
         }
 
         // 3. Explore State Space
-        val (timeoutRules, terminalFrontiers) = computeFrontiers(game, rolesSorted, potAmount)
+        val (abortPayoffs, terminalFrontiers) = exploreStateSpace(game, rolesSorted, potAmount)
 
         return ClarityGame(
             name = game.name,
             roles = rolesSorted,
             pot = potAmount,
             actions = actions,
-            timeoutRules = timeoutRules,
+            abortPayoffs = abortPayoffs,
             terminalFrontiers = terminalFrontiers,
             payoffs = game.payoffs
         )
@@ -82,15 +82,14 @@ internal object ClarityCompiler {
         )
     }
 
-    private fun computeFrontiers(
+    private fun exploreStateSpace(
         game: GameIR,
         roles: List<RoleId>,
         pot: Long
-    ): Pair<List<TimeoutRule>, List<Set<ActionId>>> {
+    ): Pair<Map<Set<ActionId>, Map<RoleId, Long>>, List<Set<ActionId>>> {
         val semantics = GameSemantics(game)
 
         val frontierPayoffs = mutableMapOf<Set<ActionId>, Map<RoleId, Long>>()
-        val frontierForbidden = mutableMapOf<Set<ActionId>, MutableSet<ActionId>>()
         val terminalFrontiers = mutableSetOf<Set<ActionId>>()
 
         val visited = mutableSetOf<Set<ActionId>>()
@@ -105,7 +104,6 @@ internal object ClarityCompiler {
             val (config, done) = queue.remove()
             val moves = semantics.enabledMoves(config)
 
-            // Check if terminal or deadlock
             val strategic = moves.filterIsInstance<Label.Play>()
                 .filter { it.tag != PlayTag.Quit && it.role in roles }
             val quit = moves.filterIsInstance<Label.Play>()
@@ -113,28 +111,20 @@ internal object ClarityCompiler {
 
             if (config.isTerminal() || (strategic.isEmpty() && quit.isEmpty())) {
                 terminalFrontiers.add(done)
-                // Continue? No moves possible from terminal.
                 continue
             }
 
-            // Not terminal: Calculate abort payoff
+            // Calculate abort payoff
             val active = if (strategic.isNotEmpty()) {
                 strategic.minByOrNull { it.role.name }!!.role
             } else {
-                // Forced abort state (only Quit moves)
                 quit.minByOrNull { it.role.name }!!.role
             }
 
             val abortPayoff = resolveAbortScenario(semantics, game, config, active, roles, pot)
             frontierPayoffs[done] = abortPayoff
 
-            val enabledActions = strategic.mapNotNull {
-                (it.tag as? PlayTag.Action)?.actionId
-            }.toSet()
-
-            frontierForbidden.getOrPut(done) { mutableSetOf() }.addAll(enabledActions)
-
-            // Explore next states
+            // Explore
             for (move in strategic) {
                 val next = applyMove(config, move)
                 val canonNext = canonicalize(semantics, next, roles)
@@ -147,19 +137,9 @@ internal object ClarityCompiler {
                     queue.add(canonNext to nextDone)
                 }
             }
-
-            // Note: we don't explore Quit moves because they lead to abort resolution, not new states we want to track.
         }
 
-        val rules = frontierPayoffs.map { (done, payoff) ->
-            TimeoutRule(
-                required = done,
-                forbidden = frontierForbidden[done] ?: emptySet(),
-                payoff = payoff
-            )
-        }.sortedByDescending { it.required.size }
-
-        return rules to terminalFrontiers.toList()
+        return frontierPayoffs to terminalFrontiers.toList()
     }
 
     private fun computePot(game: GameIR, players: Set<RoleId>): Long {

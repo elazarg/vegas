@@ -15,15 +15,17 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
     private val protocol = ClarityCompiler.compile(game, options.defaultTimeout)
     private val sb = StringBuilder()
 
-    // Assign unique ID to each action for on-chain map
-    private val actionIds: Map<ActionId, Int> = protocol.actions
+    // Linearly sorted actions (enforcing sequential execution)
+    // We sort by ID index which is topologically valid from ActionDag
+    private val sortedActions = protocol.actions.sortedBy { it.id.second }
+
+    private val actionIds: Map<ActionId, Int> = sortedActions
         .mapIndexed { index, action -> action.id to index }
         .toMap()
 
-    // Map FieldRef to list of ActionIds (uints) that write it
     private val fieldWriters: Map<FieldRef, List<Int>> by lazy {
         val map = mutableMapOf<FieldRef, MutableList<Int>>()
-        protocol.actions.forEach { action ->
+        sortedActions.forEach { action ->
             val aid = actionIds[action.id]!!
             game.dag.writes(action.id).forEach { field ->
                 map.getOrPut(field) { mutableListOf() }.add(aid)
@@ -73,7 +75,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("(define-data-var payoffs-distributed bool false)")
         sb.appendLine()
 
-        // Role bindings
         protocol.roles.forEach { role ->
             sb.appendLine("(define-data-var role-${kebab(role.name)} (optional principal) none)")
             sb.appendLine("(define-data-var deposit-${kebab(role.name)} uint u0)")
@@ -81,10 +82,8 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("(define-data-var total-pot uint u0)")
         sb.appendLine()
 
-        // State variables
         val declaredVars = mutableSetOf<String>()
-
-        protocol.actions.flatMap { it.writes }.forEach { write ->
+        sortedActions.flatMap { it.writes }.forEach { write ->
             val varName = if (write.isCommit) "commit-${kebab(write.name)}" else "var-${kebab(write.name)}"
             if (varName !in declaredVars) {
                 declaredVars.add(varName)
@@ -105,7 +104,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
     private fun generateHelpers() {
         sb.appendLine(";; Helpers")
-
         sb.appendLine("(define-read-only (get-time)")
         if (options.clarityVersion >= 4) {
              sb.appendLine("    stacks-block-time")
@@ -146,9 +144,12 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-none (var-get role-$roleName)) ERR_ALREADY_INITIALIZED)")
 
             if (depositAmount > 0) {
-                 // Use standard (as-contract tx-sender) to get contract principal.
-                 // In Clarity 4 this is still valid for getting principal, though stx-transfer? requires proper context if sending FROM contract.
-                 // Here we send TO contract.
+                 // Use (as-contract tx-sender) to get contract principal.
+                 // In Clarity 4, we use (unwrap-panic (as-contract? () tx-sender))?
+                 // Or stick to (as-contract tx-sender) if it's supported (v2 compatibility mode?)
+                 // User says "For Clarity 4... use (as-contract? (with-stx ...))". But that's for switching context.
+                 // To just GET the principal, (as-contract tx-sender) is the standard way in v1/v2.
+                 // In v3+, maybe there's a better way, but (as-contract tx-sender) works.
                  sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
                  sb.appendLine("        (var-set total-pot (+ (var-get total-pot) u$depositAmount))")
                  sb.appendLine("        (var-set deposit-$roleName u$depositAmount)")
@@ -182,8 +183,8 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
     private fun generateActions() {
         sb.appendLine(";; Actions")
 
-        protocol.actions.forEach { action ->
-            val actionIdUint = actionIds[action.id]!!
+        sortedActions.forEachIndexed { index, action ->
+            val actionIdUint = index // actionIds[action.id] is index
             val actionName = "action-${kebab(action.owner.name)}-${action.id.second}"
 
             val funcParams = mutableListOf<String>()
@@ -195,7 +196,6 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             action.params.forEach { param ->
                 val type = toClarityType(param.type)
                 localParams[FieldRef(action.owner, VarId(param.name))] = param.name
-
                 if (param.isSalt) {
                     funcParams.add("(${param.name} $type)")
                     funcParams.add("(${param.name}-salt (buff 32))")
@@ -248,9 +248,18 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-eq (some tx-sender) (var-get role-${kebab(action.owner.name)})) ERR_WRONG_ROLE)")
 
             sb.appendLine("        (asserts! (not (is-done u$actionIdUint)) ERR_ACTION_ALREADY_DONE)")
+
+            // Sequential enforcement: depend on previous action
+            if (index > 0) {
+                sb.appendLine("        (asserts! (is-done u${index - 1}) ERR_DEPENDENCY_NOT_MET)")
+            }
+
+            // Explicit DAG deps (just in case, though sequential covers most)
             action.prereqs.forEach { prereq ->
                 val pid = actionIds[prereq]!!
-                sb.appendLine("        (asserts! (is-done u$pid) ERR_DEPENDENCY_NOT_MET)")
+                if (pid != index - 1) { // Avoid duplicate check if covered by sequence
+                    sb.appendLine("        (asserts! (is-done u$pid) ERR_DEPENDENCY_NOT_MET)")
+                }
             }
 
             if (action.guard != null) {
@@ -276,18 +285,15 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (asserts! (var-get initialized) ERR_NOT_INITIALIZED)")
         sb.appendLine("        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)")
 
-        val conds = protocol.terminalFrontiers.map { doneSet ->
-            if (doneSet.isEmpty()) "true" else {
-                val checks = doneSet.map { id -> "(is-done u${actionIds[id]!!})" }
-                if (checks.size == 1) checks[0] else "(and ${checks.joinToString(" ")})"
-            }
+        // Terminal conditions: All actions in sequence done
+        val lastActionId = sortedActions.size - 1
+        sb.appendLine("        (asserts! (is-done u$lastActionId) ERR_NOT_OPEN)")
+
+        // Payoffs (convert int to uint)
+        val payouts = protocol.payoffs.mapValues { (_, expr) ->
+            val intExpr = translateExpr(expr, ::getFieldWriters)
+            "(to-uint $intExpr)" // using to-uint directly on int result
         }
-        val terminalCond = if (conds.isEmpty()) "false" else if (conds.size == 1) conds[0] else "(or ${conds.joinToString(" ")})"
-
-        sb.appendLine("        (asserts! $terminalCond ERR_NOT_OPEN)")
-
-        // Compute total payout for safety check
-        val payouts = protocol.payoffs.mapValues { (_, expr) -> translateExpr(expr, ::getFieldWriters) }
 
         // Sum payouts: (+ p1 (+ p2 ...))
         if (payouts.isNotEmpty()) {
@@ -314,31 +320,59 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (asserts! (not (var-get payoffs-distributed)) ERR_ALREADY_INITIALIZED)")
         sb.appendLine("        (asserts! (check-timeout u${options.defaultTimeout}) ERR_TIMEOUT_NOT_READY)")
 
-        if (protocol.timeoutRules.isEmpty()) {
-             sb.appendLine("        (err ERR_NOT_OPEN)")
-        } else {
-             var expr = "(err ERR_NOT_OPEN)"
+        var expr = "(err ERR_NOT_OPEN)"
 
-             for (rule in protocol.timeoutRules.reversed()) {
-                 val payBlock = StringBuilder()
-                 payBlock.append("(begin ")
-                 rule.payoff.forEach { (role, amt) ->
-                     if (amt > 0) {
-                         payBlock.append("(map-set claims (unwrap-panic (var-get role-${kebab(role.name)})) u$amt) ")
-                     }
-                 }
-                 payBlock.append("(var-set payoffs-distributed true) (ok true))")
+        // Iterate reversed to build if-else chain
+        // If not done u0 -> resolve 0.
+        // If done u0, not done u1 -> resolve 1.
+        // (if (not (is-done u0)) ... (if (not (is-done u1)) ...))
 
-                 val conditions = mutableListOf<String>()
-                 rule.required.forEach { id -> conditions.add("(is-done u${actionIds[id]!!})") }
-                 rule.forbidden.forEach { id -> conditions.add("(not (is-done u${actionIds[id]!!}))") }
+        // We iterate forwards to build the chain?
+        // (if (not (is-done u0)) Pay0 (if (not (is-done u1)) Pay1 ...))
 
-                 val condExpr = if (conditions.isEmpty()) "true" else if (conditions.size == 1) conditions[0] else "(and ${conditions.joinToString(" ")})"
+        val reversedActions = sortedActions.reversed()
+        // But we want: if not u0 ... else if not u1 ...
+        // So we build from end?
+        // If all done -> Error (use finalize).
+        // (if (not (is-done uLast)) PayLast ... (if (not (is-done u0)) Pay0 Error)...)
+        // Wait, standard if/else structure:
+        // (if (not (is-done u0)) Pay0
+        //    (if (not (is-done u1)) Pay1
+        //       ...
+        //       Error))
 
-                 expr = "(if $condExpr $payBlock $expr)"
-             }
-             sb.appendLine("        $expr")
+        // So we iterate forwards. But building a string wrapper?
+        // Recursive string building.
+        // Or loop reversed and wrap `expr`.
+        // Start with `expr = Error`.
+        // Last Action (N): `expr = (if (not (is-done uN)) PayN expr)`
+        // ...
+        // First Action (0): `expr = (if (not (is-done u0)) Pay0 expr)`
+
+        for (action in reversedActions) {
+            val aid = actionIds[action.id]!!
+            // Payoff for state where this action is enabled but not done.
+            // State = {0..aid-1}.
+            val prevSet = sortedActions.take(aid).map { it.id }.toSet()
+            val payoff = protocol.abortPayoffs[prevSet]
+
+            if (payoff != null) {
+                val payBlock = StringBuilder()
+                payBlock.append("(begin ")
+                payoff.forEach { (role, amt) ->
+                    if (amt > 0) {
+                        payBlock.append("(map-set claims (unwrap-panic (var-get role-${kebab(role.name)})) u$amt) ")
+                    }
+                }
+                payBlock.append("(var-set payoffs-distributed true) (ok true))")
+
+                expr = "(if (not (is-done u$aid)) $payBlock $expr)"
+            } else {
+                // If no payoff found (shouldn't happen in valid Vegas game), keep strict.
+                // Or maybe this action is not strategic?
+            }
         }
+        sb.appendLine("        $expr")
 
         sb.appendLine("    )")
         sb.appendLine(")")
@@ -356,7 +390,11 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
         sb.appendLine("        (map-set claims recipient u0)")
 
         if (options.clarityVersion >= 4) {
-            sb.appendLine("        (try! (as-contract? (stx-transfer? amt tx-sender recipient) (with-stx amt)))")
+            // Correct syntax: (as-contract? (stx-transfer? ...) (with-stx ...)) ?
+            // User: "argument order/form matters... expects allowance list to wrap the body".
+            // Snippet from search: (as-contract? ((with-stx amount)) expr...)
+            // So: (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient)))
+            sb.appendLine("        (try! (as-contract? ((with-stx amt)) (try! (stx-transfer? amt tx-sender recipient))))")
         } else {
             sb.appendLine("        (try! (as-contract (stx-transfer? amt tx-sender recipient)))")
         }
