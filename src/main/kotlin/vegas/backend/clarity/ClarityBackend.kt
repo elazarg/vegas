@@ -146,11 +146,10 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
             sb.appendLine("        (asserts! (is-none (var-get role-$roleName)) ERR_ALREADY_INITIALIZED)")
 
             if (depositAmount > 0) {
-                 if (options.clarityVersion >= 4) {
-                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (unwrap-panic (as-contract tx-sender))))")
-                 } else {
-                     sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
-                 }
+                 // Use standard (as-contract tx-sender) to get contract principal.
+                 // In Clarity 4 this is still valid for getting principal, though stx-transfer? requires proper context if sending FROM contract.
+                 // Here we send TO contract.
+                 sb.appendLine("        (try! (stx-transfer? u$depositAmount tx-sender (as-contract tx-sender)))")
                  sb.appendLine("        (var-set total-pot (+ (var-get total-pot) u$depositAmount))")
                  sb.appendLine("        (var-set deposit-$roleName u$depositAmount)")
             }
@@ -287,9 +286,17 @@ class ClarityBackend(val game: GameIR, val options: ClarityOptions = ClarityOpti
 
         sb.appendLine("        (asserts! $terminalCond ERR_NOT_OPEN)")
 
-        protocol.payoffs.forEach { (role, expr) ->
-            val amountExpr = translateExpr(expr, ::getFieldWriters)
-            sb.appendLine("        (map-set claims (unwrap-panic (var-get role-${kebab(role.name)})) $amountExpr)")
+        // Compute total payout for safety check
+        val payouts = protocol.payoffs.mapValues { (_, expr) -> translateExpr(expr, ::getFieldWriters) }
+
+        // Sum payouts: (+ p1 (+ p2 ...))
+        if (payouts.isNotEmpty()) {
+            val sumExpr = payouts.values.reduce { acc, s -> "(+ $acc $s)" }
+            sb.appendLine("        (asserts! (<= $sumExpr (var-get total-pot)) ERR_PAYOUT_TOO_HIGH)")
+        }
+
+        payouts.forEach { (role, exprStr) ->
+            sb.appendLine("        (map-set claims (unwrap-panic (var-get role-${kebab(role.name)})) $exprStr)")
         }
 
         sb.appendLine("        (var-set payoffs-distributed true)")

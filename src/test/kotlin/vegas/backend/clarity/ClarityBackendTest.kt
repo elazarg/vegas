@@ -53,6 +53,7 @@ class ClarityBackendTest {
 
         // Check for finalize
         assertTrue(clarityCode.contains("(define-public (finalize)"))
+        assertTrue(clarityCode.contains("ERR_PAYOUT_TOO_HIGH"))
 
         // Check for withdraw
         assertTrue(clarityCode.contains("(define-public (withdraw)"))
