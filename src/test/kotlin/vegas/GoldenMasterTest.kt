@@ -11,6 +11,7 @@ import vegas.backend.evm.generateVyper
 import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
+import vegas.backend.gallina.generateGallina
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
@@ -76,6 +77,9 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "scr", "scribble") { prog ->
                 val ir = compileToIR(prog)
                 genScribbleFromIR(ir)
+            },
+            TestCase(example, "v", "gallina") { prog ->
+                generateGallina(compileToIR(prog))
             }
         ).filter { t -> t.backend !in example.disableBackend }
     }
@@ -94,6 +98,7 @@ class GoldenMasterTest : FreeSpec({
                     val actualFile = File("$parent/${testCase.example.name}.${testCase.extension}")
 
                     if (!goldenFile.exists()) {
+                        actualFile.parentFile.mkdirs() // Fix: Ensure directory exists
                         actualFile.writeText(actualOutput)
                         error("Missing golden file for $testCase.")
                     }
