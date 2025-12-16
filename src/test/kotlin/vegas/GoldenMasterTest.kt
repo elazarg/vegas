@@ -12,9 +12,12 @@ import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
+import vegas.backend.gallina.genGallinaBlockchain
+import vegas.backend.gallina.genGallinaTypestate
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
+import vegas.ir.GameIR
 import vegas.ir.toGraphviz
 import java.io.File
 
@@ -29,7 +32,7 @@ data class TestCase(
     val example: Example,
     val extension: String,
     val backend: String,
-    val generator: (GameAst) -> String
+    val generator: (GameIR) -> String
 ) {
     override fun toString() = "$example.$extension ($backend)"
 }
@@ -54,27 +57,31 @@ class GoldenMasterTest : FreeSpec({
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
-            TestCase(example, "sol", "solidity") { prog ->
-                generateSolidity(compileToEvm(compileToIR(prog)))
+            TestCase(example, "sol", "solidity") { ir ->
+                generateSolidity(compileToEvm(ir))
             },
-            TestCase(example, "vy", "vyper") { prog ->
-                generateVyper(compileToEvm(compileToIR(prog)))
+            TestCase(example, "vy", "vyper") { ir ->
+                generateVyper(compileToEvm(ir))
             },
-            TestCase(example, "efg", "gambit") { prog ->
-                generateExtensiveFormGame(compileToIR(prog))
+            TestCase(example, "efg", "gambit") { ir ->
+                generateExtensiveFormGame(ir)
             },
-            TestCase(example, "z3", "smt") { prog ->
-                generateSMT(compileToIR(prog))
+            TestCase(example, "z3", "smt") { ir ->
+                generateSMT(ir)
             },
-            TestCase(example, "gc", "graphviz") { prog ->
-                compileToIR(prog).toGraphviz()
+            TestCase(example, "v", "gallina") { ir ->
+                genGallinaTypestate(ir)
             },
-            TestCase(example, "ln", "lightning") { prog ->
-                val ir = compileToIR(prog)
+            TestCase(example, "v", "glockchain") { ir ->
+                genGallinaBlockchain(ir)
+            },
+            TestCase(example, "gc", "graphviz") { ir ->
+                ir.toGraphviz()
+            },
+            TestCase(example, "ln", "lightning") { ir ->
                 generateLightningProtocol(ir)
             },
-            TestCase(example, "scr", "scribble") { prog ->
-                val ir = compileToIR(prog)
+            TestCase(example, "scr", "scribble") { ir ->
                 genScribbleFromIR(ir)
             }
         ).filter { t -> t.backend !in example.disableBackend }
@@ -213,7 +220,8 @@ private fun getGoldenFile(testCase: TestCase): File =
 
 private fun generateOutput(testCase: TestCase): String {
     val program = parseExample(testCase.example.name)
-    return testCase.generator(program)
+    val ir = compileToIR(program)
+    return testCase.generator(ir)
 }
 
 private fun parseExample(example: String): GameAst {
