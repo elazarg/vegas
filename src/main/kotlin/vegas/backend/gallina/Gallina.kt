@@ -1,6 +1,7 @@
 package vegas.backend.gallina
 
 import vegas.FieldRef
+import vegas.RoleId
 import vegas.VarId
 import vegas.dag.Algo
 import vegas.ir.*
@@ -53,7 +54,7 @@ class CoqDagEncoder(private val dag: ActionDag) {
     fun generate(): String = buildString {
         appendPreamble()
         appendRoles()
-        appendEnums()
+        appendDomainDefinitions()
 
         appendLine("Module GameProtocol.")
         appendLine()
@@ -95,23 +96,6 @@ class CoqDagEncoder(private val dag: ActionDag) {
         appendLine()
     }
 
-    private fun StringBuilder.appendEnums() {
-        val setTypes = mutableSetOf<Type.SetType>()
-        for (meta in dag.metas) {
-            for (param in meta.spec.params) {
-                if (param.type is Type.SetType) setTypes.add(param.type)
-            }
-        }
-
-        setTypes.forEachIndexed { i, type ->
-            appendLine("Inductive Enum_$i : Type :=")
-            type.values.sorted().forEach { v -> appendLine("| E${i}_v$v") }
-            appendLine(".")
-            appendLine("Scheme Equality for Enum_$i.")
-            appendLine()
-        }
-    }
-
     private fun paramName(f: FieldRef, hidden: Boolean) =
         if (hidden) VarId("hidden_${f.param}_${f.owner}")
         else VarId("${f.param}_${f.owner}")
@@ -120,6 +104,7 @@ class CoqDagEncoder(private val dag: ActionDag) {
 
     private fun generateWitnessRecord(sb: StringBuilder, index: Int, meta: ActionMeta) {
         val myAncestors = ancestors[index] ?: emptyList()
+        val myRole = meta.struct.owner
 
         // Signature: Record W3 (w0: W0) (w1: W1 w0) ...
         sb.append("Record W$index")
@@ -150,55 +135,90 @@ class CoqDagEncoder(private val dag: ActionDag) {
             val coqType = toCoqType(param.type)
 
             if (visibility == Visibility.COMMIT) {
-                sb.appendLine("  ${paramName(fieldRef, true)} : Hidden ($coqType);")
+                sb.appendLine("  ${paramName(fieldRef, true)} : Hidden $coqType;")
             } else {
                 sb.appendLine("  ${paramName(fieldRef, false)} : $coqType;")
             }
         }
 
-        // 2. Guard
-        sb.appendGuard(index, meta)
+        // B. Domain (guard_domain)
+        val domainChecks = meta.spec.params.filter { it.type is Type.SetType }.map { param ->
+            val typeId = setTypeMap[param.type]!!
+            val domainName = "domain_Enum_$typeId"
+            val fieldRef = FieldRef(myRole, param.name)
+            val isCommit = meta.struct.visibility[fieldRef] == Visibility.COMMIT
+            val varName = paramName(fieldRef, isCommit).name
+            val valExpr = if (isCommit) "(reveal $varName)" else varName
+            "$domainName $valExpr"
+        }
+        if (domainChecks.isNotEmpty()) {
+            sb.appendLine("  guard_domain$index : ${domainChecks.joinToString(" /\\ ")};")
+        }
 
-        sb.appendLine()
+        // C. Reveal Consistency (guard_reveal)
+        val revealChecks = meta.struct.visibility.filterValues { it == Visibility.REVEAL }.map { (field, _) ->
+            val commitNodeId = dag.actions.firstOrNull { dag.visibilityOf(it)[field] == Visibility.COMMIT }!!
+            val commitIndex = idToIndex[commitNodeId]!!
+            val commitRole = dag.owner(commitNodeId)
+
+            val hiddenName = paramName(field, true)
+            val clearName = paramName(field, false)
+
+            val commitPath = if (commitRole != myRole) {
+                "(match w$commitIndex with Have w => w.($hiddenName) | Quit _ => w.($hiddenName) end)"
+            } else {
+                "w$commitIndex.($hiddenName)"
+            }
+            "${clearName.name} = reveal $commitPath"
+        }
+        if (revealChecks.isNotEmpty()) {
+            sb.appendLine("  guard_reveal$index : ${revealChecks.joinToString(" /\\ ")};")
+        }
+
+        // D. Logic (guard_logic)
+        // We always generate this if it's not strictly true, to separate "Business Logic" from "System Logic"
+        val guardExpr = meta.spec.guardExpr
+        if (guardExpr != Expr.Const.BoolVal(true)) {
+            val exprCode = translateExpr(guardExpr, index, myRole)
+            sb.appendLine("  guard_logic$index : ${stripParens(exprCode)};")
+        }
         sb.appendLine("}.")
         sb.appendLine()
     }
 
-    private fun StringBuilder.appendGuard(currentIndex: Int, meta: ActionMeta) {
-        val conditions = mutableListOf<String>()
+    private fun stripParens(exp: String): String = exp.drop(1).dropLast(1)
 
-        // A. Explicit Logic Guard
-        val guardExpr = meta.spec.guardExpr
-        if (guardExpr != Expr.Const.BoolVal(true)) {
-            conditions.add(translateExpr(guardExpr, currentIndex))
-        }
-
-        // B. Reveal Consistency Checks
-        // x = reveal( w_commit.hidden_x )
-        for ((field, vis) in meta.struct.visibility) {
-            if (vis == Visibility.REVEAL) {
-                // Find the COMMIT node
-                val commitNodeId = dag.actions.firstOrNull {
-                    dag.visibilityOf(it)[field] == Visibility.COMMIT
-                }
-
-                if (commitNodeId != null) {
-                    val commitIndex = idToIndex[commitNodeId]!!
-                    // The commit node MUST be an ancestor for this to be valid IR.
-                    // We access it via the argument 'w_commitIndex'
-
-                    val commitPath = "w$commitIndex.(${paramName(field, true)})"
-                    val revealPath = "${paramName(field, false)}"
-
-                    conditions.add("$revealPath = reveal $commitPath")
+    // Map unique SetTypes to a stable ID (0, 1, 2...)
+    private val setTypeMap: Map<Type.SetType, Int> by lazy {
+        var counter = 0
+        val map = mutableMapOf<Type.SetType, Int>()
+        for (meta in dag.metas) {
+            for (p in meta.spec.params) {
+                if (p.type is Type.SetType && !map.containsKey(p.type)) {
+                    map[p.type] = counter++
                 }
             }
         }
+        map
+    }
 
-        append("  guard$currentIndex : ")
-        if (conditions.isEmpty()) append("True")
-        else append(conditions.joinToString(" /\\ "))
-        append(";")
+    private fun StringBuilder.appendDomainDefinitions() {
+        if (setTypeMap.isEmpty()) return
+
+        appendLine("(* --- Domain Constraints --- *)")
+        setTypeMap.toSortedMap(compareBy { it.values.toString() }).forEach { (type, id) ->
+            val domainName = "domain_Enum_$id"
+            append("Definition $domainName (z : Z) : Prop :=")
+            if (type.values.isEmpty()) {
+                append(" False.")
+            } else {
+                // z = 1 \/ z = 2 ...
+                val disjunction = type.values.sorted().joinToString(" \\/ ") { v -> "z = $v%Z" }
+                appendLine()
+                appendLine("  $disjunction.")
+            }
+        }
+        appendLine()
     }
 
     // --- The Universal Run Record ---
@@ -220,53 +240,54 @@ class CoqDagEncoder(private val dag: ActionDag) {
 
     // --- Expression Translation ---
 
-    private fun translateExpr(e: Expr, currentIndex: Int): String = when (e) {
-        is Expr.Const.IntVal -> "${e.v}%Z"
-        is Expr.Const.BoolVal -> if (e.v) "True" else "False"
-        is Expr.Const.Hidden -> translateExpr(e.inner, currentIndex)
-        is Expr.Const.Opaque -> "0%Z"
-        is Expr.Const.Quit -> "False"
+    private fun translateExpr(e: Expr, currentIndex: Int, myRole: RoleId): String {
+        fun translateExpr(e: Expr): String = when (e) {
+            is Expr.Const.IntVal -> "${e.v}%Z"
+            is Expr.Const.BoolVal -> if (e.v) "True" else "False"
+            is Expr.Const.Hidden -> translateExpr(e.inner)
+            is Expr.Const.Opaque -> "0%Z"
+            is Expr.Const.Quit -> "False"
 
-        is Expr.Field -> {
-            // Find who wrote this field
-            val writerIndex = fieldWriter[e.field]
-                ?: error("No visible writer for ${e.field} (check if it's hidden)")
+            is Expr.Field -> {
+                val writerIndex = fieldWriter[e.field]!!
+                val writerRole = dag.owner(sortedIds[writerIndex])
+                val fieldName = paramName(e.field, false).name
 
-            val varName = paramName(e.field, false).name
-
-            if (writerIndex == currentIndex) {
-                // Reading my own parameter (e.g. in a join or guard check)
-                varName
-            } else {
-                // Reading an ancestor
-                // Since this is a valid read, writerIndex MUST be in ancestors[currentIndex]
-                "w$writerIndex.($varName)"
+                if (writerIndex == currentIndex) {
+                    fieldName
+                } else if (writerRole == myRole) {
+                    "w$writerIndex.($fieldName)"
+                } else {
+                    // when quit is implemented, this would be different
+                    "w$writerIndex.($fieldName)"
+                }
             }
+
+            is Expr.Add -> "(${translateExpr(e.l)} + ${translateExpr(e.r)})%Z"
+            is Expr.Sub -> "(${translateExpr(e.l)} - ${translateExpr(e.r)})%Z"
+            is Expr.Mul -> "(${translateExpr(e.l)} * ${translateExpr(e.r)})%Z"
+            is Expr.Div -> "(${translateExpr(e.l)} / ${translateExpr(e.r)})%Z"
+            is Expr.Neg -> "(- ${translateExpr(e.x)})%Z"
+
+            is Expr.Eq -> "(${translateExpr(e.l)} = ${translateExpr(e.r)})"
+            is Expr.Ne -> "(${translateExpr(e.l)} <> ${translateExpr(e.r)})"
+            is Expr.And -> "(${translateExpr(e.l)} /\\ ${translateExpr(e.r)})"
+            is Expr.Or  -> "(${translateExpr(e.l)} \\/ ${translateExpr(e.r)})"
+            is Expr.Not -> "(negb ${translateExpr(e.x)})"
+
+            is Expr.Gt -> "(${translateExpr(e.l)} > ${translateExpr(e.r)})"
+            is Expr.Ge -> "(${translateExpr(e.l)} >= ${translateExpr(e.r)})"
+            is Expr.Lt -> "(${translateExpr(e.l)} < ${translateExpr(e.r)})"
+            is Expr.Le -> "(${translateExpr(e.l)} <= ${translateExpr(e.r)})"
+
+            else -> "true (* Unsupported expr $e *)"
         }
-
-        is Expr.Add -> "(${translateExpr(e.l, currentIndex)} + ${translateExpr(e.r, currentIndex)})%Z"
-        is Expr.Sub -> "(${translateExpr(e.l, currentIndex)} - ${translateExpr(e.r, currentIndex)})%Z"
-        is Expr.Mul -> "(${translateExpr(e.l, currentIndex)} * ${translateExpr(e.r, currentIndex)})%Z"
-        is Expr.Div -> "(${translateExpr(e.l, currentIndex)} / ${translateExpr(e.r, currentIndex)})%Z"
-        is Expr.Neg -> "(- ${translateExpr(e.x, currentIndex)})%Z"
-
-        is Expr.Eq -> "(${translateExpr(e.l, currentIndex)} = ${translateExpr(e.r, currentIndex)})"
-        is Expr.Ne -> "(${translateExpr(e.l, currentIndex)} <> ${translateExpr(e.r, currentIndex)})"
-        is Expr.And -> "(${translateExpr(e.l, currentIndex)} /\\ ${translateExpr(e.r, currentIndex)})"
-        is Expr.Or  -> "(${translateExpr(e.l, currentIndex)} \\/ ${translateExpr(e.r, currentIndex)})"
-        is Expr.Not -> "(negb ${translateExpr(e.x, currentIndex)})"
-
-        is Expr.Gt -> "(${translateExpr(e.l, currentIndex)} > ${translateExpr(e.r, currentIndex)})"
-        is Expr.Ge -> "(${translateExpr(e.l, currentIndex)} >= ${translateExpr(e.r, currentIndex)})"
-        is Expr.Lt -> "(${translateExpr(e.l, currentIndex)} < ${translateExpr(e.r, currentIndex)})"
-        is Expr.Le -> "(${translateExpr(e.l, currentIndex)} <= ${translateExpr(e.r, currentIndex)})"
-
-        else -> "true (* Unsupported expr $e *)"
+        return translateExpr(e)
     }
 
     private fun toCoqType(t: Type): String = when (t) {
         is Type.IntType -> "Z"
         is Type.BoolType -> "bool"
-        is Type.SetType -> "nat" // In real impl, map to Enum_X
+        is Type.SetType -> "Z"
     }
 }
