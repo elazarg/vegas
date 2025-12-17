@@ -173,13 +173,6 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
             appendLine("  match u with $presentName a => fun _ => a | $absentName _ => fun H => match H with end end.")
             appendLine()
         }
-
-        // Safe Accessors (Defaults)
-        appendLine("Definition get_z {r A} (u : $wrapperName r A) (f : A -> Z) : Z := ")
-        appendLine("  match u with $presentName w => f w | $absentName _ => 0%Z end.")
-        appendLine("Definition get_bool {r A} (u : $wrapperName r A) (f : A -> bool) : bool := ")
-        appendLine("  match u with $presentName w => f w | $absentName _ => false end.")
-        appendLine()
     }
 
     private fun StringBuilder.appendDomainDefinitions() {
@@ -233,8 +226,7 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
                 sb.appendLine()
             }
         }
-        sb.append(" : Type := {")
-        sb.appendLine()
+        sb.appendLine(" : Type := {")
 
         // 2. Data Parameters
         for (param in meta.spec.params) {
@@ -247,7 +239,6 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
             if (isCommit) sb.appendLine("  $name : Hidden $typeStr;")
             else sb.appendLine("  $name : $typeStr;")
         }
-        if (meta.spec.params.isNotEmpty()) sb.appendLine()
 
         // --- 3. Guards ---
 
@@ -336,7 +327,7 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
     // --- Records: Run (Fair) & Execution (Trace) ---
 
     private fun appendFairPlayRun(sb: StringBuilder) {
-        sb.appendLine("Record Run : Type := {")
+        sb.appendLine("Record ActionDag : Type := {")
         sortedIds.forEachIndexed { i, _ ->
             val myAncestors = ancestors[i] ?: emptyList()
 
@@ -349,32 +340,33 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
             }
             val suffix = if (policy == LivenessPolicy.FAIR_PLAY) "" else ")"
 
-            val appArgs = myAncestors.joinToString(" ") { "${wrapper}row$it${suffix}" }
+            val appArgs = myAncestors.joinToString(" ") { "${wrapper}action$it${suffix}" }
             val type = if (appArgs.isEmpty()) "@W$i" else "@W$i $appArgs"
 
-            sb.appendLine("  row$i : $type;")
+            sb.appendLine("  action$i : $type;")
         }
         sb.appendLine("}.")
         sb.appendLine()
     }
 
     private fun appendExecutionRecord(sb: StringBuilder) {
-        sb.appendLine("Record Execution : Type := {")
+        sb.appendLine("Record EventDag : Type := {")
         val wrapperName = if (policy == LivenessPolicy.INDEPENDENT) "Maybe" else "UnlessQuit"
 
         sortedIds.forEachIndexed { i, _ ->
             val myAncestors = ancestors[i] ?: emptyList()
             // In execution trace, we pass previous rows directly (they are already wrapped)
-            val appArgs = myAncestors.joinToString(" ") { "row$it" }
+            val appArgs = myAncestors.joinToString(" ") { "event$it" }
 
             // The raw witness type (W$i) is defined expecting wrapped args.
             // So we just apply W$i rowA rowB.
             val witnessType = if (appArgs.isEmpty()) "W$i" else "W$i $appArgs"
             val role = dag.owner(sortedIds[i])
 
-            sb.appendLine("  row$i : $wrapperName ${role.name} ($witnessType);")
+            sb.appendLine("  event$i : $wrapperName ${role.name} ($witnessType);")
         }
         sb.appendLine("}.")
+        sb.appendLine()
     }
 
     // --- Expression Translation ---
