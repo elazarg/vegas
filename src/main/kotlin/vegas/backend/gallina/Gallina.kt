@@ -24,7 +24,7 @@ import vegas.ir.*
  * ancestors as arguments. This creates a "Single Source of Truth" for shared history.
  * 2.  Propagated Failure: Instead of dependent pattern matching on the execution trace,
  * we encode failure (quitting/timeouts) as values (`UnlessQuit`/`Maybe`) passed into the
- * witness types. Validity is enforced via internal Guards**. If a required dependency is
+ * witness types. Validity is enforced via internal Guards. If a required dependency is
  * missing (Quit), the Guard evaluates to `False`, making the Witness type uninhabited.
  * This naturally prunes invalid branches of the execution tree.
  * 3.  Option Lifting: For non-idealized policies, all logical expressions are "lifted" into
