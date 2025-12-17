@@ -1,0 +1,488 @@
+package vegas.backend.gallina
+
+import vegas.FieldRef
+import vegas.VarId
+import vegas.dag.Algo
+import vegas.ir.*
+
+/**
+ * Generates a Gallina (COQ/ROCQ) deep embedding of a Vegas Game Protocol.
+ *
+ * # Theoretical Approach: The Diamond DAG Strategy
+ *
+ * Representing a DAG of dependent actions in Constructive Type Theory (CIC) is challenging because
+ * execution is linear (a trace), but logic is branched (a DAG). A naive encoding leads to the
+ * "Diamond Problem," where a node `D` depending on `B` and `C` (which both depend on `A`) receives
+ * two distinct, structurally incompatible copies of `A`.
+ *
+ * This encoder solves this by linearizing the DAG via topological sort and generating a
+ * Witness Record for each action `W_i`.
+ *
+ * ## Key Mechanisms
+ *
+ * 1.  Transitive Parameterization: Each `Record W_i` explicitly takes *all* its transitive
+ * ancestors as arguments. This creates a "Single Source of Truth" for shared history.
+ * 2.  Propagated Failure: Instead of dependent pattern matching on the execution trace,
+ * we encode failure (quitting/timeouts) as values (`UnlessQuit`/`Maybe`) passed into the
+ * witness types. Validity is enforced via internal Guards. If a required dependency is
+ * missing (Quit), the Guard evaluates to `False`, making the Witness type uninhabited.
+ * This naturally prunes invalid branches of the execution tree.
+ * 3.  Option Lifting: For non-idealized policies, all logical expressions are "lifted" into
+ * the `option` monad (e.g., `lift2 Z.add`). This ensures that operations on missing data
+ * result in `None` rather than undefined behavior, allowing the protocol to define precise
+ * fallback semantics.
+ **/
+
+ /** # Liveness Policies
+ *
+ * The encoder supports three strategies for handling player disconnects/timeouts:
+ *
+ * * [LivenessPolicy.FAIR_PLAY]: An idealized model assuming no timeouts.
+ * * Types: Direct values (`Z`, `bool`).
+ * * Dependencies: Unwrapped (`@W_i`).
+ * * Guards: Logical propositions (`Prop`).
+ * * Output: Generates `Record ActionDag` (a proof that a complete run is possible).
+ *
+ * * [LivenessPolicy.MONOTONIC]: Enforces that a player cannot act if they have previously quit.
+ * * Wrapper: `UnlessQuit` (Constructors: `Have` | `Quit`).
+ * * Guards: `guard_monotonicity` proves `IsHave w_self`.
+ * * Access: Uses dependent accessor `getHave` for safe self-access, strict `match` for others.
+ * * Output: Generates `Record ActionDag` (Fair Play proof) AND `Record EventDag` (Trace).
+ *
+ * * [LivenessPolicy.INDEPENDENT]: A sparse model where actions are valid if data exists, regardless of history.
+ * * Wrapper: `Maybe` (Constructors: `Present` | `Absent`).
+ * * Guards: No structural enforcement. Validity relies purely on strict data availability checks.
+ * * Output: Generates `Record EventDag` (Trace).
+ */
+enum class LivenessPolicy {
+    FAIR_PLAY,
+    MONOTONIC,
+    INDEPENDENT
+}
+
+class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPolicy) {
+
+    private val sortedIds: List<ActionId> by lazy {
+        val adjacency = dag.actions.associateWith { dag.prerequisitesOf(it) }
+        Algo.topo(dag.actions, adjacency)
+    }
+
+    private val idToIndex: Map<ActionId, Int> by lazy {
+        sortedIds.withIndex().associate { it.value to it.index }
+    }
+
+    private val ancestors: Map<Int, List<Int>> by lazy {
+        val map = mutableMapOf<Int, List<Int>>()
+        for (i in sortedIds.indices) {
+            val id = sortedIds[i]
+            val paramAncestors = dag.reach.ancestorsOf(id)
+                .map { idToIndex[it]!! }
+                .sorted()
+            map[i] = paramAncestors
+        }
+        map
+    }
+
+    private val setTypeMap: Map<Type.SetType, Int> by lazy {
+        var counter = 0
+        val map = mutableMapOf<Type.SetType, Int>()
+        for (meta in dag.metas) {
+            for (p in meta.spec.params) {
+                if (p.type is Type.SetType && !map.containsKey(p.type)) {
+                    map[p.type] = counter++
+                }
+            }
+        }
+        map
+    }
+
+    fun generate(): String = buildString {
+        appendPreamble()
+        appendRoles()
+        appendQuitLogic()
+        appendDomainDefinitions()
+
+        appendLine("Module GameProtocol.")
+        appendLine()
+
+        sortedIds.forEachIndexed { index, id ->
+            generateWitnessRecord(this, index, dag.meta(id))
+        }
+
+        when (policy) {
+            LivenessPolicy.MONOTONIC -> {
+                appendFairPlayRun(this)
+                appendExecutionRecord(this)
+            }
+            LivenessPolicy.INDEPENDENT -> {
+                appendExecutionRecord(this)
+            }
+            LivenessPolicy.FAIR_PLAY -> {
+                appendFairPlayRun(this)
+            }
+        }
+
+        appendLine("End GameProtocol.")
+    }
+
+    private fun StringBuilder.appendPreamble() {
+        appendLine("(* Generated by Vegas Coq Encoder - Policy: $policy *)")
+        appendLine("From Coq Require Import ZArith.ZArith.")
+        appendLine()
+        appendLine("Set Implicit Arguments.")
+        appendLine("Set Primitive Projections.")
+        appendLine()
+        appendLine("Definition Hidden (A : Type) : Type := { x : A & unit }.")
+        appendLine("Definition reveal {A} (h : Hidden A) : A := projT1 h.")
+        appendLine()
+    }
+
+    private fun StringBuilder.appendRoles() {
+        val roles = dag.actions.map { it.first }.distinct().sortedBy { it.name }
+        append("Inductive Role : Type :=")
+        if (roles.isEmpty()) append(" | Role_None")
+        else roles.forEach { append(" | ${it.name}") }
+        appendLine(".")
+        appendLine()
+    }
+
+    private fun StringBuilder.appendQuitLogic() {
+        if (policy == LivenessPolicy.FAIR_PLAY) return
+
+        appendLine("(* --- Liveness Primitives --- *)")
+        val failureName = if (policy == LivenessPolicy.INDEPENDENT) "Absence" else "QuitW"
+        val wrapperName = if (policy == LivenessPolicy.INDEPENDENT) "Maybe" else "UnlessQuit"
+        val presentName = if (policy == LivenessPolicy.INDEPENDENT) "Present" else "Have"
+        val absentName  = if (policy == LivenessPolicy.INDEPENDENT) "Absent" else "Quit"
+
+        appendLine("Inductive $failureName (r : Role) : Type := | Timeout : $failureName r.")
+        appendLine()
+        appendLine("Inductive $wrapperName (r : Role) (A : Type) : Type :=")
+        appendLine("| $presentName : A -> $wrapperName r A")
+        appendLine("| $absentName : $failureName r -> $wrapperName r A.")
+        appendLine()
+        appendLine("Arguments $presentName {r} {A} _.")
+        appendLine("Arguments $absentName {r} {A} _.")
+        appendLine()
+        if (policy == LivenessPolicy.INDEPENDENT) {
+            appendLine("Definition IsPresent {r A} (u : Maybe r A) : Prop :=")
+            appendLine("  match u with Present _ => True | Absent _ => False end.")
+            appendLine()
+            appendLine("Definition getPresent {r A} (u : Maybe r A) : IsPresent u -> A :=")
+            appendLine("  match u with")
+            appendLine("  | Present a => fun _ => a")
+            appendLine("  | Absent _  => fun H => match H with end")
+            appendLine("  end.")
+            appendLine()
+        }
+
+        if (policy == LivenessPolicy.MONOTONIC) {
+            appendLine("Definition IsHave {r A} (u : $wrapperName r A) : Prop :=")
+            appendLine("  match u with $presentName _ => True | $absentName _ => False end.")
+            appendLine()
+            appendLine("Definition getHave {r A} (u : $wrapperName r A) : IsHave u -> A :=")
+            appendLine("  match u with $presentName a => fun _ => a | $absentName _ => fun H => match H with end end.")
+            appendLine()
+        }
+
+        appendLine("(* Helpers for accessing optional values and lifting operators *)")
+        appendLine("Definition get_val {r A B} (u : $wrapperName r A) (f : A -> B) : option B :=")
+        appendLine("  match u with $presentName w => Some (f w) | $absentName _ => None end.")
+        appendLine()
+        appendLine("Definition lift1 {A B} (f : A -> B) (x : option A) : option B :=")
+        appendLine("  match x with Some v => Some (f v) | None => None end.")
+        appendLine()
+        appendLine("Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : option C :=")
+        appendLine("  match x, y with Some vx, Some vy => Some (f vx vy) | _, _ => None end.")
+        appendLine()
+    }
+
+    private fun StringBuilder.appendDomainDefinitions() {
+        if (setTypeMap.isEmpty()) return
+        appendLine("(* --- Domain Constraints --- *)")
+        setTypeMap.toSortedMap(compareBy { it.values.toString() }).forEach { (type, id) ->
+            val domainName = "domain_Enum_$id"
+            append("Definition $domainName (z : Z) : Prop :=")
+            if (type.values.isEmpty()) append(" False.")
+            else {
+                val disjunction = type.values.sorted().joinToString(" \\/ ") { v -> "z = $v%Z" }
+                appendLine()
+                appendLine("  $disjunction.")
+            }
+        }
+        appendLine()
+    }
+
+    private fun paramName(f: FieldRef, hidden: Boolean) =
+        if (hidden) VarId("hidden_${f.param}_${f.owner}")
+        else VarId("${f.param}_${f.owner}")
+
+    private fun commitSourceIndex(currentIndex: Int, field: FieldRef): Int {
+        val cand = ancestors.getValue(currentIndex)
+            .filter { ai ->
+                val id = sortedIds[ai]
+                dag.visibilityOf(id)[field] == Visibility.COMMIT
+            }
+        return cand.maxOrNull()
+            ?: error("No commit ancestor for reveal field $field at action $currentIndex")
+    }
+
+    private fun generateWitnessRecord(sb: StringBuilder, index: Int, meta: ActionMeta) {
+        val myAncestors = ancestors[index] ?: emptyList()
+        val myRole = meta.struct.owner
+
+        sb.append("Record ${actionName(index)} ")
+        if (myAncestors.isNotEmpty()) {
+            sb.appendLine()
+            for (ancIndex in myAncestors) {
+                val ancId = sortedIds[ancIndex]
+                val ancRole = dag.owner(ancId)
+                val ancAncestors = ancestors[ancIndex] ?: emptyList()
+                val appArgs = ancAncestors.joinToString(" ") { "w$it" }
+                val rawType = if (appArgs.isEmpty()) "@${actionName(ancIndex)}" else "@${actionName(ancIndex)} $appArgs"
+                val finalType = when (policy) {
+                    LivenessPolicy.FAIR_PLAY -> rawType
+                    LivenessPolicy.MONOTONIC -> "UnlessQuit ${ancRole.name} ($rawType)"
+                    LivenessPolicy.INDEPENDENT -> "Maybe ${ancRole.name} ($rawType)"
+                }
+                sb.append("  (w$ancIndex : $finalType)")
+                sb.appendLine()
+            }
+        }
+        sb.append(" : Type := {")
+        sb.appendLine()
+
+        // 2. Data Parameters
+        for (param in meta.spec.params) {
+            val fieldRef = FieldRef(myRole, param.name)
+            val vis = meta.struct.visibility[fieldRef] ?: Visibility.PUBLIC
+            val isCommit = (vis == Visibility.COMMIT)
+            val typeStr = toCoqType(param.type)
+            val name = paramName(fieldRef, isCommit)
+
+            if (isCommit) sb.appendLine("  $name : Hidden $typeStr;")
+            else sb.appendLine("  $name : $typeStr;")
+        }
+        if (meta.spec.params.isNotEmpty()) sb.appendLine()
+
+        // --- 3. Guards ---
+
+        // A. Monotonicity (Splitting fields to avoid tuple hell)
+        if (policy == LivenessPolicy.MONOTONIC) {
+            val selfDeps = myAncestors.filter { dag.owner(sortedIds[it]) == myRole }
+            // Generate individual proofs for each ancestor
+            selfDeps.forEach { depIndex ->
+                sb.appendLine("  ${actionName(index)}_${monotonicityGuardName(depIndex)} : IsHave w$depIndex;")
+            }
+        }
+
+        // B. Domain Constraints
+        val domainChecks = meta.spec.params.filter { it.type is Type.SetType }.map { param ->
+            val typeId = setTypeMap[param.type]!!
+            val domainName = "domain_Enum_$typeId"
+            val fieldRef = FieldRef(myRole, param.name)
+            val isCommit = (meta.struct.visibility[fieldRef] == Visibility.COMMIT)
+            val varName = paramName(fieldRef, isCommit).name
+            val valExpr = if (isCommit) "(reveal $varName)" else varName
+            "$domainName $valExpr"
+        }
+        if (domainChecks.isNotEmpty()) {
+            sb.appendLine("  ${actionName(index)}_guard_domain : ${domainChecks.joinToString(" /\\ ")};")
+        }
+
+        // C. Reveal Consistency
+        for ((field, visibility) in meta.struct.visibility) {
+            if (visibility != Visibility.REVEAL) continue
+            val commitNodeId = dag.actions.firstOrNull { dag.visibilityOf(it)[field] == Visibility.COMMIT }!!
+            val commitIndex = commitSourceIndex(index, field)
+            val commitRole = dag.owner(commitNodeId)
+            val hiddenName = paramName(field, true)
+            val clearName = paramName(field, false)
+            val guardName = "${actionName(index)}_guard_reveal"
+            when (policy) {
+                LivenessPolicy.FAIR_PLAY -> {
+                    sb.appendLine("  $guardName : $clearName = reveal w$commitIndex.($hiddenName);")
+                }
+                LivenessPolicy.MONOTONIC -> {
+                    require(commitRole == myRole)
+                    // Access using the named proof field we generated
+                    sb.appendLine("  $guardName : $clearName = reveal (getHave w$commitIndex ${actionName(index)}_${monotonicityGuardName(commitIndex)}).($hiddenName);")
+                }
+                LivenessPolicy.INDEPENDENT -> {
+                    val guardPresentName = "${actionName(index)}_guard_w${commitIndex}_present"
+                    sb.appendLine("  $guardPresentName : IsPresent w${commitIndex};")
+                    sb.appendLine("  $guardName : $clearName = reveal (getPresent w$commitIndex $guardPresentName).($hiddenName);")
+                }
+            }
+        }
+
+        // D. Logic Guard
+        val guardExpr = meta.spec.guardExpr
+        if (guardExpr != Expr.Const.BoolVal(true)) {
+            val exprCode = stripParens(translateExpr(guardExpr, index))
+            val propify = if (policy == LivenessPolicy.FAIR_PLAY) "true" else "Some true"
+            sb.appendLine("  ${actionName(index)}_guard_logic : ${stripParens(exprCode)} = $propify;")
+        }
+        sb.appendLine("}.")
+        sb.appendLine()
+    }
+
+    private fun monotonicityGuardName(depIndex: Int): String = "guard_have_w$depIndex"
+
+    private fun stripParens(exp: String): String =
+        if (exp.startsWith("(") && exp.endsWith(")")) exp.drop(1).dropLast(1) else exp
+
+    private fun appendFairPlayRun(sb: StringBuilder) {
+        sb.appendLine("Record ActionDag : Type := {")
+        sortedIds.forEachIndexed { i, _ ->
+            val myAncestors = ancestors[i] ?: emptyList()
+            val wrapper = when(policy) {
+                LivenessPolicy.FAIR_PLAY -> ""
+                LivenessPolicy.MONOTONIC -> "(@Have _ _ "
+                LivenessPolicy.INDEPENDENT -> "(@Present _ _ "
+            }
+            val suffix = if (policy == LivenessPolicy.FAIR_PLAY) "" else ")"
+            val appArgs = myAncestors.joinToString(" ") { "${wrapper}action$it${suffix}" }
+            val type = if (appArgs.isEmpty()) "@${actionName(i)}" else "@${actionName(i)} $appArgs"
+            sb.appendLine("  action$i : $type;")
+        }
+        sb.appendLine("}.")
+        sb.appendLine()
+    }
+
+    private fun appendExecutionRecord(sb: StringBuilder) {
+        sb.appendLine("Record EventDag : Type := {")
+        val wrapperName = if (policy == LivenessPolicy.INDEPENDENT) "Maybe" else "UnlessQuit"
+        sortedIds.forEachIndexed { i, _ ->
+            val myAncestors = ancestors[i] ?: emptyList()
+            val appArgs = myAncestors.joinToString(" ") { "event$it" }
+            val witnessType = if (appArgs.isEmpty()) "@${actionName(i)}" else "@${actionName(i)} $appArgs"
+            val role = dag.owner(sortedIds[i])
+            sb.appendLine("  event$i : $wrapperName ${role.name} ($witnessType);")
+        }
+        sb.appendLine("}.")
+        sb.appendLine()
+    }
+
+    private fun actionName(index: Int): String = "W$index"
+
+    private fun latestWriterIndex(currentIndex: Int, field: FieldRef): Int? {
+        // include self because guards can reference this action’s own params (packet overlay)
+        val candidates = ancestors.getValue(currentIndex) + currentIndex
+        return candidates
+            .filter { idx -> dag.visibilityOf(sortedIds[idx]).containsKey(field) }
+            .maxOrNull()
+    }
+    private fun coqFieldName(field: FieldRef, hidden: Boolean): String =
+        paramName(field, hidden).name
+
+    private fun fieldReadExpr(field: FieldRef, currentIndex: Int): String {
+        val reader = dag.owner(sortedIds[currentIndex])
+        val writerIndex = latestWriterIndex(currentIndex, field)
+            ?: error("No writer for field $field at action $currentIndex")
+
+        val writerId = sortedIds[writerIndex]
+        val vis = dag.visibilityOf(writerId)[field]!!  // since writerIndex ensured it exists
+
+        // Local read (field written by current action): refer to local binder, not wX.
+        val isLocal = writerIndex == currentIndex
+
+        fun wrapSome(x: String) = if (policy == LivenessPolicy.FAIR_PLAY) x else "(Some $x)"
+        fun none() = if (policy == LivenessPolicy.FAIR_PLAY)
+            error("In FAIR_PLAY, guard referenced unavailable/hidden field $field for non-owner")
+        else "None"
+
+        return when (vis) {
+            Visibility.PUBLIC, Visibility.REVEAL -> {
+                val clear = coqFieldName(field, hidden = false)
+                if (isLocal) wrapSome(clear)
+                else if (policy == LivenessPolicy.FAIR_PLAY) "w$writerIndex.($clear)"
+                else "(get_val w$writerIndex (fun w => w.($clear)))"
+            }
+
+            Visibility.COMMIT -> {
+                if (field.owner != reader) return none()
+
+                val hid = coqFieldName(field, hidden = true)
+
+                if (isLocal) {
+                    // actor knows their own hidden choice right now (Semantics unwraps Hidden)
+                    wrapSome("reveal $hid")
+                } else {
+                    if (policy == LivenessPolicy.FAIR_PLAY) {
+                        "reveal w$writerIndex.($hid)"
+                    } else {
+                        // get_val returns option (Hidden A); lift reveal over it.
+                        "(lift1 reveal (get_val w$writerIndex (fun w => w.($hid))))"
+                    }
+                }
+            }
+        }
+    }
+
+    private fun translateExpr(e: Expr, currentIndex: Int): String {
+        fun translate(e: Expr): String = when (e) {
+            // Parenthesize Option constructors to avoid "unknown context" parsing errors
+            is Expr.Const.IntVal -> if (policy == LivenessPolicy.FAIR_PLAY) "${e.v}%Z" else "(Some ${e.v}%Z)"
+            is Expr.Const.BoolVal -> if (policy == LivenessPolicy.FAIR_PLAY) (if(e.v) "true" else "false") else (if(e.v) "(Some true)" else "(Some false)")
+            is Expr.Const.Hidden -> translate(e.inner)
+            is Expr.Const.Opaque -> if (policy == LivenessPolicy.FAIR_PLAY) "0%Z" else "(Some 0%Z)"
+            is Expr.Const.Quit -> if (policy == LivenessPolicy.FAIR_PLAY) "false" else "(Some false)"
+
+            is Expr.Field -> fieldReadExpr(e.field, currentIndex)
+
+            is Expr.Add -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} + ${translate(e.r)})%Z"
+            else "(lift2 Z.add ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Sub -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} - ${translate(e.r)})%Z"
+            else "(lift2 Z.sub ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Mul -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} * ${translate(e.r)})%Z"
+            else "(lift2 Z.mul ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Div -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} / ${translate(e.r)})%Z"
+            else "(lift2 Z.div ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Neg -> if (policy == LivenessPolicy.FAIR_PLAY) "(- ${translate(e.x)})%Z"
+            else "(lift1 Z.opp ${translate(e.x)})"
+
+            // Comparisons (Z -> bool)
+            is Expr.Eq -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.eqb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 (fun x y => Z.eqb x y) ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Ne -> if (policy == LivenessPolicy.FAIR_PLAY) "(negb (Z.eqb ${translate(e.l)} ${translate(e.r)}))"
+            else "(lift2 (fun x y => negb (Z.eqb x y)) ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Gt -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.gtb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.gtb ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Ge -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.geb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.geb ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Lt -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.ltb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.ltb ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Le -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.leb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.leb ${translate(e.l)} ${translate(e.r)})"
+
+            // Boolean Logic (bool -> bool)
+            is Expr.And -> if (policy == LivenessPolicy.FAIR_PLAY) "(andb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 (fun a b => andb a b) ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Or -> if (policy == LivenessPolicy.FAIR_PLAY) "(orb ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 (fun a b => orb a b) ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Not -> if (policy == LivenessPolicy.FAIR_PLAY) "(negb ${translate(e.x)})"
+            else "(lift1 negb ${translate(e.x)})"
+
+            else -> if (policy == LivenessPolicy.FAIR_PLAY) "true" else "(Some true)"
+        }
+        return translate(e)
+    }
+
+    private fun toCoqType(t: Type): String = when (t) {
+        is Type.IntType -> "Z"
+        is Type.BoolType -> "bool"
+        is Type.SetType -> "Z"
+    }
+}

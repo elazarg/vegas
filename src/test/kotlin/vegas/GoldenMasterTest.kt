@@ -12,9 +12,12 @@ import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
+import vegas.backend.gallina.CoqDagEncoder
+import vegas.backend.gallina.LivenessPolicy
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
+import vegas.ir.GameIR
 import vegas.ir.toGraphviz
 import java.io.File
 
@@ -29,7 +32,7 @@ data class TestCase(
     val example: Example,
     val extension: String,
     val backend: String,
-    val generator: (GameAst) -> String
+    val generator: (GameIR) -> String
 ) {
     override fun toString() = "$example.$extension ($backend)"
 }
@@ -37,47 +40,55 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
+        Example("Bet", disableBackend = setOf("lightning", "gallina")), // Not 2-player (has random role)
         Example("MontyHall", disableBackend = setOf()),
-        Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
-        Example("OddsEvens", disableBackend = setOf()),
+        Example("MontyHallChance", disableBackend = setOf("lightning", "gallina")), // Has randomness + utility semantics
+        Example("OddsEvens", disableBackend = setOf("gallina")),
         Example("OddsEvensShort", disableBackend = setOf()),
         Example("Prisoners", disableBackend = setOf()),
-        Example("Simple", disableBackend = setOf()),
-        Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
-        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Unbounded int
-        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("Simple", disableBackend = setOf("gallina")),
+        Example("Trivial1", disableBackend = setOf("lightning", "gallina")), // Not 2-player (only 1 player)
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning", "gallina")), // Unbounded int
+        Example("ThreeWayLottery", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("VickreyAuction", disableBackend = setOf("solidity", "vyper", "gambit", "smt", "graphviz", "scribble", "lightning", "gallina")),
         Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game
     )
 
     val testCases = exampleFiles.flatMap { example ->
         listOf(
-            TestCase(example, "sol", "solidity") { prog ->
-                generateSolidity(compileToEvm(compileToIR(prog)))
+            TestCase(example, "sol", "solidity") { ir ->
+                generateSolidity(compileToEvm(ir))
             },
-            TestCase(example, "vy", "vyper") { prog ->
-                generateVyper(compileToEvm(compileToIR(prog)))
+            TestCase(example, "vy", "vyper") { ir ->
+                generateVyper(compileToEvm(ir))
             },
-            TestCase(example, "efg", "gambit") { prog ->
-                generateExtensiveFormGame(compileToIR(prog))
+            TestCase(example, "efg", "gambit") { ir ->
+                generateExtensiveFormGame(ir)
             },
-            TestCase(example, "z3", "smt") { prog ->
-                generateSMT(compileToIR(prog))
+            TestCase(example, "z3", "smt") { ir ->
+                generateSMT(ir)
             },
-            TestCase(example, "gc", "graphviz") { prog ->
-                compileToIR(prog).toGraphviz()
+            TestCase(example, "v", "gallina-fair") { ir ->
+                CoqDagEncoder(ir.dag, LivenessPolicy.FAIR_PLAY).generate()
             },
-            TestCase(example, "ln", "lightning") { prog ->
-                val ir = compileToIR(prog)
+            TestCase(example, "v", "gallina-monotone") { ir ->
+                CoqDagEncoder(ir.dag, LivenessPolicy.MONOTONIC).generate()
+            },
+            TestCase(example, "v", "gallina-independent") { ir ->
+                CoqDagEncoder(ir.dag, LivenessPolicy.INDEPENDENT).generate()
+            },
+            TestCase(example, "gc", "graphviz") { ir ->
+                ir.toGraphviz()
+            },
+            TestCase(example, "ln", "lightning") { ir ->
                 generateLightningProtocol(ir)
             },
-            TestCase(example, "scr", "scribble") { prog ->
-                val ir = compileToIR(prog)
+            TestCase(example, "scr", "scribble") { ir ->
                 genScribbleFromIR(ir)
             }
-        ).filter { t -> t.backend !in example.disableBackend }
+        ).filter { t -> example.disableBackend.none { t.backend.startsWith(it) } }
     }
 
     "Golden Master Tests" - {
@@ -213,7 +224,8 @@ private fun getGoldenFile(testCase: TestCase): File =
 
 private fun generateOutput(testCase: TestCase): String {
     val program = parseExample(testCase.example.name)
-    return testCase.generator(program)
+    val ir = compileToIR(program)
+    return testCase.generator(ir)
 }
 
 private fun parseExample(example: String): GameAst {
