@@ -115,7 +115,7 @@ data class ActionMeta(
 class ActionDag private constructor(
     private val dag: Dag<ActionId>,
     private val payloads: Map<ActionId, ActionMeta>,
-    private val reach: Reachability<ActionId>,
+    val reach: Reachability<ActionId>,
 ) : Dag<ActionId> by dag {
 
     /** All actions present in this DAG. */

@@ -12,8 +12,9 @@ import vegas.backend.smt.generateSMT
 import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
+import vegas.backend.gallina.CoqDagEncoder
 import vegas.backend.gallina.genGallinaBlockchain
-import vegas.backend.gallina.genGallinaTypestate
+//import vegas.backend.gallina.genGallinaWitnessDAG
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -70,7 +71,7 @@ class GoldenMasterTest : FreeSpec({
                 generateSMT(ir)
             },
             TestCase(example, "v", "gallina") { ir ->
-                genGallinaTypestate(ir)
+                CoqDagEncoder(ir.dag).generate()
             },
             TestCase(example, "v", "glockchain") { ir ->
                 genGallinaBlockchain(ir)
