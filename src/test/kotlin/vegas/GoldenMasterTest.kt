@@ -14,8 +14,6 @@ import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.bitcoin.CompilationException
 import vegas.backend.gallina.CoqDagEncoder
 import vegas.backend.gallina.LivenessPolicy
-import vegas.backend.gallina.genGallinaBlockchain
-//import vegas.backend.gallina.genGallinaWitnessDAG
 import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -79,9 +77,6 @@ class GoldenMasterTest : FreeSpec({
             },
             TestCase(example, "v", "gallina-independent") { ir ->
                 CoqDagEncoder(ir.dag, LivenessPolicy.INDEPENDENT).generate()
-            },
-            TestCase(example, "v", "glockchain") { ir ->
-                genGallinaBlockchain(ir)
             },
             TestCase(example, "gc", "graphviz") { ir ->
                 ir.toGraphviz()
