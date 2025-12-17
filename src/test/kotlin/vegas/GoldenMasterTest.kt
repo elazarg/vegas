@@ -40,18 +40,19 @@ data class TestCase(
 class GoldenMasterTest : FreeSpec({
 
     val exampleFiles = listOf(
-        Example("Bet", disableBackend = setOf("lightning")), // Not 2-player (has random role)
+        Example("Bet", disableBackend = setOf("lightning", "gallina")), // Not 2-player (has random role)
         Example("MontyHall", disableBackend = setOf()),
-        Example("MontyHallChance", disableBackend = setOf("lightning")), // Has randomness + utility semantics
-        Example("OddsEvens", disableBackend = setOf()),
+        Example("MontyHallChance", disableBackend = setOf("lightning", "gallina")), // Has randomness + utility semantics
+        Example("OddsEvens", disableBackend = setOf("gallina")),
         Example("OddsEvensShort", disableBackend = setOf()),
         Example("Prisoners", disableBackend = setOf()),
-        Example("Simple", disableBackend = setOf()),
-        Example("Trivial1", disableBackend = setOf("lightning")), // Not 2-player (only 1 player)
-        Example("Puzzle", disableBackend = setOf("gambit", "lightning")), // Unbounded int
-        Example("ThreeWayLottery", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning")), // Not 2-player (3 players)
-        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning")), // Not 2-player (3 players)
+        Example("Simple", disableBackend = setOf("gallina")),
+        Example("Trivial1", disableBackend = setOf("lightning", "gallina")), // Not 2-player (only 1 player)
+        Example("Puzzle", disableBackend = setOf("gambit", "lightning", "gallina")), // Unbounded int
+        Example("ThreeWayLottery", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryBuggy", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("ThreeWayLotteryShort", disableBackend = setOf("lightning", "gallina")), // Not 2-player (3 players)
+        Example("VickreyAuction", disableBackend = setOf("solidity", "vyper", "gambit", "smt", "graphviz", "scribble", "lightning", "gallina")),
         Example("TicTacToe", disableBackend = setOf("gambit", "lightning")), // Complex game
     )
 
@@ -87,7 +88,7 @@ class GoldenMasterTest : FreeSpec({
             TestCase(example, "scr", "scribble") { ir ->
                 genScribbleFromIR(ir)
             }
-        ).filter { t -> t.backend !in example.disableBackend }
+        ).filter { t -> example.disableBackend.none { t.backend.startsWith(it) } }
     }
 
     "Golden Master Tests" - {
