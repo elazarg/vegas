@@ -58,18 +58,13 @@ class CoqDagEncoder(private val dag: ActionDag) {
         appendLine("Module GameProtocol.")
         appendLine()
 
-        // 1. Payloads (Data carried by each step)
-        sortedIds.forEachIndexed { index, id ->
-            generatePayloadRecord(this, index, dag.meta(id))
-        }
-
-        // 2. Witnesses (The Logic/DAG structure)
+        // 1. Witnesses (The Logic/DAG structure)
         // Each W_i takes ancestors as arguments.
         sortedIds.forEachIndexed { index, id ->
             generateWitnessRecord(this, index, dag.meta(id))
         }
 
-        // 3. The Run (Universal Quantifier)
+        // 2. The Run (Universal Quantifier)
         generateRunRecord(this)
 
         appendLine("End GameProtocol.")
@@ -84,6 +79,7 @@ class CoqDagEncoder(private val dag: ActionDag) {
         appendLine("From Coq Require Import String.")
         appendLine()
         appendLine("Set Implicit Arguments.")
+        appendLine("Set Primitive Projections.")
         appendLine()
         appendLine("Definition Hidden (A : Type) : Type := { x : A & unit }.")
         appendLine("Definition reveal {A} (h : Hidden A) : A := projT1 h.")
@@ -120,31 +116,6 @@ class CoqDagEncoder(private val dag: ActionDag) {
         if (hidden) VarId("hidden_${f.param}_${f.owner}")
         else VarId("${f.param}_${f.owner}")
 
-    // --- Payload ---
-
-    private fun generatePayloadRecord(sb: StringBuilder, index: Int, meta: ActionMeta) {
-        val params = meta.spec.params
-        if (params.isEmpty()) {
-            sb.appendLine("Definition P_Action$index : Type := unit.")
-            return
-        }
-
-        sb.appendLine("Record P_Action$index : Type := {")
-        for (param in params) {
-            val fieldRef = FieldRef(meta.struct.owner, param.name)
-            val visibility = meta.struct.visibility[fieldRef] ?: Visibility.PUBLIC
-            val coqType = toCoqType(param.type)
-
-            if (visibility == Visibility.COMMIT) {
-                sb.appendLine("  ${paramName(fieldRef, true)} : Hidden ($coqType);")
-            } else {
-                sb.appendLine("  ${paramName(fieldRef, false)} : $coqType;")
-            }
-        }
-        sb.appendLine("}.")
-        sb.appendLine()
-    }
-
     // --- Witness Records (The Core DAG Logic) ---
 
     private fun generateWitnessRecord(sb: StringBuilder, index: Int, meta: ActionMeta) {
@@ -173,7 +144,17 @@ class CoqDagEncoder(private val dag: ActionDag) {
         sb.appendLine()
 
         // 1. Payload
-        sb.appendLine("  payload$index : P_Action$index;")
+        for (param in meta.spec.params) {
+            val fieldRef = FieldRef(meta.struct.owner, param.name)
+            val visibility = meta.struct.visibility[fieldRef] ?: Visibility.PUBLIC
+            val coqType = toCoqType(param.type)
+
+            if (visibility == Visibility.COMMIT) {
+                sb.appendLine("  ${paramName(fieldRef, true)} : Hidden ($coqType);")
+            } else {
+                sb.appendLine("  ${paramName(fieldRef, false)} : $coqType;")
+            }
+        }
 
         // 2. Guard
         sb.appendGuard(index, meta)
@@ -193,7 +174,7 @@ class CoqDagEncoder(private val dag: ActionDag) {
         }
 
         // B. Reveal Consistency Checks
-        // payload.x = reveal( w_commit.payload.hidden_x )
+        // x = reveal( w_commit.hidden_x )
         for ((field, vis) in meta.struct.visibility) {
             if (vis == Visibility.REVEAL) {
                 // Find the COMMIT node
@@ -206,8 +187,8 @@ class CoqDagEncoder(private val dag: ActionDag) {
                     // The commit node MUST be an ancestor for this to be valid IR.
                     // We access it via the argument 'w_commitIndex'
 
-                    val commitPath = "w$commitIndex.(payload$commitIndex).(${paramName(field, true)})"
-                    val revealPath = "payload$currentIndex.(${paramName(field, false)})"
+                    val commitPath = "w$commitIndex.(${paramName(field, true)})"
+                    val revealPath = "${paramName(field, false)}"
 
                     conditions.add("$revealPath = reveal $commitPath")
                 }
@@ -255,11 +236,11 @@ class CoqDagEncoder(private val dag: ActionDag) {
 
             if (writerIndex == currentIndex) {
                 // Reading my own parameter (e.g. in a join or guard check)
-                "payload$currentIndex.($varName)"
+                varName
             } else {
                 // Reading an ancestor
                 // Since this is a valid read, writerIndex MUST be in ancestors[currentIndex]
-                "w$writerIndex.(payload$writerIndex).($varName)"
+                "w$writerIndex.($varName)"
             }
         }
 
