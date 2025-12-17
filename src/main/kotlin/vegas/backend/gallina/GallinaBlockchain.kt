@@ -47,9 +47,7 @@ private class GallinaBlockchainGen(private val game: GameIR) {
 
     private fun coqType(t: Type): String = when (t) {
         Type.BoolType -> "bool"
-        // For this runtime we support nat (as you requested) as the canonical "unbounded-ish" integer.
-        // If you want Z instead, swap to "Z" and import ZArith.
-        Type.IntType -> "nat"
+        Type.IntType -> "Z"
         is Type.SetType -> setTypes.getValue(t)
     }
 
@@ -97,10 +95,9 @@ private class GallinaBlockchainGen(private val game: GameIR) {
         return deps.joinToString("; ", prefix = "[", postfix = "]") { actionCtor(it) }
     }
 
-    // Optional: if your DAG has per-field visibility on an action, use it; else default PUBLIC.
+    // Optional: if the DAG has per-field visibility on an action, use it; else default PUBLIC.
     private fun visibilityOf(action: ActionId, field: FieldRef): Visibility {
         return try {
-            // If this method exists in your codebase:
             val visMap = dag.visibilityOf(action)
             visMap[field] ?: Visibility.PUBLIC
         } catch (_: Throwable) {
