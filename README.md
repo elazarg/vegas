@@ -59,27 +59,43 @@ withdraw (Host.car != null && Guest.switch != null)
 
 ## Building and Running
 
+### Prerequisites
+
+- Java 21 or later
+- Maven 3.6+
+
 ### Build
 
 ```bash
-# Generate ANTLR parser
-antlr4 -o ./generated/vegasGen -package vegasGen -listener -visitor -lib . ./Vegas.g4
+# Clean and compile the project
+mvn clean compile
 
-# Compile Kotlin code
-kotlinc src/vegas/*.kt -cp antlr-runtime.jar
+# Run all tests
+mvn test
+
+# Run specific test suite
+mvn test -Dtest=SolidityTest
 ```
 
-### Run
+### Project Structure
 
-```bash
-kotlin -cp .:antlr-runtime.jar vegas.MainKt
-```
+- `examples/` - Vegas game specifications (.vg files)
+- `src/main/kotlin/vegas/` - Compiler implementation
+- `src/test/kotlin/vegas/` - Test suites
+- `src/test/resources/golden-masters/` - Expected compiler outputs for testing
 
-This will process example files and generate outputs in:
+### Generated Outputs
 
-- `gambit` - Extensive form game files (.efg)
-- `solidity` - Smart contract implementations (.sol)
-- `graphviz` - Visualizations of the action dependency DAG
+The compiler generates multiple backend formats from Vegas specifications:
+
+- **Solidity** (.sol) - Ethereum smart contracts
+- **Vyper** (.vy) - Vyper smart contracts
+- **Gambit** (.efg) - Extensive form game files for Nash equilibrium analysis
+- **SMT-LIB** (.z3) - Constraint solver format for formal verification
+- **Scribble** (.scr) - Protocol descriptions
+- **Graphviz** (.gc) - DAG visualizations
+- **Lightning** (.ln) - Lightning Network protocols
+- **Gallina** (.v) - Coq formal definitions
 
 ## Output Formats
 
