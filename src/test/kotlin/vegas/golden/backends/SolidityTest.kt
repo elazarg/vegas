@@ -1,0 +1,33 @@
+package vegas.golden.backends
+
+import io.kotest.matchers.shouldBe
+import vegas.backend.evm.compileToEvm
+import vegas.backend.evm.generateSolidity
+import vegas.frontend.compileToIR
+import vegas.golden.BackendGoldenSpec
+import vegas.golden.parseExample
+import vegas.golden.sanitizeOutput
+
+/**
+ * Solidity backend golden master tests.
+ */
+class SolidityTest : BackendGoldenSpec("solidity", "sol") {
+
+    override fun generate(ir: vegas.ir.GameIR): String {
+        return generateSolidity(compileToEvm(ir))
+    }
+
+    init {
+        // Backend-specific test: Solidity generation should be deterministic
+        "Solidity generation should be deterministic" {
+            val example = "MontyHall"
+            val program = parseExample(example)
+            val ir = compileToIR(program)
+
+            val output1 = generateSolidity(compileToEvm(ir))
+            val output2 = generateSolidity(compileToEvm(ir))
+
+            sanitizeOutput(output1, "solidity") shouldBe sanitizeOutput(output2, "solidity")
+        }
+    }
+}

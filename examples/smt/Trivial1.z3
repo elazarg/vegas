@@ -1,6 +1,0 @@
-(declare-const action_A_0_done Bool)
-(declare-const A_outcome Int)
-(assert (= A_outcome 10))
-(assert (=> action_A_0_done (and true true)))
-(check-sat)
-(get-model)
