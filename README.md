@@ -77,9 +77,9 @@ kotlin -cp .:antlr-runtime.jar vegas.MainKt
 
 This will process example files and generate outputs in:
 
-- `examples/gambit/` - Extensive form game files (.efg)
-- `examples/solidity/` - Smart contract implementations (.sol)
-- `examples/graphviz/` - Visualizations of the action dependency DAG
+- `gambit` - Extensive form game files (.efg)
+- `solidity` - Smart contract implementations (.sol)
+- `graphviz` - Visualizations of the action dependency DAG
 
 ## Output Formats
 
