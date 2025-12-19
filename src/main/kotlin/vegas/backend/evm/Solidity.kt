@@ -1,5 +1,6 @@
 package vegas.backend.evm
 
+import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
@@ -70,11 +71,11 @@ private fun StringBuilder.renderInfrastructureModifiers() {
         receive() external payable {
             revert("direct ETH not allowed");
         }
-        
-        uint256 constant public TIMEOUT = 86400;
+
+        uint256 constant public TIMEOUT = $TIMEOUT_SECONDS;
 
         mapping(Role => bool) private bailed;
-        
+
         function _check_timestamp(Role role) private {
             if (role == Role.None) {
                 return;
@@ -84,7 +85,7 @@ private fun StringBuilder.renderInfrastructureModifiers() {
                 lastTs = block.timestamp;
             }
         }
-        
+
         modifier depends(Role role, uint256 actionId) {
             _check_timestamp(role);
             if (!bailed[role]) {
@@ -92,7 +93,7 @@ private fun StringBuilder.renderInfrastructureModifiers() {
             }
             _;
         }
-        
+
         modifier action(Role role, uint256 actionId) {
             require((!actionDone[role][actionId]), "already done");
             actionDone[role][actionId] = true;
@@ -100,14 +101,14 @@ private fun StringBuilder.renderInfrastructureModifiers() {
             actionTimestamp[role][actionId] = block.timestamp;
             lastTs = block.timestamp;
         }
-        
+
         modifier by(Role role) {
             require((${roleMap}[msg.sender] == role), "bad role");
             _check_timestamp(role);
             require(!bailed[role], "you bailed");
             _;
         }
-        
+
         function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
             require((keccak256(preimage) == commitment), "bad reveal");
         }

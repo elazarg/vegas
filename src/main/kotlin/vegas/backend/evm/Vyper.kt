@@ -1,5 +1,6 @@
 package vegas.backend.evm
 
+import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
@@ -26,7 +27,7 @@ fun generateVyper(contract: EvmContract): String {
             renderStorage(slot)
         }
         // Add timeout infrastructure
-        appendLine("TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds")
+        appendLine("TIMEOUT: constant(uint256) = $TIMEOUT_SECONDS  # 24 hours in seconds")
         appendLine("bailed: HashMap[Role, bool]")
         if (contract.storage.isNotEmpty()) appendLine()
 

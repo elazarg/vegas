@@ -11,13 +11,12 @@ import java.io.File
 /**
  * Abstract base class for backend golden master tests.
  *
- * Each backend extends this class and implements the [generate] method.
+ * Each backend extends this class and implements the [generate] and [sanitize] methods.
  * The base class handles:
  * - Filtering games based on disabled backends
  * - Running parametrized tests for all applicable games
  * - Comparing generated output with golden master files
  * - Writing debug artifacts (diffs, actual outputs) when tests fail
- * - Automatic sanitization of output
  */
 abstract class BackendGoldenSpec(
     private val backendId: String,
@@ -28,6 +27,13 @@ abstract class BackendGoldenSpec(
      * Implement this to generate the specific backend code from the IR.
      */
     abstract fun generate(ir: GameIR): String
+
+    /**
+     * Implement this to sanitize generated output for comparison.
+     * This normalizes non-deterministic elements (timestamps, hashes, etc.)
+     * to ensure consistent test results.
+     */
+    protected open fun sanitize(content: String): String = content.trim()
 
     init {
         "Golden Masters: $backendId" - {
@@ -47,7 +53,7 @@ abstract class BackendGoldenSpec(
                     val ast = parseExample(game.name)
                     val ir = compileToIR(ast)
                     val actualOutput = generate(ir)
-                    val sanitized = sanitizeOutput(actualOutput, backendId)
+                    val sanitized = sanitize(actualOutput)
 
                     // Prepare debug artifact locations
                     val parent = "test-diffs/$backendId"
@@ -62,7 +68,7 @@ abstract class BackendGoldenSpec(
                     }
 
                     // Read and sanitize expected output
-                    val expectedOutput = sanitizeOutput(goldenFile.readText(), backendId)
+                    val expectedOutput = sanitize(goldenFile.readText())
 
                     // Write debug artifacts if outputs differ
                     if (sanitized != expectedOutput) {

@@ -6,7 +6,6 @@ import vegas.backend.bitcoin.generateLightningProtocol
 import vegas.frontend.compileToIR
 import vegas.frontend.parseCode
 import vegas.golden.BackendGoldenSpec
-import vegas.golden.sanitizeOutput
 
 /**
  * Lightning Network protocol backend golden master tests.
@@ -15,6 +14,10 @@ class LightningTest : BackendGoldenSpec("lightning", "ln") {
 
     override fun generate(ir: vegas.ir.GameIR): String {
         return generateLightningProtocol(ir)
+    }
+
+    override fun sanitize(content: String): String {
+        return content.trim()
     }
 
     init {
@@ -32,7 +35,7 @@ class LightningTest : BackendGoldenSpec("lightning", "ln") {
             val output1 = generateLightningProtocol(ir)
             val output2 = generateLightningProtocol(ir)
 
-            sanitizeOutput(output1, "lightning") shouldBe sanitizeOutput(output2, "lightning")
+            sanitize(output1) shouldBe sanitize(output2)
         }
 
         // Backend-specific test: Lightning protocol should contain key structure

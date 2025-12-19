@@ -15,6 +15,13 @@ class GambitTest : BackendGoldenSpec("gambit", "efg") {
         return generateExtensiveFormGame(ir)
     }
 
+    override fun sanitize(content: String): String {
+        return content
+            .replace(Regex("\\b\\d{7,}\\b"), "HASH")
+            .replace(Regex("\\d+\\.\\d{10,}"), "FLOAT")
+            .trim()
+    }
+
     init {
         // Backend-specific test: Gambit generation should preserve game structure
         "Gambit generation should preserve game structure" {

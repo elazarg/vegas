@@ -178,6 +178,21 @@ enum class BinaryOp {
     AND, OR
 }
 
+/**
+ * Constants used across EVM backend code generation (Solidity, Vyper).
+ */
+object EvmConstants {
+    /**
+     * Default timeout in seconds (24 hours).
+     */
+    const val TIMEOUT_SECONDS = 86400
+
+    /**
+     * Default maximum size for bytes type.
+     */
+    const val DEFAULT_BYTES_SIZE = 1024
+}
+
 // ==========================================
 // Type System
 // ==========================================
@@ -192,7 +207,7 @@ sealed class EvmType {
     // Abstracting Bytes vs Bytes[N]
     // Solidity: bytes (dynamic)
     // Vyper: Bytes[maxSize] (bounded)
-    data class Bytes(val maxSize: Int = 1024) : EvmType()
+    data class Bytes(val maxSize: Int = EvmConstants.DEFAULT_BYTES_SIZE) : EvmType()
 
     data class Mapping(val key: EvmType, val value: EvmType) : EvmType()
     data class EnumType(val name: String) : EvmType()

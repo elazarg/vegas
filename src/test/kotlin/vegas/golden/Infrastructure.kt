@@ -65,37 +65,3 @@ fun computeDiff(expected: String, actual: String): String {
     }
     return if (diff.isEmpty()) "No differences" else diff.toString()
 }
-
-/**
- * Sanitizes output for a specific backend to normalize non-deterministic elements.
- */
-fun sanitizeOutput(content: String, backend: String): String =
-    when (backend) {
-        "solidity" -> content
-            .replace(Regex("//.*\\d{10,}.*\n"), "// TIMESTAMP_COMMENT\n")
-            .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
-            .replace(Regex("\\s+\n"), "\n")
-            .replace(Regex("\n{3,}"), "\n\n")
-            .trim()
-
-        "vyper" -> content
-            .replace(Regex("#.*\\d{10,}.*\n"), "# TIMESTAMP_COMMENT\n")
-            .replace(Regex("0x[0-9a-fA-F]{40}"), "0xADDRESS")
-            .replace(Regex("\\s+\n"), "\n")
-            .replace(Regex("\n{3,}"), "\n\n")
-            .trim()
-
-        "gambit" -> content
-            .replace(Regex("\\b\\d{7,}\\b"), "HASH")
-            .replace(Regex("\\d+\\.\\d{10,}"), "FLOAT")
-            .trim()
-
-        "smt" -> content
-            .replace(Regex("_\\d{7,}"), "_HASH")
-            .replace(Regex("\\s+\n"), "\n")
-            .trim()
-
-        "lightning" -> content.trim()
-
-        else -> content.trim()
-    }

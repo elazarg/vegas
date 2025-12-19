@@ -15,6 +15,13 @@ class SmtTest : BackendGoldenSpec("smt", "z3") {
         return generateSMT(ir)
     }
 
+    override fun sanitize(content: String): String {
+        return content
+            .replace(Regex("_\\d{7,}"), "_HASH")
+            .replace(Regex("\\s+\n"), "\n")
+            .trim()
+    }
+
     init {
         // Backend-specific test: SMT generation should be valid SMT-LIB
         "SMT generation should be valid SMT-LIB" {

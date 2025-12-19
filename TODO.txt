@@ -1,10 +1,6 @@
 TODO:
-* Add trust (e.g. for bet and montyhall)
 * Generate clients / client stubs
 * Support ERC-20 / ERC-777 tokens (code generation)
 * Support multi-token games
-* Support code generation for n-players: 'join many', 'for yield' and outcome
 * Support solidity pure functions
-* Generate Viper code
-* Implement Language Server Protocol
 * Support variable deposits
