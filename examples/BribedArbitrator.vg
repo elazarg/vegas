@@ -1,25 +1,28 @@
 // Bribed arbitrator: P1 may bribe, judge accepts/rejects and chooses verdict between P1 and P2.
 // Distribution semantics: pot (300 wei) allocated based on verdict, bribe, and judge integrity
+
 type bribe   = {0, 1, 2}
 type verdict = {1, 2}  // 1=favor P1, 2=favor P2
 
-join P1() $ 100 P2() $ 100 Judge() $ 100;
-
-yield P1(b: bribe);
-yield Judge(accept: bool, v: verdict);
-
-withdraw {
-    P1 -> 100
-        + (Judge.v == 1 ? 20 : -20)              // win/lose verdict
-        - (Judge.accept ? P1.b * 10 : 0)         // pay bribe if accepted
-        - (!Judge.accept && Judge.v == 2 ? 10 : 0);  // integrity bonus from P1
-
-    P2 -> 100
-        + (Judge.v == 2 ? 20 : -20)              // win/lose verdict
-        + (Judge.accept && Judge.v == 1 ? 10 : 0);   // corruption penalty to P2
-
-    Judge -> 100
-        + (Judge.accept ? P1.b * 10 : 0)         // receive bribe if accepted
-        - (Judge.accept && Judge.v == 1 ? 10 : 0)    // corruption penalty
-        + (!Judge.accept && Judge.v == 2 ? 10 : 0);  // integrity bonus
+game main() {
+  join P1() $ 100 P2() $ 100 Judge() $ 100;
+  
+  yield P1(b: bribe);
+  yield Judge(accept: bool, v: verdict);
+  
+  withdraw {
+      P1 -> 100
+          + (Judge.v == 1 ? 20 : -20)              // win/lose verdict
+          - (Judge.accept ? P1.b * 10 : 0)         // pay bribe if accepted
+          - (!Judge.accept && Judge.v == 2 ? 10 : 0);  // integrity bonus from P1
+  
+      P2 -> 100
+          + (Judge.v == 2 ? 20 : -20)              // win/lose verdict
+          + (Judge.accept && Judge.v == 1 ? 10 : 0);   // corruption penalty to P2
+  
+      Judge -> 100
+          + (Judge.accept ? P1.b * 10 : 0)         // receive bribe if accepted
+          - (Judge.accept && Judge.v == 1 ? 10 : 0)    // corruption penalty
+          + (!Judge.accept && Judge.v == 2 ? 10 : 0);  // integrity bonus
+  }
 }

@@ -1,16 +1,19 @@
 // Hidden reserve price bargaining: seller sets hidden reserve, buyer bids, seller accepts/rejects.
 // Distribution semantics: pot (200 wei) allocated based on bid and reserve if deal completes
+
 type price   = {0 .. 10}
 type reserve = {3 .. 7}
 
-join Seller() $ 100 Buyer() $ 100;
-
-yield Seller(r: hidden reserve);
-yield Buyer(b: price);
-yield Seller(accept: bool);
-
-withdraw (Seller.accept && Buyer.b >= Seller.r) ?
-    { Seller -> 100 + (Buyer.b - Seller.r) * 10;
-      Buyer  -> 100 + (10 - Buyer.b) * 10; }
-  : { Seller -> 100;
-      Buyer  -> 100; }  // No deal, deposits returned
+game main() {
+  join Seller() $ 100 Buyer() $ 100;
+  
+  yield Seller(r: hidden reserve);
+  yield Buyer(b: price);
+  yield Seller(accept: bool);
+  
+  withdraw (Seller.accept && Buyer.b >= Seller.r) ?
+      { Seller -> 100 + (Buyer.b - Seller.r) * 10;
+        Buyer  -> 100 + (10 - Buyer.b) * 10; }
+    : { Seller -> 100;
+        Buyer  -> 100; }  // No deal, deposits returned
+}

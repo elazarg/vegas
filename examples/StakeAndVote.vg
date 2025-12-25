@@ -1,28 +1,31 @@
 // Stake-and-vote: protocol holds hidden truth; validators vote and are rewarded/punished by correctness.
 // Distribution semantics: pot (300 wei) rewards correct votes, punishes incorrect ones
-join V1() $ 100 V2() $ 100 Protocol() $ 100;
 
-yield Protocol(correct: hidden bool);
-
-yield V1(v: bool) V2(v: bool);
-
-reveal Protocol(correct: bool);
-
-withdraw {
-    V1 ->
-        (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 120     // Both correct
-      : (V1.v != Protocol.correct && V2.v == Protocol.correct) ? 70      // V1 wrong, V2 right
-      : (V1.v == Protocol.correct && V2.v != Protocol.correct) ? 110     // V1 right, V2 wrong
-      : 50;  // Both wrong
-
-    V2 ->
-        (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 120     // Both correct
-      : (V2.v != Protocol.correct && V1.v == Protocol.correct) ? 70      // V2 wrong, V1 right
-      : (V2.v == Protocol.correct && V1.v != Protocol.correct) ? 110     // V2 right, V1 wrong
-      : 50;  // Both wrong
-
-    Protocol ->
-        (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 60      // Both correct
-      : (V1.v == Protocol.correct || V2.v == Protocol.correct) ? 120     // One correct
-      : 200;  // Both wrong, protocol keeps more
+game main() {
+  join V1() $ 100 V2() $ 100 Protocol() $ 100;
+  
+  yield Protocol(correct: hidden bool);
+  
+  yield V1(v: bool) V2(v: bool);
+  
+  reveal Protocol(correct: bool);
+  
+  withdraw {
+      V1 ->
+          (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 120     // Both correct
+        : (V1.v != Protocol.correct && V2.v == Protocol.correct) ? 70      // V1 wrong, V2 right
+        : (V1.v == Protocol.correct && V2.v != Protocol.correct) ? 110     // V1 right, V2 wrong
+        : 50;  // Both wrong
+  
+      V2 ->
+          (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 120     // Both correct
+        : (V2.v != Protocol.correct && V1.v == Protocol.correct) ? 70      // V2 wrong, V1 right
+        : (V2.v == Protocol.correct && V1.v != Protocol.correct) ? 110     // V2 right, V1 wrong
+        : 50;  // Both wrong
+  
+      Protocol ->
+          (V1.v == Protocol.correct && V2.v == Protocol.correct) ? 60      // Both correct
+        : (V1.v == Protocol.correct || V2.v == Protocol.correct) ? 120     // One correct
+        : 200;  // Both wrong, protocol keeps more
+  }
 }

@@ -1,8 +1,11 @@
 // Factoring puzzle: Q poses composite number, A must factor it
 // Distribution semantics: if A solves, A gets both deposits; if A fails/quits, Q keeps both
-join Q(x: int) $ 50;
-join A(p: int, q: int) where A.p * A.q == Q.x && A.p != 1 && A.q != 1;
-withdraw {
-    Q -> 0;     // A solved puzzle, A gets all
-    A -> 100;   // Full pot to solver
+
+game main() {
+  join Q(x: int) $ 50;
+  join A(p: int, q: int) where A.p * A.q == Q.x && A.p != 1 && A.q != 1;
+  withdraw {
+      Q -> 0;     // A solved puzzle, A gets all
+      A -> 100;   // Full pot to solver
+  }
 }

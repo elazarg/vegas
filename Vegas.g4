@@ -1,6 +1,10 @@
 grammar Vegas;
 
-program : (typeDec | macroDec)* ext EOF ;
+program : (typeDec | macroDec)* gameDec EOF ;
+
+gameDec : 'game' name=gameId '(' ')' '{' ext '}' ;
+
+gameId : varId ;
 
 typeDec : 'type' name=typeId '=' typeExp ;
 

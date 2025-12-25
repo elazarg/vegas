@@ -1,10 +1,11 @@
 // Congestion routing: each sender chooses shared or alternative route; congestion reduces payoff.
 // Distribution semantics: pot (200 wei) - uncongested shared route is best
-join S1() $ 100 S2() $ 100;
 
-yield S1(useShared: bool) S2(useShared: bool);
-
-withdraw {
-    S1 -> (S1.useShared ? (S2.useShared ? 100 : 115) : (S2.useShared ? 85 : 100));
-    S2 -> (S2.useShared ? (S1.useShared ? 100 : 115) : (S1.useShared ? 85 : 100));
+game main() {
+  join S1() $ 100 S2() $ 100;
+  yield S1(useShared: bool) S2(useShared: bool);
+  withdraw {
+      S1 -> (S1.useShared ? (S2.useShared ? 100 : 115) : (S2.useShared ? 85 : 100));
+      S2 -> (S2.useShared ? (S1.useShared ? 100 : 115) : (S1.useShared ? 85 : 100));
+  }
 }

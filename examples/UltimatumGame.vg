@@ -1,19 +1,20 @@
 // Ultimatum Game: Proposer offers a split; Responder accepts or rejects.
 // Distribution semantics: pot (200 wei) split if accepted, returned if rejected
 type amount = {0 .. 200}
-
-join Proposer() $ 100 Responder() $ 100;
-
-// Proposer offers 'offer' to Responder from the pot (200 total)
-yield Proposer(offer: amount);
-
-// Responder decides to accept or reject
-yield Responder(accept: bool);
-
-withdraw {
-    Proposer ->
-        (Responder.accept ? (200 - Proposer.offer) : 100);
-
-    Responder ->
-        (Responder.accept ? Proposer.offer : 100);
+game main() {
+  join Proposer() $ 100 Responder() $ 100;
+  
+  // Proposer offers 'offer' to Responder from the pot (200 total)
+  yield Proposer(offer: amount);
+  
+  // Responder decides to accept or reject
+  yield Responder(accept: bool);
+  
+  withdraw {
+      Proposer ->
+          (Responder.accept ? (200 - Proposer.offer) : 100);
+  
+      Responder ->
+          (Responder.accept ? Proposer.offer : 100);
+  }
 }

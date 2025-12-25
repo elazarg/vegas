@@ -1,14 +1,17 @@
 // Micropayment channel: sender proposes payout; receiver signs or refuses, causing griefing.
 // Distribution semantics: pot (200 wei) split based on proposed amount if signed
+
 type amt = {0 .. 10}
 
-join Sender() $ 100 Receiver() $ 100;
-
-yield Sender(x: amt) Receiver(sign: bool);
-
-withdraw Receiver.sign ?
-    { Sender  -> 100 + (10 - Sender.x) * 10;
-      Receiver -> Sender.x * 10; }
-  :
-    { Sender  -> 160;
-      Receiver -> 40; }  // Receiver griefs but loses funds
+game main() {
+  join Sender() $ 100 Receiver() $ 100;
+  
+  yield Sender(x: amt) Receiver(sign: bool);
+  
+  withdraw Receiver.sign ?
+      { Sender  -> 100 + (10 - Sender.x) * 10;
+        Receiver -> Sender.x * 10; }
+    :
+      { Sender  -> 160;
+        Receiver -> 40; }  // Receiver griefs but loses funds
+}

@@ -322,7 +322,7 @@ private class Checker(
             val left = type(exp.left)
             val right = type(exp.right)
             when (exp.op) {
-                "+", "-", "*", "/" -> {
+                "+", "-", "*", "/", "%" -> {
                     checkOp(INT, left, right); INT
                 }
 

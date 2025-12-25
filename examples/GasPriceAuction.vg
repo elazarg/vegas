@@ -1,16 +1,19 @@
 // Gas-price threshold auction: miner with hidden threshold, client bids, miner accepts/rejects.
 // Distribution semantics: pot (200 wei) split based on accepted gas price
+
 type thr = {1 .. 5}
 type bid = {0 .. 8}
 
-join Miner() $ 100 Client() $ 100;
-
-yield Miner(t: hidden thr);
-yield Client(b: bid);
-yield Miner(accept: bool);
-
-withdraw (Miner.accept && Client.b >= Miner.t) ?
-    { Miner  -> 100 + Client.b * 10;
-      Client -> 100 + (10 - Client.b) * 10; }
-  : { Miner  -> 100;
-      Client -> 100; }  // No tx, deposits returned
+game main() {
+  join Miner() $ 100 Client() $ 100;
+  
+  yield Miner(t: hidden thr);
+  yield Client(b: bid);
+  yield Miner(accept: bool);
+  
+  withdraw (Miner.accept && Client.b >= Miner.t) ?
+      { Miner  -> 100 + Client.b * 10;
+        Client -> 100 + (10 - Client.b) * 10; }
+    : { Miner  -> 100;
+        Client -> 100; }  // No tx, deposits returned
+}

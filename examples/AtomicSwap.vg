@@ -3,26 +3,28 @@
 // If Alice ghosts, Bob gets his money back.
 // Distribution semantics: pot (20 wei) allocated based on swap outcome
 
-join Alice() $ 10 Bob() $ 10;
-
-// Alice commits to the pre-image (the secret key)
-yield Alice(secret: hidden int);
-
-// Bob inspects the commitment (abstractly) and funds the contract
-yield Bob(fund: bool);
-
-// Alice must reveal the secret to get the money
-reveal Alice(secret: int);
-
-withdraw
-    // Case 1: Bob didn't fund -> Refund everyone
-    (!Bob.fund) ?
-        { Alice -> 10; Bob -> 10 }
-    :
-    // Case 2: Bob funded, Alice revealed -> Swap happens
-    // Alice gets the payment (10), Bob effectively "gets" the secret (valued at 10)
-    (Bob.fund && Alice.secret != null) ?
-        { Alice -> 10; Bob -> 10 }
-    :
-    // Case 3: Bob funded, Alice timed out (didn't reveal) -> Refund Bob
-    { Alice -> 0; Bob -> 20 }
+game main() {
+  join Alice() $ 10 Bob() $ 10;
+  
+  // Alice commits to the pre-image (the secret key)
+  yield Alice(secret: hidden int);
+  
+  // Bob inspects the commitment (abstractly) and funds the contract
+  yield Bob(fund: bool);
+  
+  // Alice must reveal the secret to get the money
+  reveal Alice(secret: int);
+  
+  withdraw
+      // Case 1: Bob didn't fund -> Refund everyone
+      (!Bob.fund) ?
+          { Alice -> 10; Bob -> 10 }
+      :
+      // Case 2: Bob funded, Alice revealed -> Swap happens
+      // Alice gets the payment (10), Bob effectively "gets" the secret (valued at 10)
+      (Bob.fund && Alice.secret != null) ?
+          { Alice -> 10; Bob -> 10 }
+      :
+      // Case 3: Bob funded, Alice timed out (didn't reveal) -> Refund Bob
+      { Alice -> 0; Bob -> 20 }
+}

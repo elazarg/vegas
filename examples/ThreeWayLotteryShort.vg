@@ -1,27 +1,30 @@
 // Three-way lottery (short form with join parameters)
 // Distribution semantics with quit punishment - see ThreeWayLottery.vg for rationale
+
 type choice = {1, 2, 3}
 
-join Issuer(c: choice) $ 12
-     Alice(c: choice) $ 12
-     Bob(c: choice) $ 12;
-
-withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
-     ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
-            ? { Alice -> 24; Bob -> 6; Issuer -> 6 }
-       : ((Issuer.c + Alice.c + Bob.c) % 3 == 1)
-            ? { Alice -> 6; Bob -> 24; Issuer -> 6 }
-            : { Alice -> 6; Bob -> 6; Issuer -> 24 })
-     : (Alice.c == null && Bob.c == null)
-            ? { Alice -> 1; Bob -> 1; Issuer -> 34 }
-     : (Alice.c == null && Issuer.c == null)
-            ? { Alice -> 1; Bob -> 34; Issuer -> 1 }
-     : (Bob.c == null && Issuer.c == null)
-            ? { Alice -> 34; Bob -> 1; Issuer -> 1 }
-     : (Alice.c == null)
-            ? { Alice -> 2; Bob -> 17; Issuer -> 17 }
-     : (Bob.c == null)
-            ? { Alice -> 17; Bob -> 2; Issuer -> 17 }
-     : (Issuer.c == null)
-            ? { Alice -> 17; Bob -> 17; Issuer -> 2 }
-            : { Alice -> 12; Bob -> 12; Issuer -> 12 }
+game main() {
+  join Issuer(c: choice) $ 12
+       Alice(c: choice) $ 12
+       Bob(c: choice) $ 12;
+  
+  withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
+       ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
+              ? { Alice -> 24; Bob -> 6; Issuer -> 6 }
+         : ((Issuer.c + Alice.c + Bob.c) % 3 == 1)
+              ? { Alice -> 6; Bob -> 24; Issuer -> 6 }
+              : { Alice -> 6; Bob -> 6; Issuer -> 24 })
+       : (Alice.c == null && Bob.c == null)
+              ? { Alice -> 1; Bob -> 1; Issuer -> 34 }
+       : (Alice.c == null && Issuer.c == null)
+              ? { Alice -> 1; Bob -> 34; Issuer -> 1 }
+       : (Bob.c == null && Issuer.c == null)
+              ? { Alice -> 34; Bob -> 1; Issuer -> 1 }
+       : (Alice.c == null)
+              ? { Alice -> 2; Bob -> 17; Issuer -> 17 }
+       : (Bob.c == null)
+              ? { Alice -> 17; Bob -> 2; Issuer -> 17 }
+       : (Issuer.c == null)
+              ? { Alice -> 17; Bob -> 17; Issuer -> 2 }
+              : { Alice -> 12; Bob -> 12; Issuer -> 12 }
+}
