@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Copy non-.diff output files from test-diffs/BACKEND/ to examples/BACKEND/
+Copy non-.diff output files from test-diffs/BACKEND/ to src/test/resources/golden-masters/BACKEND/
 
 This script copies generated backend outputs (e.g., .efg, .sol, .vy files) from the
-test-diffs directory structure to corresponding subdirectories under examples/.
+test-diffs directory structure to the golden-masters directory.
 
 Directory structure:
-  test-diffs/gambit/Simple.efg      -> examples/gambit/Simple.efg
-  test-diffs/solidity/Simple.sol    -> examples/solidity/Simple.sol
+  test-diffs/gambit/Simple.efg      -> src/test/resources/golden-masters/gambit/Simple.efg
+  test-diffs/solidity/Simple.sol    -> src/test/resources/golden-masters/solidity/Simple.sol
   etc.
 
 .diff files are excluded from copying.
@@ -17,14 +17,14 @@ import shutil
 from pathlib import Path
 
 # Backend directories to process
-BACKENDS = ["gambit", "graphviz", "lightning", "smt", "solidity", "vyper"]
+BACKENDS = ["gallina-fair", "gallina-independent", "gallina-monotone", "gambit", "graphviz", "lightning", "scribble", "smt", "solidity", "vyper"]
 
 def copy_test_outputs():
-    """Copy non-.diff files from test-diffs/BACKEND/ to examples/BACKEND/"""
+    """Copy non-.diff files from test-diffs/BACKEND/ to src/test/resources/golden-masters/BACKEND/"""
 
     for backend in BACKENDS:
         src_dir = Path("test-diffs") / backend
-        dst_dir = Path("examples") / backend
+        dst_dir = Path("src/test/resources/golden-masters") / backend
 
         if not src_dir.exists():
             print(f"Warning: Source directory {src_dir} does not exist, skipping")

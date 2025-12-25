@@ -146,7 +146,11 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
     }
 
     private Query query(QueryContext ctx) {
-        return withSpan(new Query(role(ctx.roleId()), list(ctx.decls, this::vardec), num(ctx.deposit), where(ctx.cond)), ctx);
+        return withSpan(new Query(role(ctx.roleId()), list(ctx.decls, this::vardec), num(ctx.deposit), where(ctx.cond), handler(ctx.handler)), ctx);
+    }
+
+    private Outcome handler(OutcomeContext handler) {
+        return handler != null ? outcome(handler) : null;
     }
 
     private Exp where(ExpContext cond) {
