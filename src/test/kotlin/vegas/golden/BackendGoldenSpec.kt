@@ -5,6 +5,7 @@ import io.kotest.datatest.withData
 import io.kotest.matchers.shouldBe
 import vegas.backend.bitcoin.CompilationException
 import vegas.frontend.compileToIR
+import vegas.frontend.inlineMacros
 import vegas.ir.GameIR
 import java.io.File
 
@@ -49,9 +50,10 @@ abstract class BackendGoldenSpec(
                 val goldenFile = GoldenMasterConfig.getGoldenFile(backendId, game.name, extension)
 
                 try {
-                    // Parse the game and generate output
+                    // Parse the game, inline macros, and generate output
                     val ast = parseExample(game.name)
-                    val ir = compileToIR(ast)
+                    val astWithInlinedMacros = inlineMacros(ast)
+                    val ir = compileToIR(astWithInlinedMacros)
                     val actualOutput = generate(ir)
                     val sanitized = sanitize(actualOutput)
 

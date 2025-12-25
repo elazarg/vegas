@@ -1,0 +1,52 @@
+digraph "VickreyAuction" {
+  rankdir=LR;
+  node [fontname="Helvetica", fontsize=10, style=filled, penwidth=0.5];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+  splines=true;
+  subgraph "cluster_0" {
+    label="B1";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_B1_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_B1_1" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#1</font></td></tr><tr><td><font point-size="14">&#128274;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#FFD1DC", penwidth=1.5];
+    "n_B1_4" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#4</font></td></tr><tr><td><font point-size="14">&#128065;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#C1E1C1", penwidth=0.5];
+  }
+  subgraph "cluster_1" {
+    label="B2";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_B2_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_B2_2" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#2</font></td></tr><tr><td><font point-size="14">&#128274;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#FFD1DC", penwidth=1.5];
+    "n_B2_5" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#5</font></td></tr><tr><td><font point-size="14">&#128065;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#C1E1C1", penwidth=0.5];
+  }
+  subgraph "cluster_2" {
+    label="B3";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_B3_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+    "n_B3_3" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#3</font></td></tr><tr><td><font point-size="14">&#128274;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#FFD1DC", penwidth=1.5];
+    "n_B3_6" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#6</font></td></tr><tr><td><font point-size="14">&#128065;</font> <b>b</b></td></tr></table>>, shape=box, fillcolor="#C1E1C1", penwidth=0.5];
+  }
+  subgraph "cluster_3" {
+    label="Seller";
+    style=dashed;
+    color="#777777";
+    fontcolor="#333333";
+    "n_Seller_0" [label=<<table border="0" cellborder="0" cellspacing="0"><tr><td><font point-size="8" color="#555555">#0</font></td></tr><tr><td><font color="#AAAAAA">&#8212;</font></td></tr></table>>, shape=box, fillcolor="#F0F0F0", penwidth=0.5];
+  }
+  "n_Seller_0" -> "n_B1_1";
+  "n_B1_0" -> "n_B1_1";
+  "n_B2_0" -> "n_B1_1";
+  "n_B3_0" -> "n_B1_1";
+  "n_B1_1" -> "n_B2_2";
+  "n_B2_2" -> "n_B3_3";
+  "n_B3_3" -> "n_B1_4";
+  "n_B1_1" -> "n_B1_4";
+  "n_B1_4" -> "n_B2_5";
+  "n_B2_2" -> "n_B2_5";
+  "n_B2_5" -> "n_B3_6";
+  "n_B3_3" -> "n_B3_6";
+}
