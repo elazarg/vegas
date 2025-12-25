@@ -1,18 +1,21 @@
 // Rumor forwarding: A sends or not; B and C may forward; popularity depends on forwarding.
 // Distribution semantics: pot (300 wei) allocated based on rumor spreading success
-join A() $ 100 B() $ 100 C() $ 100;
 
-yield A(send: bool);
-yield B(forward: bool) C(forward: bool) where A.send;
-
-withdraw !A.send ?
-    { A -> 100; B -> 100; C -> 100; }  // No rumor, deposits returned
-  :
-    (!B.forward && !C.forward) ?
-        { A -> 95; B -> 100; C -> 105; }  // Rumor fails to spread
-    : (B.forward && !C.forward) ?
-        { A -> 110; B -> 120; C -> 70; }  // Only B forwards
-    : (!B.forward && C.forward) ?
-        { A -> 110; B -> 70; C -> 120; }  // Only C forwards
+game main() {
+  join A() $ 100 B() $ 100 C() $ 100;
+  
+  yield A(send: bool);
+  yield B(forward: bool) C(forward: bool) where A.send; // A bug
+  
+  withdraw !A.send ?
+      { A -> 100; B -> 100; C -> 100; }  // No rumor, deposits returned
     :
-        { A -> 120; B -> 90; C -> 90; }  // Both forward
+      (!B.forward && !C.forward) ?
+          { A -> 95; B -> 100; C -> 105; }  // Rumor fails to spread
+      : (B.forward && !C.forward) ?
+          { A -> 110; B -> 120; C -> 70; }  // Only B forwards
+      : (!B.forward && C.forward) ?
+          { A -> 110; B -> 70; C -> 120; }  // Only C forwards
+      :
+          { A -> 120; B -> 90; C -> 90; }  // Both forward
+}

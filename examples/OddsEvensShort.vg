@@ -1,10 +1,13 @@
 // Odds and Evens (short form with join parameters)
 // Distribution semantics with quit punishment (pot = 200, deposits = 100 each)
 // See OddsEvens.vg for detailed payoff rationale
-join  Odd(c: bool) $ 100
-     Even(c: bool) $ 100;
-withdraw (Even.c != null && Odd.c != null) ?
-            { Even -> ((Even.c <-> Odd.c) ? 126 : 74); Odd -> ((Even.c <-> Odd.c) ? 74 : 126) }
-       : (Even.c == null && Odd.c != null) ? { Even -> 20; Odd -> 180 }  // Even quit (punished)
-       : (Even.c != null && Odd.c == null) ? { Even -> 180; Odd -> 20 }  // Odd quit (punished)
-       : { Even -> 100; Odd -> 100 }  // Both quit, split pot
+
+game main() {
+  join  Odd(c: bool) $ 100
+       Even(c: bool) $ 100;
+  withdraw (Even.c != null && Odd.c != null) ?
+              { Even -> ((Even.c <-> Odd.c) ? 126 : 74); Odd -> ((Even.c <-> Odd.c) ? 74 : 126) }
+         : (Even.c == null && Odd.c != null) ? { Even -> 20; Odd -> 180 }  // Even quit (punished)
+         : (Even.c != null && Odd.c == null) ? { Even -> 180; Odd -> 20 }  // Odd quit (punished)
+         : { Even -> 100; Odd -> 100 }  // Both quit, split pot
+}

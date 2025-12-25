@@ -2,9 +2,11 @@
 // Distribution semantics: winner gets full pot (200 wei)
 type options = {1, 2, 3}
 
-random Race() $ 10;
-join Gambler(bet: options) $ 10;
-yield Race(winner: options);
-withdraw (Race.winner == null || Race.winner == Gambler.bet)
-    ? { Race -> 0; Gambler -> 20 }     // Gambler wins or Race quit
-    : { Race -> 20; Gambler -> 0 }     // Gambler loses
+game main() {
+  random Race() $ 10;
+  join Gambler(bet: options) $ 10;
+  yield Race(winner: options);
+  withdraw (Race.winner == null || Race.winner == Gambler.bet)
+      ? { Race -> 0; Gambler -> 20 }     // Gambler wins or Race quit
+      : { Race -> 20; Gambler -> 0 }     // Gambler loses
+}

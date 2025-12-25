@@ -17,6 +17,18 @@ public interface VegasVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitProgram(VegasParser.ProgramContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link VegasParser#gameDec}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGameDec(VegasParser.GameDecContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link VegasParser#gameId}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGameId(VegasParser.GameIdContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link VegasParser#typeDec}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

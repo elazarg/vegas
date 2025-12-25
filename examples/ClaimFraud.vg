@@ -1,34 +1,37 @@
 // Claim fraud inspection: claimant may lie, world accident, inspector may investigate and catch fraud.
 // Distribution semantics: pot (300 wei) allocated based on fraud detection and investigation
+
 macro isFraud(accident: bool, inflate: bool, claim: bool): bool =
     (claim && (!accident || inflate));
 
-join Claimant() $ 100 Inspector() $ 100;
-random World() $ 100;
-
-yield Claimant(claim: bool, inflate: bool);
-yield World(accident: bool);
-yield Inspector(invest: bool);
-
-withdraw {
-    Claimant ->
-        !Claimant.claim ? 100
-        : Inspector.invest ?
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 70 : 120)
-        :
-            120;
-
-    Inspector ->
-        !Claimant.claim ? 100
-        : !Inspector.invest ?
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 100)
-        :
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 130 : 90);
-
-    World ->
-        !Claimant.claim ? 100
-        : !Inspector.invest ?
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 80)
-        :
-            (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 100 : 90);
+game main() {
+  join Claimant() $ 100 Inspector() $ 100;
+  random World() $ 100;
+  
+  yield Claimant(claim: bool, inflate: bool);
+  yield World(accident: bool);
+  yield Inspector(invest: bool);
+  
+  withdraw {
+      Claimant ->
+          !Claimant.claim ? 100
+          : Inspector.invest ?
+              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 70 : 120)
+          :
+              120;
+  
+      Inspector ->
+          !Claimant.claim ? 100
+          : !Inspector.invest ?
+              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 100)
+          :
+              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 130 : 90);
+  
+      World ->
+          !Claimant.claim ? 100
+          : !Inspector.invest ?
+              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 80)
+          :
+              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 100 : 90);
+  }
 }

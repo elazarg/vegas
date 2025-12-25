@@ -52,7 +52,15 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public GameAst visitProgram(ProgramContext ctx) {
-        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), ext(ctx.ext()));
+        GameDecContext gameDec = ctx.gameDec();
+        String gameName = gameDec.name.getText();
+
+        // For now, only 'main' is supported
+        if (!gameName.equals("main")) {
+            throw new RuntimeException("Only 'game main()' is supported; found 'game " + gameName + "()' at line " + gameDec.getStart().getLine());
+        }
+
+        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), ext(gameDec.ext()));
     }
 
     private Map<TypeExp.TypeId, TypeExp> map(List<TypeDecContext> ctxs) {
