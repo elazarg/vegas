@@ -1,0 +1,68 @@
+module Game;
+
+type <java> "java.lang.Integer" from "rt.jar" as int;
+type <java> "java.lang.Boolean" from "rt.jar" as bool;
+
+explicit global protocol VickreyAuction(role Server, role Seller, role B1, role B2, role B3){
+    connect Server to Seller;
+    connect Server to B1;
+    connect Server to B2;
+    connect Server to B3;
+    Hidden_b(hidden) from B1 to Server;
+    Hidden_b(hidden) from B2 to Server;
+    Hidden_b(hidden) from B3 to Server;
+    Reveal_b(int) from B1 to Server;
+    Broadcast_b(int) from Server to Seller, B2, B3;
+    Reveal_b(int) from B2 to Server;
+    Broadcast_b(int) from Server to Seller, B1, B3;
+    Reveal_b(int) from B3 to Server;
+    Broadcast_b(int) from Server to Seller, B1, B2;
+}
+
+
+local protocol VickreyAuction_Seller(role Server, role Seller){
+    accept Server;
+    Broadcast_b(int) from Server;
+    Broadcast_b(int) from Server;
+    Broadcast_b(int) from Server;
+}
+
+
+local protocol VickreyAuction_B1(role Server, role B1){
+    accept Server;
+    Hidden_b(hidden) to Server;
+    Reveal_b(int) to Server;
+    Broadcast_b(int) from Server;
+    Broadcast_b(int) from Server;
+}
+
+
+local protocol VickreyAuction_B2(role Server, role B2){
+    accept Server;
+    Hidden_b(hidden) to Server;
+    Broadcast_b(int) from Server;
+    Reveal_b(int) to Server;
+    Broadcast_b(int) from Server;
+}
+
+
+local protocol VickreyAuction_B3(role Server, role B3){
+    accept Server;
+    Hidden_b(hidden) to Server;
+    Broadcast_b(int) from Server;
+    Broadcast_b(int) from Server;
+    Reveal_b(int) to Server;
+}
+
+
+local protocol VickreyAuction_Server(role Server, role Seller, role B1, role B2, role B3){
+    Hidden_b(hidden) from B1;
+    Hidden_b(hidden) from B2;
+    Hidden_b(hidden) from B3;
+    Reveal_b(int) from B1;
+    Broadcast_b(int) to Seller, B2, B3;
+    Reveal_b(int) from B2;
+    Broadcast_b(int) to Seller, B1, B3;
+    Reveal_b(int) from B3;
+    Broadcast_b(int) to Seller, B1, B2;
+}

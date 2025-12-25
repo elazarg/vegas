@@ -25,8 +25,8 @@ object GoldenMasterConfig {
         GameExample("MontyHall"),
         GameExample("OddsEvensShort"),
         GameExample("Prisoners"),
-        GameExample("TicTacToe", disabledBackends = setOf("gambit", "lightning"))
-        // VickreyAuction temporarily removed due to macro support issue (isWinner, secondMax)
+        GameExample("TicTacToe", disabledBackends = setOf("gambit", "lightning")),
+        GameExample("VickreyAuction", disabledBackends = setOf("gambit", "lightning"))
     )
 
     /**
@@ -39,7 +39,7 @@ object GoldenMasterConfig {
 // === Helper Functions ===
 
 /**
- * Parses a game example from the examples directory.
+ * Parses a game example from the examples/ directory.
  */
 fun parseExample(exampleName: String): GameAst {
     return parseFile("examples/$exampleName.vg")
