@@ -11,11 +11,11 @@ macro p1Wins(h1: hand, h2: hand): bool = (mod5(h1 - h2 + 5) == 1 || mod5(h1 - h2
 game main() {
   join P1() $ 100 P2() $ 100;
   
-  yield P1(h: hidden hand);
-  yield P2(h: hidden hand);
-  
-  reveal P1(h: hand);
-  reveal P2(h: hand);
+  yield P1(h: hidden hand) || { P2 -> 200 };
+  yield P2(h: hidden hand) || { P1 -> 200 };
+
+  reveal P1(h: hand) || { P2 -> 200 };
+  reveal P2(h: hand) || { P1 -> 200 };
   
   withdraw {
       P1 -> (P1.h == P2.h) ? 100 : (p1Wins(P1.h, P2.h) ? 120 : 80);

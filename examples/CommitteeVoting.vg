@@ -6,19 +6,25 @@ macro passes(p: bool, v1: bool, v2: bool): bool = ((v1 == p && v1 == true) || (v
 game main() {
   join Chair() $ 100 M1() $ 100 M2() $ 100;
   
-  yield Chair(p: bool);
+  yield Chair(p: bool) || { M1 -> 150; M2 -> 150 };
   yield M1(v: bool) M2(v: bool);
-  
-  withdraw {
+
+  withdraw (M1.v == null && M2.v == null) ?
+      { Chair -> 100; M1 -> 100; M2 -> 100; }  // Both members quit
+    : (M1.v == null) ?
+      { Chair -> 125; M1 -> 50; M2 -> 125; }  // M1 quit
+    : (M2.v == null) ?
+      { Chair -> 125; M1 -> 125; M2 -> 50; }  // M2 quit
+    : {
       Chair ->
           (passes(Chair.p, M1.v, M2.v) ? 130 : 100);
-  
+
       M1 ->
           (passes(Chair.p, M1.v, M2.v) && M1.v == Chair.p ? 120 : 100);
-  
+
       M2 ->
           (passes(Chair.p, M1.v, M2.v) && M2.v == Chair.p ? 50
            : !passes(Chair.p, M1.v, M2.v) ? 100
            : 50);
-  }
+    }
 }

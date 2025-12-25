@@ -289,11 +289,14 @@ private class Checker(
                                 // Original field was non-nullable, keep reveal non-nullable
                                 type
                             }
+                        } else if (ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE) {
+                            // JOIN fields are always NON-NULLABLE (players can't quit from join)
+                            stripOpt(type)
                         } else if (q.handler != null) {
-                            // Handler present: field is NON-NULLABLE (strip Opt wrapper if present)
+                            // YIELD with handler: field is NON-NULLABLE
                             stripOpt(type)
                         } else {
-                            // No handler: field is NULLABLE (wrap in Opt if not already)
+                            // YIELD without handler: field is NULLABLE
                             wrapInOpt(type)
                         }
                         fieldRef to fieldType

@@ -8,13 +8,13 @@ type d2 = {1, 3, 4, 5, 9}
 game main() {
   join X() $ 100;
   join O() $ 100;
-  yield X(c1: d1);
-  yield O(c1: d2) where alldiff(X.c1, O.c1);
-  yield X(c2: d) where alldiff(X.c1, O.c1, X.c2);
-  yield O(c2: d) where alldiff(X.c1, O.c1, X.c2, O.c2);
-  yield X(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3);
-  yield O(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3);
-  yield X(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4);
-  yield O(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4, O.c4);
+  yield X(c1: d1) || { O -> 150; X -> 50 };
+  yield O(c1: d2) where alldiff(X.c1, O.c1) || { X -> 150; O -> 50 };
+  yield X(c2: d) where alldiff(X.c1, O.c1, X.c2) || { O -> 150; X -> 50 };
+  yield O(c2: d) where alldiff(X.c1, O.c1, X.c2, O.c2) || { X -> 150; O -> 50 };
+  yield X(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3) || { O -> 150; X -> 50 };
+  yield O(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3) || { X -> 150; O -> 50 };
+  yield X(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4) || { O -> 150; X -> 50 };
+  yield O(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4, O.c4) || { X -> 150; O -> 50 };
   withdraw { X -> 100; O -> 100 }
 }

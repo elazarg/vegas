@@ -6,9 +6,9 @@ type decision = {0, 1}  // 0=refund, 1=release
 game main() {
   join Buyer() $ 100 Seller() $ 100 Escrow() $ 100;
   
-  yield Buyer(fund: bool);
-  yield Seller(ship: bool);
-  yield Escrow(dec: decision);
+  yield Buyer(fund: bool) || { Seller -> 150; Escrow -> 150 };
+  yield Seller(ship: bool) || { Buyer -> 150; Escrow -> 150 };
+  yield Escrow(dec: decision) || { Buyer -> 150; Seller -> 150 };
   
   withdraw {
       Buyer ->

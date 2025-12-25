@@ -11,9 +11,15 @@ game main() {
   join P1() $ 100 P2() $ 100;
   
   yield P1(m: move) P2(m: move);
-  
-  withdraw {
+
+  withdraw (P1.m == null && P2.m == null) ?
+      { P1 -> 100; P2 -> 100; }  // Both quit, deposits returned
+    : (P1.m == null) ?
+      { P1 -> 50; P2 -> 150; }  // P1 quit, penalized
+    : (P2.m == null) ?
+      { P1 -> 150; P2 -> 50; }  // P2 quit, penalized
+    : {
       P1 -> (xor(flip1(P1.m), flip1(P2.m)) == xor(flip2(P1.m), flip2(P2.m)) ? 120 : 80);
       P2 -> (xor(flip1(P1.m), flip1(P2.m)) != xor(flip2(P1.m), flip2(P2.m)) ? 120 : 80);
-  }
+    }
 }

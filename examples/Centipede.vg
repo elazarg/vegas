@@ -5,14 +5,21 @@
 game main() {
   join Alice() $ 100 Bob() $ 100;
   
-  yield Alice(m1: bool); // True = Pass, False = Take
-  yield Bob(m2: bool)   where Alice.m1; // Only moves if Alice passed
+  yield Alice(m1: bool);
+  yield Bob(m2: bool)   where Alice.m1;
   yield Alice(m3: bool) where Alice.m1 && Bob.m2;
   yield Bob(m4: bool)   where Alice.m1 && Bob.m2 && Alice.m3;
-  
-  withdraw
-      (!Alice.m1) ?
-          { Alice -> 110; Bob -> 90 } // Alice takes immediately (small advantage)
+
+  withdraw (Alice.m1 == null) ?
+          { Alice -> 50; Bob -> 150 } // Alice quit, penalized
+      : (Bob.m2 == null) ?
+          { Alice -> 150; Bob -> 50 } // Bob quit, penalized
+      : (Alice.m3 == null) ?
+          { Alice -> 50; Bob -> 150 } // Alice quit, penalized
+      : (Bob.m4 == null) ?
+          { Alice -> 150; Bob -> 50 } // Bob quit, penalized
+      : (!Alice.m1) ?
+          { Alice -> 110; Bob -> 90 } // Alice takes immediately
       : (!Bob.m2) ?
           { Alice -> 80; Bob -> 120 } // Bob takes (bigger advantage)
       : (!Alice.m3) ?

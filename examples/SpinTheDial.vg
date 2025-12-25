@@ -9,9 +9,15 @@ game main() {
   join P1() $ 100 P2() $ 100;
   
   yield P1(a: move) P2(b: move);
-  
-  withdraw {
+
+  withdraw (P1.a == null && P2.b == null) ?
+      { P1 -> 100; P2 -> 100; }  // Both quit, deposits returned
+    : (P1.a == null) ?
+      { P1 -> 50; P2 -> 150; }  // P1 quit, penalized
+    : (P2.b == null) ?
+      { P1 -> 150; P2 -> 50; }  // P2 quit, penalized
+    : {
       P1 -> (even(P1.a + P2.b) ? 120 : 80);
       P2 -> (even(P1.a + P2.b) ? 80 : 120);
-  }
+    }
 }
