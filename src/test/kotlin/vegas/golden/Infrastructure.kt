@@ -26,6 +26,7 @@ object GoldenMasterConfig {
         GameExample("OddsEvensShort"),
         GameExample("Prisoners"),
         GameExample("TicTacToe", disabledBackends = setOf("gambit", "lightning"))
+        // VickreyAuction temporarily removed due to macro support issue (isWinner, secondMax)
     )
 
     /**

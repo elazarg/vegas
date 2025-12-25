@@ -146,6 +146,18 @@ private class Checker(
         else -> t
     }
 
+    /** Remove Opt wrapper from a type, making it non-nullable */
+    internal fun stripOpt(t: TypeExp): TypeExp = when (t) {
+        is Opt -> t.type  // Already optional, extract inner type
+        else -> t         // Not optional, return as-is
+    }
+
+    /** Wrap type in Opt to make it nullable (if not already) */
+    private fun wrapInOpt(t: TypeExp): TypeExp = when (t) {
+        is Opt -> t       // Already optional
+        else -> Opt(t)    // Make optional
+    }
+
     /* -------------------------- Protocol layer ---------------------------- */
 
     fun type(ext: Ext) {
@@ -159,17 +171,53 @@ private class Checker(
                         }
                     }
                 }
+                // Check for handlers on simultaneous non-JOIN actions
+                if (ext.qs.size > 1 && ext.kind != Kind.JOIN && ext.kind != Kind.JOIN_CHANCE) {
+                    ext.qs.forEach { q ->
+                        if (q.handler != null) {
+                            throw StaticError(
+                                "Quit handlers are not supported on simultaneous actions. " +
+                                "Found handler on ${q.role.id} in a ${ext.kind} with ${ext.qs.size} actors.",
+                                q
+                            )
+                        }
+                    }
+                }
+
                 val (newRoles, ms) = ext.qs.map { q ->
-                    val m = q.params.associate { (k, type) -> FieldRef(q.role.id, k.id) to type }
+                    val m = q.params.associate { (k, type) ->
+                        val fieldRef = FieldRef(q.role.id, k.id)
+                        val fieldType = if (ext.kind == Kind.REVEAL) {
+                            // REVEAL: Preserve nullability from original yield
+                            // If the original field (from yield) is nullable, make reveal nullable too
+                            val existing: TypeExp? = env.h.get(fieldRef)
+                            if (existing != null && (stripHidden(existing) as? TypeExp) is Opt) {
+                                // Original field was nullable, make reveal nullable
+                                wrapInOpt(type)
+                            } else {
+                                // Original field was non-nullable, keep reveal non-nullable
+                                type
+                            }
+                        } else if (q.handler != null) {
+                            // Handler present: field is NON-NULLABLE (strip Opt wrapper if present)
+                            stripOpt(type)
+                        } else {
+                            // No handler: field is NULLABLE (wrap in Opt if not already)
+                            wrapInOpt(type)
+                        }
+                        fieldRef to fieldType
+                    }
                     when (ext.kind) {
                         Kind.JOIN, Kind.JOIN_CHANCE -> {
                             val newRole = setOf(q.role.id)
                             checkWhere(roles + newRole, m, q)
+                            checkHandler(roles + newRole, q)
                             Pair(newRole, m)
                         }
                         Kind.YIELD -> {
                             requireRole(q.role.id, q.role)
                             checkWhere(roles, m, q)
+                            checkHandler(roles, q)
                             Pair(emptySet(), m)
                         }
                         Kind.REVEAL -> {
@@ -177,15 +225,27 @@ private class Checker(
                             m.forEach { (rf, revealedType) ->
                                 val (role, field) = rf
                                 val existing = env.safeGetValue(rf, q)
-                                requireStatic(existing is Hidden, "Parameter '$role.$field' must be hidden", q)
-                                val expected = (existing as Hidden).type
+
+                                // Strip Opt to handle nullable hidden fields (from yields without handlers)
+                                val existingInner = stripOpt(existing)
+                                requireStatic(existingInner is Hidden, "Parameter '$role.$field' must be hidden", q)
+
+                                // Extract inner type from Hidden wrapper
+                                val expected = (existingInner as Hidden).type
+
+                                // Strip Opt from both sides to compare inner types
+                                // (reveal type should match the underlying type, nullable or not)
+                                val expectedInner = stripOpt(expected)
+                                val revealedInner = stripOpt(revealedType)
+
                                 requireStatic(
-                                    compatible(revealedType, expected) && compatible(expected, revealedType),
+                                    compatible(revealedInner, expectedInner) && compatible(expectedInner, revealedInner),
                                     "Reveal type mismatch for '${role.name}.${field.name}': expected ${pt(expected)}, got ${pt(revealedType)}",
                                     q
                                 )
                             }
                             checkWhere(roles, m, q)
+                            checkHandler(roles, q)
                             Pair(emptySet(), m)
                         }
                     }
@@ -218,9 +278,10 @@ private class Checker(
     private fun checkWhere(n: Set<RoleId>, m: Map<FieldRef, TypeExp>, q: Query) {
         val newEnv = env withMap m
 
-        // 1. Type check
+        // 1. Type check - strip Opt to allow nullable bool (implicitly unwrapped)
+        val whereType = Checker(typeMap, n, newEnv, macroEnv).type(q.where)
         requireStatic(
-            Checker(typeMap, n, newEnv, macroEnv).type(q.where) == BOOL,
+            stripOpt(whereType) == BOOL,
             "Where clause failed",
             q
         )
@@ -243,11 +304,53 @@ private class Checker(
         }
     }
 
+    private fun checkHandler(currentRoles: Set<RoleId>, q: Query) {
+        val handler = q.handler ?: return
+
+        // 1. Must be simple value outcome (not conditional/let)
+        if (handler !is Outcome.Value) {
+            throw StaticError(
+                "Quit handler must be a simple withdraw outcome { Role -> Exp }, " +
+                "not a conditional or let expression",
+                handler
+            )
+        }
+
+        // 2. Must allocate to exactly K-1 roles (all except actor)
+        val expectedRoles = currentRoles - q.role.id
+        val handlerRoles = handler.ts.keys.map { it.id }.toSet()
+
+        if (handlerRoles != expectedRoles) {
+            val missing = expectedRoles - handlerRoles
+            val extra = handlerRoles - expectedRoles
+            val msg = buildString {
+                append("Quit handler for ${q.role.id} must allocate to ")
+                append("${expectedRoles.size} role(s): ")
+                append(expectedRoles.joinToString(", ") { it.name })
+                if (missing.isNotEmpty()) append(". Missing: ${missing.joinToString { it.name }}")
+                if (extra.isNotEmpty()) append(". Unexpected: ${extra.joinToString { it.name }}")
+            }
+            throw StaticError(msg, handler)
+        }
+
+        // 3. Type check handler expressions
+        handler.ts.forEach { (role, exp) ->
+            val t = Checker(typeMap, currentRoles, env, macroEnv).type(exp)
+            requireStatic(
+                compatible(t, INT),
+                "Quit handler payout for ${role.name} must be int; actual: ${pt(t)}",
+                exp
+            )
+        }
+    }
+
     private fun type(outcome: Outcome) {
         when (outcome) {
             is Outcome.Cond -> {
                 val t = type(outcome.cond)
-                requireStatic(t == BOOL, "Outcome condition must be boolean; actual: ${pt(t)}", outcome)
+                // Strip Opt to allow nullable bool in outcome conditions (implicitly unwrapped)
+                val tInner = stripOpt(t)
+                requireStatic(tInner == BOOL, "Outcome condition must be boolean; actual: ${pt(t)}", outcome)
                 type(outcome.ifTrue)
                 type(outcome.ifFalse)
             }
@@ -256,7 +359,9 @@ private class Checker(
                 outcome.ts.forEach { (role, v) ->
                     requireRole(role.id, role)
                     val t = type(v)
-                    requireStatic(compatible(t, INT), "Outcome value must be an int; actual: ${pt(t)}", v)
+                    // Strip Opt to allow nullable int in outcome values (implicitly unwrapped)
+                    val tInner = stripOpt(t)
+                    requireStatic(compatible(tInner, INT), "Outcome value must be an int; actual: ${pt(t)}", v)
                 }
             }
 
@@ -311,7 +416,21 @@ private class Checker(
                     checkOp(BOOL, operandType); BOOL
                 }
                 "isUndefined", "isDefined" -> {
-                    // Flow-sensitive checks would go here
+                    // Validate null checks are only allowed on nullable fields
+                    val fieldExp = exp.operand as? Exp.Field
+                        ?: throw StaticError("${exp.op} requires a field reference", exp)
+
+                    val fieldType = env.safeGetValue(fieldExp.fieldRef, exp)
+                    val isNullable = resolve(fieldType) is Opt
+
+                    if (!isNullable) {
+                        throw StaticError(
+                            "Cannot check nullability of non-nullable field '${fieldExp.fieldRef}'. " +
+                            "Field is non-nullable because action has a quit handler.",
+                            exp
+                        )
+                    }
+
                     BOOL
                 }
                 else -> throw StaticError("Invalid unary operation '${exp.op}'", exp)
@@ -335,11 +454,15 @@ private class Checker(
                 }
 
                 "==", "!=" -> {
+                    // Strip Opt to allow comparing nullable types (implicitly unwrapped)
+                    val leftInner = stripOpt(left)
+                    val rightInner = stripOpt(right)
+
                     // Check for common base type instead of mutual compatibility (subtyping)
                     // This allows comparing disjoint ranges like {3} and {7}
-                    val validComparison = (isInteger(left) && isInteger(right)) ||
-                            (isBoolean(left) && isBoolean(right)) ||
-                            (left == ADDRESS && right == ADDRESS)
+                    val validComparison = (isInteger(leftInner) && isInteger(rightInner)) ||
+                            (isBoolean(leftInner) && isBoolean(rightInner)) ||
+                            (leftInner == ADDRESS && rightInner == ADDRESS)
 
                     requireStatic(
                         validComparison,
@@ -350,8 +473,11 @@ private class Checker(
                 }
 
                 "<->", "<-!->" -> {
+                    // Strip Opt to allow nullable bool in XOR operations (implicitly unwrapped)
+                    val leftInner = stripOpt(left)
+                    val rightInner = stripOpt(right)
                     requireStatic(
-                        compatible(left, BOOL) && compatible(right, BOOL),
+                        compatible(leftInner, BOOL) && compatible(rightInner, BOOL),
                         "Both sides of ${exp.op} must be bool; got ${pt(left)} and ${pt(right)}",
                         exp
                     )
@@ -380,8 +506,9 @@ private class Checker(
 
         is Exp.Cond -> {
             val tCond = type(exp.cond)
-            // Use compatible() to allow for any potential future subtypes of BOOL
-            requireStatic(compatible(tCond, BOOL), "Condition must be bool, found '${pt(tCond)}'", exp.cond)
+            // Strip Opt to allow nullable bool in conditions (implicitly unwrapped)
+            val tCondInner = stripOpt(tCond)
+            requireStatic(compatible(tCondInner, BOOL), "Condition must be bool, found '${pt(tCond)}'", exp.cond)
 
             val tTrue = type(exp.ifTrue)
             val tFalse = type(exp.ifFalse)
@@ -417,8 +544,12 @@ private class Checker(
 
     private fun checkOp(expected: TypeExp, vararg args: TypeExp) {
         for (arg in args) {
+            // Strip Opt from both sides for operator compatibility checking
+            // This allows nullable types to be used in operators (they'll be implicitly unwrapped)
+            val expectedInner = stripOpt(expected)
+            val argInner = stripOpt(arg)
             requireStatic(
-                compatible(arg, expected),
+                compatible(argInner, expectedInner),
                 "Incompatible operator argument: Expected ${pt(expected)}, actual ${pt(arg)}",
                 arg
             )
@@ -567,10 +698,11 @@ private fun checkMacroCall(
     // Reuse Checker.compatible algebra
     val checker = Checker(typeMap, emptySet(), Env(), emptyMap())
 
-    // Check argument types
+    // Check argument types - strip Opt to allow nullable types (implicitly unwrapped)
     for ((i, argType) in argTypes.withIndex()) {
         val paramType = macro.params[i].type
-        if (!checker.compatible(argType, paramType)) {
+        val argTypeInner = checker.stripOpt(argType)
+        if (!checker.compatible(argTypeInner, paramType)) {
             throw StaticError(
                 "Argument ${i + 1} to macro '${macro.name}' has type ${pt(argType)}, but expected ${pt(paramType)}",
                 callSite

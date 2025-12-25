@@ -24,7 +24,7 @@ sealed class Ext : Ast() {
     data class Value(val outcome: Outcome) : Ext()
 }
 
-data class Query(val role: Role, val params: List<VarDec>, val deposit: Exp.Const.Num, val where: Exp) : Ast()
+data class Query(val role: Role, val params: List<VarDec>, val deposit: Exp.Const.Num, val where: Exp, val handler: Outcome? = null) : Ast()
 
 sealed class Exp : Ast() {
     data class Call(val target: Var, val args: List<Exp>) : Exp()

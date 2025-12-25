@@ -16,15 +16,11 @@ type door = {0, 1, 2}
 game main() {
   join Host() $ 20;
   join Guest() $ 20;
-  yield Host(car: hidden door);
-  yield Guest(d: door);
-  yield Host(goat: door) where Host.goat != Guest.d;
-  yield Guest(switch: bool);
+  yield Host(car: hidden door) || { Guest -> 40 };
+  yield Guest(d: door) || { Host -> 40 };
+  yield Host(goat: door) where Host.goat != Guest.d || { Guest -> 40 };
+  yield Guest(switch: bool) || { Host -> 40 };
   reveal Host(car: door) where Host.goat != Host.car;
-  withdraw (Host.car != null && Guest.switch != null)
-       ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
-           Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
-       : (Host.car == null)  // Host quit
-       ? { Guest -> 40;   Host -> 0 }
-       : { Guest -> 0; Host -> 40 }  // Guest quit
+  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+             Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
 }

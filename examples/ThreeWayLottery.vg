@@ -18,7 +18,7 @@ game main() {
   join Alice() $ 12;
   join Bob() $ 12;
   yield Issuer(c: choice) Alice(c: choice) Bob(c: choice);
-  
+
   withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
        ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
               ? { Alice -> 24; Bob -> 6; Issuer -> 6 }  // Sum div by 3: Alice wins

@@ -555,12 +555,59 @@ private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr
 
 // ========== Payoff Extraction ==========
 
-private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+// Collect all handlers from AST in causal order
+private fun collectHandlers(ext: Ext): List<Pair<Query, Outcome>> {
     return when (ext) {
-        is Ext.Bind -> extractPayoffs(ext.ext, typeEnv)
-        is Ext.BindSingle -> extractPayoffs(ext.ext, typeEnv)
-        is Ext.Value -> desugarOutcome(ext.outcome, typeEnv)
+        is Ext.Bind -> {
+            val handlers = ext.qs.mapNotNull { q -> q.handler?.let { Pair(q, it) } }
+            handlers + collectHandlers(ext.ext)
+        }
+        is Ext.BindSingle -> {
+            val handler = ext.q.handler?.let { listOf(Pair(ext.q, it)) } ?: emptyList()
+            handler + collectHandlers(ext.ext)
+        }
+        is Ext.Value -> emptyList()
     }
+}
+
+// Generate null-check condition: param1 == null && param2 == null && ...
+private fun generateNullCheckCondition(query: Query): AstExpr {
+    val fields = query.params.map { AstExpr.Field(FieldRef(query.role.id, it.v.id)) }
+
+    if (fields.isEmpty()) return AstExpr.Const.Bool(false)
+
+    val nullChecks: List<AstExpr> = fields.map { AstExpr.UnOp("isUndefined", it) }
+    return nullChecks.reduce { acc: AstExpr, check: AstExpr -> AstExpr.BinOp("&&", acc, check) }
+}
+
+// Merge handlers into terminal outcome as outer conditionals
+private fun mergeHandlersIntoOutcome(
+    handlers: List<Pair<Query, Outcome>>,
+    terminalOutcome: Outcome
+): Outcome {
+    return handlers.foldRight(terminalOutcome) { (query, handlerOutcome), acc ->
+        val condition = generateNullCheckCondition(query)
+        Outcome.Cond(condition, handlerOutcome, acc)
+    }
+}
+
+private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
+    is Ext.Bind -> extractTerminalOutcome(ext.ext)
+    is Ext.BindSingle -> extractTerminalOutcome(ext.ext)
+    is Ext.Value -> ext.outcome
+}
+
+private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+    val handlers = collectHandlers(ext)
+    val terminalOutcome = extractTerminalOutcome(ext)
+
+    val mergedOutcome = if (handlers.isNotEmpty()) {
+        mergeHandlersIntoOutcome(handlers, terminalOutcome)
+    } else {
+        terminalOutcome
+    }
+
+    return desugarOutcome(mergedOutcome, typeEnv)
 }
 
 private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {

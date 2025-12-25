@@ -130,7 +130,7 @@ contract MontyHall {
     function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 7) depends(Role.Host, 6) {
         require((!claimed_Guest), "already claimed");
         claimed_Guest = true;
-        int256 payout = ((done_Host_car && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 40 : 0) : ((!done_Host_car) ? 40 : 0));
+        int256 payout = ((!done_Host_car) ? 40 : ((!done_Guest_d) ? 0 : ((!done_Host_goat) ? 40 : ((!done_Guest_switch) ? 0 : (((Guest_d != Host_car) == Guest_switch) ? 40 : 0)))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Guest).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -140,7 +140,7 @@ contract MontyHall {
     function withdraw_Host() public by(Role.Host) action(Role.Host, 8) depends(Role.Host, 6) {
         require((!claimed_Host), "already claimed");
         claimed_Host = true;
-        int256 payout = ((done_Host_car && done_Guest_switch) ? (((Guest_d != Host_car) == Guest_switch) ? 0 : 40) : ((!done_Host_car) ? 0 : 40));
+        int256 payout = ((!done_Host_car) ? 0 : ((!done_Guest_d) ? 40 : ((!done_Host_goat) ? 0 : ((!done_Guest_switch) ? 40 : (((Guest_d != Host_car) == Guest_switch) ? 0 : 40)))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Host).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

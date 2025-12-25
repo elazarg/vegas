@@ -5,16 +5,16 @@
 
 game main() {
   join Alice() $ 10 Bob() $ 10;
-  
+
   // Alice commits to the pre-image (the secret key)
-  yield Alice(secret: hidden int);
-  
+  yield Alice(secret: hidden int) || { Bob -> 20 };
+
   // Bob inspects the commitment (abstractly) and funds the contract
-  yield Bob(fund: bool);
-  
+  yield Bob(fund: bool) || { Alice -> 20 };
+
   // Alice must reveal the secret to get the money
-  reveal Alice(secret: int);
-  
+  reveal Alice(secret: int) || { Bob -> 20 };
+
   withdraw
       // Case 1: Bob didn't fund -> Refund everyone
       (!Bob.fund) ?
@@ -22,9 +22,5 @@ game main() {
       :
       // Case 2: Bob funded, Alice revealed -> Swap happens
       // Alice gets the payment (10), Bob effectively "gets" the secret (valued at 10)
-      (Bob.fund && Alice.secret != null) ?
-          { Alice -> 10; Bob -> 10 }
-      :
-      // Case 3: Bob funded, Alice timed out (didn't reveal) -> Refund Bob
-      { Alice -> 0; Bob -> 20 }
+      { Alice -> 10; Bob -> 10 }
 }
