@@ -118,20 +118,39 @@ private class Checker(
     private val typeMap: Map<TypeId, TypeExp>,
     private val roles: Set<RoleId> = emptySet(),
     private val env: Env<TypeExp> = Env(),
-    private val macroEnv: Map<VarId, MacroDec> = emptyMap()
+    private val macroEnv: Map<VarId, MacroDec> = emptyMap(),
+    private val nonNullFacts: Set<FieldRef> = emptySet()  // Path-sensitive facts: fields known to be non-null
 ) {
 
     private fun requireRole(owner: RoleId, node: Ast) {
         requireStatic(owner in roles, "$owner is not a role", node)
     }
 
-    private fun Env<TypeExp>.safeGetValue(f: FieldRef, node: Ast): TypeExp {
+    /**
+     * Get field type with path-sensitive narrowing.
+     * If the field is in nonNullFacts, narrow opt T to T.
+     */
+    private fun getFieldType(f: FieldRef, node: Ast): TypeExp {
         requireRole(f.owner, node)
-        try {
-            return getValue(f)
+        val baseType = try {
+            env.getValue(f)
         } catch (_: NoSuchElementException) {
             throw StaticError("Field '$f' is undefined", node)
         }
+
+        // Apply path-sensitive narrowing
+        if (f in nonNullFacts) {
+            val resolved = resolve(baseType)
+            if (resolved is Opt) {
+                return stripOpt(resolved)
+            }
+        }
+
+        return baseType
+    }
+
+    private fun safeGetValue(f: FieldRef, node: Ast): TypeExp {
+        return getFieldType(f, node)
     }
 
     /** Resolve builtins and type aliases, preserving Hidden. */
@@ -147,7 +166,7 @@ private class Checker(
     }
 
     /** Remove Opt wrapper from a type, making it non-nullable */
-    internal fun stripOpt(t: TypeExp): TypeExp = when (t) {
+    fun stripOpt(t: TypeExp): TypeExp = when (t) {
         is Opt -> t.type  // Already optional, extract inner type
         else -> t         // Not optional, return as-is
     }
@@ -156,6 +175,78 @@ private class Checker(
     private fun wrapInOpt(t: TypeExp): TypeExp = when (t) {
         is Opt -> t       // Already optional
         else -> Opt(t)    // Make optional
+    }
+
+    /**
+     * Information about null checks extracted from a boolean expression.
+     * Used for control-flow-sensitive type narrowing.
+     */
+    private data class NullCheckInfo(
+        val nonNull: Set<FieldRef> = emptySet(),  // Fields known to be non-null
+        val isNull: Set<FieldRef> = emptySet()     // Fields known to be null
+    ) {
+        /** Negates the null check info (for ! operator) */
+        fun negate() = NullCheckInfo(nonNull = isNull, isNull = nonNull)
+
+        companion object {
+            val EMPTY = NullCheckInfo()
+        }
+    }
+
+    /**
+     * Extract null-check information from a boolean expression.
+     * Returns info for when the expression is true.
+     */
+    private fun extractNullChecks(exp: Exp): NullCheckInfo {
+        return when (exp) {
+            is Exp.UnOp -> {
+                when (exp.op) {
+                    "isDefined" -> {
+                        // field != null: field is non-null when true
+                        val fieldExp = exp.operand as? Exp.Field
+                        if (fieldExp != null) {
+                            NullCheckInfo(nonNull = setOf(fieldExp.fieldRef))
+                        } else {
+                            NullCheckInfo.EMPTY
+                        }
+                    }
+                    "isUndefined" -> {
+                        // field == null: field is null when true
+                        val fieldExp = exp.operand as? Exp.Field
+                        if (fieldExp != null) {
+                            NullCheckInfo(isNull = setOf(fieldExp.fieldRef))
+                        } else {
+                            NullCheckInfo.EMPTY
+                        }
+                    }
+                    "!" -> {
+                        // Negate the inner expression's null checks
+                        extractNullChecks(exp.operand).negate()
+                    }
+                    else -> NullCheckInfo.EMPTY
+                }
+            }
+            is Exp.BinOp -> {
+                when (exp.op) {
+                    "&&" -> {
+                        // A && B: both must be true, so combine null checks
+                        val leftInfo = extractNullChecks(exp.left)
+                        val rightInfo = extractNullChecks(exp.right)
+                        NullCheckInfo(
+                            nonNull = leftInfo.nonNull + rightInfo.nonNull,
+                            isNull = leftInfo.isNull + rightInfo.isNull
+                        )
+                    }
+                    "||" -> {
+                        // A || B: at least one is true, can't definitively narrow
+                        // Conservative: no narrowing
+                        NullCheckInfo.EMPTY
+                    }
+                    else -> NullCheckInfo.EMPTY
+                }
+            }
+            else -> NullCheckInfo.EMPTY
+        }
     }
 
     /* -------------------------- Protocol layer ---------------------------- */
@@ -190,8 +281,8 @@ private class Checker(
                         val fieldType = if (ext.kind == Kind.REVEAL) {
                             // REVEAL: Preserve nullability from original yield
                             // If the original field (from yield) is nullable, make reveal nullable too
-                            val existing: TypeExp? = env.h.get(fieldRef)
-                            if (existing != null && (stripHidden(existing) as? TypeExp) is Opt) {
+                            val existing: TypeExp? = env.h[fieldRef]
+                            if (existing != null && stripHidden(existing) is Opt) {
                                 // Original field was nullable, make reveal nullable
                                 wrapInOpt(type)
                             } else {
@@ -224,7 +315,7 @@ private class Checker(
                             requireRole(q.role.id, q.role)
                             m.forEach { (rf, revealedType) ->
                                 val (role, field) = rf
-                                val existing = env.safeGetValue(rf, q)
+                                val existing = safeGetValue(rf, q)
 
                                 // Strip Opt to handle nullable hidden fields (from yields without handlers)
                                 val existingInner = stripOpt(existing)
@@ -250,7 +341,7 @@ private class Checker(
                         }
                     }
                 }.unzip()
-                val checker = Checker(typeMap, roles + newRoles.union(), env withMap ms.union(), macroEnv)
+                val checker = Checker(typeMap, roles + newRoles.union(), env withMap ms.union(), macroEnv, nonNullFacts)
                 checker.type(ext.ext)
             }
 
@@ -278,11 +369,12 @@ private class Checker(
     private fun checkWhere(n: Set<RoleId>, m: Map<FieldRef, TypeExp>, q: Query) {
         val newEnv = env withMap m
 
-        // 1. Type check - strip Opt to allow nullable bool (implicitly unwrapped)
-        val whereType = Checker(typeMap, n, newEnv, macroEnv).type(q.where)
+        // 1. Type check - strict null safety: Do NOT strip Opt
+        // Propagate facts so WHERE clauses can use fields narrowed by earlier conditionals
+        val whereType = Checker(typeMap, n, newEnv, macroEnv, nonNullFacts).type(q.where)
         requireStatic(
-            stripOpt(whereType) == BOOL,
-            "Where clause failed",
+            whereType == BOOL,
+            "Where clause must be bool, found '${pt(whereType)}'",
             q
         )
 
@@ -335,7 +427,7 @@ private class Checker(
 
         // 3. Type check handler expressions
         handler.ts.forEach { (role, exp) ->
-            val t = Checker(typeMap, currentRoles, env, macroEnv).type(exp)
+            val t = Checker(typeMap, currentRoles, env, macroEnv, nonNullFacts).type(exp)
             requireStatic(
                 compatible(t, INT),
                 "Quit handler payout for ${role.name} must be int; actual: ${pt(t)}",
@@ -348,20 +440,27 @@ private class Checker(
         when (outcome) {
             is Outcome.Cond -> {
                 val t = type(outcome.cond)
-                // Strip Opt to allow nullable bool in outcome conditions (implicitly unwrapped)
-                val tInner = stripOpt(t)
-                requireStatic(tInner == BOOL, "Outcome condition must be boolean; actual: ${pt(t)}", outcome)
-                type(outcome.ifTrue)
-                type(outcome.ifFalse)
+                // Strict null safety: Do NOT strip Opt
+                requireStatic(t == BOOL, "Outcome condition must be boolean; actual: ${pt(t)}", outcome)
+
+                // Extract null-check information for path-sensitive analysis
+                val nullCheckInfo = extractNullChecks(outcome.cond)
+
+                // Type check true branch with accumulated facts (fields known to be non-null)
+                val factsTrue = nonNullFacts + nullCheckInfo.nonNull
+                Checker(typeMap, roles, env, macroEnv, factsTrue).type(outcome.ifTrue)
+
+                // Type check false branch with negated facts
+                val factsFalse = nonNullFacts + nullCheckInfo.negate().nonNull
+                Checker(typeMap, roles, env, macroEnv, factsFalse).type(outcome.ifFalse)
             }
 
             is Outcome.Value -> {
                 outcome.ts.forEach { (role, v) ->
                     requireRole(role.id, role)
                     val t = type(v)
-                    // Strip Opt to allow nullable int in outcome values (implicitly unwrapped)
-                    val tInner = stripOpt(t)
-                    requireStatic(compatible(tInner, INT), "Outcome value must be an int; actual: ${pt(t)}", v)
+                    // Strict null safety: Do NOT strip Opt
+                    requireStatic(compatible(t, INT), "Outcome value must be an int; actual: ${pt(t)}", v)
                 }
             }
 
@@ -372,7 +471,7 @@ private class Checker(
                     "Bad initialization of let ext",
                     outcome.init
                 )
-                Checker(typeMap, roles, env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv)
+                Checker(typeMap, roles, env + Pair(outcome.dec.v.id, outcome.dec.type), macroEnv, nonNullFacts)
                     .type(outcome.outcome)
             }
         }
@@ -420,7 +519,7 @@ private class Checker(
                     val fieldExp = exp.operand as? Exp.Field
                         ?: throw StaticError("${exp.op} requires a field reference", exp)
 
-                    val fieldType = env.safeGetValue(fieldExp.fieldRef, exp)
+                    val fieldType = safeGetValue(fieldExp.fieldRef, exp)
                     val isNullable = resolve(fieldType) is Opt
 
                     if (!isNullable) {
@@ -454,15 +553,28 @@ private class Checker(
                 }
 
                 "==", "!=" -> {
-                    // Strip Opt to allow comparing nullable types (implicitly unwrapped)
-                    val leftInner = stripOpt(left)
-                    val rightInner = stripOpt(right)
+                    // Strict null safety: Allow opt T == opt T, but require both sides to match nullability
+                    val leftResolved = resolve(left)
+                    val rightResolved = resolve(right)
+                    val leftIsOpt = leftResolved is Opt
+                    val rightIsOpt = rightResolved is Opt
 
-                    // Check for common base type instead of mutual compatibility (subtyping)
-                    // This allows comparing disjoint ranges like {3} and {7}
-                    val validComparison = (isInteger(leftInner) && isInteger(rightInner)) ||
-                            (isBoolean(leftInner) && isBoolean(rightInner)) ||
-                            (leftInner == ADDRESS && rightInner == ADDRESS)
+                    // If nullability differs, reject (can't compare opt T with T)
+                    if (leftIsOpt != rightIsOpt) {
+                        throw StaticError(
+                            "Cannot compare nullable and non-nullable types: ${Pretty.type(left)} and ${Pretty.type(right)}. " +
+                            "Check for null first or ensure both sides have matching nullability.",
+                            exp
+                        )
+                    }
+
+                    // Strip Opt if both are optional, for base type checking
+                    val l = if (leftIsOpt) stripOpt(leftResolved) else leftResolved
+                    val r = if (rightIsOpt) stripOpt(rightResolved) else rightResolved
+
+                    val validComparison = (isInteger(l) && isInteger(r)) ||
+                            (isBoolean(l) && isBoolean(r)) ||
+                            (l == ADDRESS && r == ADDRESS)
 
                     requireStatic(
                         validComparison,
@@ -473,11 +585,9 @@ private class Checker(
                 }
 
                 "<->", "<-!->" -> {
-                    // Strip Opt to allow nullable bool in XOR operations (implicitly unwrapped)
-                    val leftInner = stripOpt(left)
-                    val rightInner = stripOpt(right)
+                    // Strict null safety: Do NOT strip Opt
                     requireStatic(
-                        compatible(leftInner, BOOL) && compatible(rightInner, BOOL),
+                        compatible(left, BOOL) && compatible(right, BOOL),
                         "Both sides of ${exp.op} must be bool; got ${pt(left)} and ${pt(right)}",
                         exp
                     )
@@ -502,16 +612,24 @@ private class Checker(
             throw StaticError("Variable '${exp}' is undefined", exp)
         }
 
-        is Exp.Field -> env.safeGetValue(exp.fieldRef, exp)
+        is Exp.Field -> safeGetValue(exp.fieldRef, exp)
 
         is Exp.Cond -> {
             val tCond = type(exp.cond)
-            // Strip Opt to allow nullable bool in conditions (implicitly unwrapped)
-            val tCondInner = stripOpt(tCond)
-            requireStatic(compatible(tCondInner, BOOL), "Condition must be bool, found '${pt(tCond)}'", exp.cond)
+            // Strict null safety: Do NOT strip Opt
+            requireStatic(compatible(tCond, BOOL), "Condition must be bool, found '${pt(tCond)}'", exp.cond)
 
-            val tTrue = type(exp.ifTrue)
-            val tFalse = type(exp.ifFalse)
+            // Extract null-check information for path-sensitive analysis
+            val nullCheckInfo = extractNullChecks(exp.cond)
+
+            // Type check true branch with accumulated facts (fields known to be non-null)
+            val factsTrue = nonNullFacts + nullCheckInfo.nonNull
+            val tTrue = Checker(typeMap, roles, env, macroEnv, factsTrue).type(exp.ifTrue)
+
+            // Type check false branch with negated facts
+            val factsFalse = nonNullFacts + nullCheckInfo.negate().nonNull
+            val tFalse = Checker(typeMap, roles, env, macroEnv, factsFalse).type(exp.ifFalse)
+
             val joined = join(tTrue, tFalse)
 
             requireStatic(
@@ -530,7 +648,7 @@ private class Checker(
                 "Bad initialization of let exp. Expected ${pt(exp.dec.type)}, got ${pt(initType)}",
                 exp
             )
-            Checker(typeMap, emptySet(), env + Pair(exp.dec.v.id, exp.dec.type), macroEnv).type(exp.exp)
+            Checker(typeMap, emptySet(), env + Pair(exp.dec.v.id, exp.dec.type), macroEnv, nonNullFacts).type(exp.exp)
         }
 
         Exp.Const.UNDEFINED -> throw AssertionError()
@@ -544,12 +662,9 @@ private class Checker(
 
     private fun checkOp(expected: TypeExp, vararg args: TypeExp) {
         for (arg in args) {
-            // Strip Opt from both sides for operator compatibility checking
-            // This allows nullable types to be used in operators (they'll be implicitly unwrapped)
-            val expectedInner = stripOpt(expected)
-            val argInner = stripOpt(arg)
+            // Strict null safety: Do NOT strip Opt - nullable types must be checked before use
             requireStatic(
-                compatible(argInner, expectedInner),
+                compatible(arg, expected),
                 "Incompatible operator argument: Expected ${pt(expected)}, actual ${pt(arg)}",
                 arg
             )
@@ -698,11 +813,10 @@ private fun checkMacroCall(
     // Reuse Checker.compatible algebra
     val checker = Checker(typeMap, emptySet(), Env(), emptyMap())
 
-    // Check argument types - strip Opt to allow nullable types (implicitly unwrapped)
+    // Check argument types - strict null safety: Do NOT strip Opt
     for ((i, argType) in argTypes.withIndex()) {
         val paramType = macro.params[i].type
-        val argTypeInner = checker.stripOpt(argType)
-        if (!checker.compatible(argTypeInner, paramType)) {
+        if (!checker.compatible(argType, paramType)) {
             throw StaticError(
                 "Argument ${i + 1} to macro '${macro.name}' has type ${pt(argType)}, but expected ${pt(paramType)}",
                 callSite

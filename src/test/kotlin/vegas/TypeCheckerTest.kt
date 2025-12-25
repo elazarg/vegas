@@ -318,7 +318,7 @@ class TypeCheckerTest : FreeSpec({
                     B.yieldTo(P, listOf(B.i("x")), where = B.m(P, "x")) // non-boolean where
                 )
                 val exception = shouldThrow<StaticError> { typeCheck(bad) }
-                exception.message shouldContain "Where clause failed"
+                exception.message shouldContain "Where clause must be bool"
             }
         }
     }
@@ -1017,7 +1017,7 @@ class TypeCheckerTest : FreeSpec({
                         B.join(P),
                         B.yieldTo(P, listOf(B.i("x")), where = B.m(P, "x"))
                     ),
-                    listOf("Where clause failed")
+                    listOf("Where clause must be bool")
                 )
             ) { case ->
                 val exception = shouldThrow<StaticError> { typeCheck(case.prog) }
