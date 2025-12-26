@@ -28,7 +28,6 @@ From a single Vegas specification, the tool generates:
 ### Example: Monty Hall Game
 
 ```vegas
-
 type door = {0, 1, 2}
 
 game main() {
