@@ -1,45 +1,36 @@
 // Two-robot corridor: robots declare courtesy and choose entry times; collisions and yielding decide payoffs.
-// Distribution semantics: pot (200 wei) - earlier entry and courtesy affect allocation
-//
-// KNOWN ISSUE: This example uses simultaneous yields which produce nullable fields,
-// but the macro robotPayoff expects non-nullable arguments. Macros cannot accept
-// nullable types. The withdraw section must either:
-// 1. Inline the macro logic (current approach), or
-// 2. Add explicit null checks before macro calls
-//
-// This is a design limitation: macros are pure functions that cannot handle opt types.
+// Payoff structure: earlier entry earns bonus, collisions require yielding, timeouts incur penalties.
 
 type time = {0, 1, 2}
 
-macro robotPayoff(myTime: time, otherTime: time, myCourteous: bool, otherCourteous: bool): int =
-    (myTime != otherTime) ? (100 + (10 - myTime) * 10)  // Earlier entry gets bonus
-  : (!myCourteous && !otherCourteous) ? 50  // Collision with no courtesy
-  : (myCourteous && !otherCourteous) ? ((myTime + 1 <= 2) ? (100 + (10 - (myTime + 1)) * 10) : 100)  // Yield and retry
-  : (!myCourteous && otherCourteous) ?  (100 + (10 - myTime) * 10)  // Benefit from other's courtesy
-  : ((myTime + 1 <= 2) ? (100 + (10 - (myTime + 1)) * 10) : 100);  // Both courteous
-
 game main() {
   join R1() $ 100 R2() $ 100;
-  
-  yield R1(courteous: bool) R2(courteous: bool);
 
+  yield R1(courteous: bool) R2(courteous: bool);
   yield R1(t: time) R2(t: time);
 
-  withdraw (R1.courteous == null || R1.t == null) && (R2.courteous == null || R2.t == null) ?
-      { R1 -> 100; R2 -> 100; }  // Both quit at some point
+  withdraw
+    // Handle quit cases
+    (R1.courteous == null || R1.t == null) && (R2.courteous == null || R2.t == null) ?
+      { R1 -> 100; R2 -> 100; }  // Both quit: return deposits
     : (R1.courteous == null || R1.t == null) ?
-      { R1 -> 50; R2 -> 150; }  // R1 quit
+      { R1 -> 50; R2 -> 150; }  // R1 quit: penalized
     : (R2.courteous == null || R2.t == null) ?
-      { R1 -> 150; R2 -> 50; }  // R2 quit
+      { R1 -> 150; R2 -> 50; }  // R2 quit: penalized
+
+    // Handle collision-free entry
     : (R1.t != R2.t) ?
-      { R1 -> 100 + (10 - R1.t) * 10; R2 -> 100 + (10 - R2.t) * 10; }  // No collision
+      { R1 -> 100 + (10 - R1.t) * 10; R2 -> 100 + (10 - R2.t) * 10; }  // Earlier entry bonus
+
+    // Handle collisions based on courtesy
     : (!R1.courteous && !R2.courteous) ?
-      { R1 -> 50; R2 -> 50; }  // Collision with no courtesy
+      { R1 -> 50; R2 -> 50; }  // Stubborn collision: both penalized
     : (R1.courteous && !R2.courteous) ?
-      { R1 -> ((R1.t + 1 <= 2) ? (100 + (10 - (R1.t + 1)) * 10) : 100); R2 -> 100 + (10 - R2.t) * 10; }  // R1 yields
+      { R1 -> (R1.t + 1 <= 2) ? (100 + (10 - (R1.t + 1)) * 10) : 100;
+        R2 -> 100 + (10 - R2.t) * 10; }  // R1 yields, delayed entry
     : (!R1.courteous && R2.courteous) ?
-      { R1 -> 100 + (10 - R1.t) * 10; R2 -> ((R2.t + 1 <= 2) ? (100 + (10 - (R2.t + 1)) * 10) : 100); }  // R2 yields
-    :
-      { R1 -> ((R1.t + 1 <= 2) ? (100 + (10 - (R1.t + 1)) * 10) : 100);
-        R2 -> ((R2.t + 1 <= 2) ? (100 + (10 - (R2.t + 1)) * 10) : 100); }  // Both courteous
+      { R1 -> 100 + (10 - R1.t) * 10;
+        R2 -> (R2.t + 1 <= 2) ? (100 + (10 - (R2.t + 1)) * 10) : 100; }  // R2 yields, delayed entry
+    : { R1 -> (R1.t + 1 <= 2) ? (100 + (10 - (R1.t + 1)) * 10) : 100;
+        R2 -> (R2.t + 1 <= 2) ? (100 + (10 - (R2.t + 1)) * 10) : 100; }  // Both courteous: both yield
 }
