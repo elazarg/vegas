@@ -5,10 +5,10 @@ game main() {
   join Insured() $ 100 Insurer() $ 100;
   random World() $ 100;
   
-  yield Insured(buy: bool);
-  yield World(accident: bool);
-  yield Insured(claim: bool) where Insured.buy && World.accident;
-  yield Insurer(pay: bool)   where Insured.claim;
+  yield Insured(buy: bool) || { Insurer -> 150; World -> 150 };
+  yield World(accident: bool) || { Insured -> 150; Insurer -> 150 };
+  yield Insured(claim: bool) where Insured.buy && World.accident || { Insurer -> 150; World -> 150 };
+  yield Insurer(pay: bool)   where Insured.claim || { Insured -> 150; World -> 150 };
   
   withdraw {
       Insured ->

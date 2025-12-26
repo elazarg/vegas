@@ -4,11 +4,17 @@
 game main() {
   join A() $ 100 B() $ 100 C() $ 100;
   
-  yield A(send: bool);
-  yield B(forward: bool) C(forward: bool) where A.send; // A bug
-  
+  yield A(send: bool) || { B -> 150; C -> 150 };
+  yield B(forward: bool) C(forward: bool) where A.send;
+
   withdraw !A.send ?
       { A -> 100; B -> 100; C -> 100; }  // No rumor, deposits returned
+    : (B.forward == null && C.forward == null) ?
+      { A -> 100; B -> 100; C -> 100; }  // Both quit forwarding
+    : (B.forward == null) ?
+      { A -> 125; B -> 50; C -> 125; }  // B quit
+    : (C.forward == null) ?
+      { A -> 125; B -> 125; C -> 50; }  // C quit
     :
       (!B.forward && !C.forward) ?
           { A -> 95; B -> 100; C -> 105; }  // Rumor fails to spread

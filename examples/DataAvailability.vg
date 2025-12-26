@@ -4,24 +4,30 @@
 game main() {
   join Producer() $ 100 Validator() $ 100 Users() $ 100;
   yield Producer(publish: bool) Validator(avail: bool);
-  
-  withdraw {
+
+  withdraw (Producer.publish == null && Validator.avail == null) ?
+      { Producer -> 50; Validator -> 50; Users -> 200; }  // Both quit, Users benefit
+    : (Producer.publish == null) ?
+      { Producer -> 50; Validator -> 125; Users -> 125; }  // Producer quit
+    : (Validator.avail == null) ?
+      { Producer -> 125; Validator -> 50; Users -> 125; }  // Validator quit
+    : {
       Producer ->
           (Producer.publish && Validator.avail) ? 130        // Honest publishing, correct attestation
         : (!Producer.publish && Validator.avail) ? 110       // Withhold but attested available (collusion?)
         : (!Producer.publish && !Validator.avail) ? 70       // Withhold, correctly not attested
         : 100;  // Publish but not attested
-  
+
       Validator ->
           (Producer.publish && Validator.avail) ? 120        // Correct positive attestation
         : (!Producer.publish && Validator.avail) ? 50        // False positive
         : (!Producer.publish && !Validator.avail) ? 110      // Correct negative attestation
         : 90;  // False negative
-  
+
       Users ->
           (Producer.publish && Validator.avail) ? 50         // Best case
         : (!Producer.publish && Validator.avail) ? 140       // False positive confuses users
         : (Producer.publish && !Validator.avail) ? 110       // False negative
         : 120;  // Neither (no data, no attestation)
-  }
+    }
 }

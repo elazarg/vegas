@@ -8,9 +8,9 @@ game main() {
   join Claimant() $ 100 Inspector() $ 100;
   random World() $ 100;
   
-  yield Claimant(claim: bool, inflate: bool);
-  yield World(accident: bool);
-  yield Inspector(invest: bool);
+  yield Claimant(claim: bool, inflate: bool) || { Inspector -> 150; World -> 150 };
+  yield World(accident: bool) || { Claimant -> 150; Inspector -> 150 };
+  yield Inspector(invest: bool) || { Claimant -> 150; World -> 150 };
   
   withdraw {
       Claimant ->

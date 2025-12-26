@@ -4,8 +4,8 @@
 game main() {
   join Owner() $ 100 Querier() $ 100;
   
-  yield Querier(query: bool);
-  yield Owner(noise: bool) where Querier.query;
+  yield Querier(query: bool) || { Owner -> 200 };
+  yield Owner(noise: bool) where Querier.query || { Querier -> 200 };
   
   withdraw {
       Querier -> (!Querier.query ? 100 : (Owner.noise ? 110 : 150));

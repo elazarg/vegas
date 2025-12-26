@@ -7,8 +7,8 @@ type verdict = {1, 2}  // 1=favor P1, 2=favor P2
 game main() {
   join P1() $ 100 P2() $ 100 Judge() $ 100;
   
-  yield P1(b: bribe);
-  yield Judge(accept: bool, v: verdict);
+  yield P1(b: bribe) || { P2 -> 150; Judge -> 150 };
+  yield Judge(accept: bool, v: verdict) || { P1 -> 150; P2 -> 150 };
   
   withdraw {
       P1 -> 100

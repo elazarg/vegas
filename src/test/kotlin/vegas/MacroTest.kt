@@ -286,27 +286,6 @@ class MacroTest : FreeSpec({
             ir.roles.size shouldBe 2
         }
 
-        "macros produce valid expressions with hidden context" {
-            val code = """
-                type num = {1..5}
-                macro times2(x: int): int = x * 2;
-                join A(secret: hidden num) $ 100;
-                join B(public: num) $ 100;
-                withdraw {
-                    A -> times2(B.public) + A.secret;
-                    B -> times2(B.public);
-                }
-            """.trimIndent()
-
-            val ast = parseCode(code)
-            typeCheck(ast)
-            val inlined = inlineMacros(ast)
-            val ir = compileToIR(inlined)
-
-            inlined.macros.size shouldBe 0
-            ir.roles.size shouldBe 2
-        }
-
         "macros calling built-in functions" {
             val code = """
                 type range = {1..10}

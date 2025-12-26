@@ -7,7 +7,7 @@ game main() {
   join Issuer(c: choice) $ 12
        Alice(c: choice) $ 12
        Bob(c: choice) $ 12;
-  
+
   withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
        ? (((Issuer.c + Alice.c + Bob.c) % 3 == 0)
               ? { Alice -> 24; Bob -> 6; Issuer -> 6 }

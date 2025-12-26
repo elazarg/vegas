@@ -4,8 +4,14 @@
 game main() {
   join S1() $ 100 S2() $ 100;
   yield S1(useShared: bool) S2(useShared: bool);
-  withdraw {
+  withdraw (S1.useShared == null && S2.useShared == null) ?
+      { S1 -> 100; S2 -> 100; }  // Both quit, deposits returned
+    : (S1.useShared == null) ?
+      { S1 -> 50; S2 -> 150; }  // S1 quit, penalized
+    : (S2.useShared == null) ?
+      { S1 -> 150; S2 -> 50; }  // S2 quit, penalized
+    : {
       S1 -> (S1.useShared ? (S2.useShared ? 100 : 115) : (S2.useShared ? 85 : 100));
       S2 -> (S2.useShared ? (S1.useShared ? 100 : 115) : (S1.useShared ? 85 : 100));
-  }
+    }
 }
