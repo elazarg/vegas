@@ -36,7 +36,8 @@ game main() {
   join Host() $ 20;
   join Guest() $ 20;
   
-  // Host hides the car (compiler generates commitment)
+  // Host hides the car (compiler generates commitment);
+  // if Host does not play, Guest gets the entire pot
   yield Host(car: hidden door) || { Guest -> 40 };
   
   // Guest makes a public choice
@@ -52,7 +53,7 @@ game main() {
   reveal Host(car: door) where Host.goat != Host.car;
   
   // Payouts calculated based on game state
-  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;
              Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
 }
 ````
