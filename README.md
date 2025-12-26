@@ -28,33 +28,33 @@ From a single Vegas specification, the tool generates:
 ### Example: Monty Hall Game
 
 ```vegas
+
 type door = {0, 1, 2}
 
-// Players join with deposits
-join Host() $ 20;
-join Guest() $ 20;
-
-// Host hides the car (compiler generates commitment)
-yield Host(car: hidden door);
-
-// Guest makes a public choice
-yield Guest(d: door);
-
-yield Host(goat: door) where Host.goat != Guest.d;
-
-// Guest decides whether to switch
-yield Guest(switch: bool);
-
-// Host reveals the car's location
-reveal Host(car: door) where Host.goat != Host.car;
-
-// Payouts calculated based on game state
-withdraw (Host.car != null && Guest.switch != null)
-     ? { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
-         Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
-     : (Host.car == null)  // Host quit
-     ? { Guest -> 40;   Host -> 0 }
-     : { Guest -> 0; Host -> 40 }  // Guest quit
+game main() {
+  // Players join with deposits
+  join Host() $ 20;
+  join Guest() $ 20;
+  
+  // Host hides the car (compiler generates commitment)
+  yield Host(car: hidden door) || { Guest -> 40 };
+  
+  // Guest makes a public choice
+  yield Guest(d: door) || { Host -> 40 };
+  
+  // Host opens a door behind which there must be a goat
+  yield Host(goat: door) where Host.goat != Guest.d || { Guest -> 40 };
+  
+  // Guest decides whether to switch
+  yield Guest(switch: bool) || { Host -> 40 };
+  
+  // Host reveals the car's location
+  reveal Host(car: door) where Host.goat != Host.car;
+  
+  // Payouts calculated based on game state
+  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+             Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
+}
 ````
 
 ## Building and Running
