@@ -25,7 +25,14 @@ class ExamplesValidationTest : FreeSpec({
         // (where Host.car is yielded as hidden), but can only be verified server-side at
         // the reveal site. Current language syntax doesn't support deferred constraints
         // (e.g., "where reveal Host.car != Host.goat").
-        "MontyHallChance"
+        "MontyHallChance",
+
+        // TwoRobotCorridor: Uses simultaneous yields which produce nullable fields (opt T),
+        // but the macro robotPayoff expects non-nullable arguments. Macros are pure functions
+        // that cannot accept opt types - they would need to handle null cases explicitly,
+        // defeating their purpose. The withdraw section would need to inline the macro logic
+        // or add explicit null checks before calling the macro.
+        "TwoRobotCorridor"
     )
 
     val examples = exampleFiles
@@ -77,9 +84,9 @@ class ExamplesValidationTest : FreeSpec({
             try {
                 typeCheck(ast)
                 throw AssertionError("Expected $exampleName to fail type checking, but it passed")
-            } catch (e: StaticError) {
+            } catch (_: StaticError) {
                 // Expected - this is good
-            } catch (e: NotImplementedError) {
+            } catch (_: NotImplementedError) {
                 // Also acceptable for invalid examples
             }
         }

@@ -1,7 +1,7 @@
 // Committee voting with chair proposal: chair proposes; two members vote; alignment with proposal rewarded.
 // Distribution semantics: pot (300 wei) rewards passing proposals and aligned members
 
-macro passes(p: bool, v1: bool, v2: bool): bool = ((v1 == p && v1 == true) || (v2 == p && v2 == true));
+macro passes(p: bool, v1: bool, v2: bool): bool = (v1 == p && v1 == true) || (v2 == p && v2 == true);
 
 game main() {
   join Chair() $ 100 M1() $ 100 M2() $ 100;

@@ -160,22 +160,22 @@ contract TicTacToe {
         done_O_c4 = true;
     }
     
-    function withdraw_X() public by(Role.X) action(Role.X, 10) depends(Role.O, 9) {
-        require((!claimed_X), "already claimed");
-        claimed_X = true;
-        int256 payout = 100;
+    function withdraw_O() public by(Role.O) action(Role.O, 10) depends(Role.O, 9) {
+        require((!claimed_O), "already claimed");
+        claimed_O = true;
+        int256 payout = ((!done_X_c1) ? 200 : ((!done_O_c1) ? 0 : ((!done_X_c2) ? 200 : ((!done_O_c2) ? 0 : ((!done_X_c3) ? 200 : ((!done_O_c3) ? 0 : ((!done_X_c4) ? 200 : ((!done_O_c4) ? 0 : 100))))))));
         if (payout > 0) {
-            (bool ok, ) = payable(address_X).call{value: uint256(payout)}("");
+            (bool ok, ) = payable(address_O).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
         }
     }
     
-    function withdraw_O() public by(Role.O) action(Role.O, 11) depends(Role.O, 9) {
-        require((!claimed_O), "already claimed");
-        claimed_O = true;
-        int256 payout = 100;
+    function withdraw_X() public by(Role.X) action(Role.X, 11) depends(Role.O, 9) {
+        require((!claimed_X), "already claimed");
+        claimed_X = true;
+        int256 payout = ((!done_X_c1) ? 0 : ((!done_O_c1) ? 200 : ((!done_X_c2) ? 0 : ((!done_O_c2) ? 200 : ((!done_X_c3) ? 0 : ((!done_O_c3) ? 200 : ((!done_X_c4) ? 0 : ((!done_O_c4) ? 200 : 100))))))));
         if (payout > 0) {
-            (bool ok, ) = payable(address_O).call{value: uint256(payout)}("");
+            (bool ok, ) = payable(address_X).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
         }
     }

@@ -184,14 +184,14 @@ class TypeCheckerTest : FreeSpec({
                         B.join(P, params = listOf(B.i("x"))),
                         value = B.pay(P to (B.m(P, "x") and B.b(true)))
                     ),
-                    "Incompatible"
+                    "Logic operator"
                 ),
                 TypeMismatchCase(
                     B.program(
                         B.join(P, params = listOf(B.bl("b"))),
                         value = B.pay(P to (B.m(P, "b") plus B.n(1)))
                     ),
-                    "Incompatible"
+                    "Arithmetic operator"
                 ),
                 TypeMismatchCase(
                     B.program(
@@ -204,14 +204,14 @@ class TypeCheckerTest : FreeSpec({
                             )
                         )
                     ),
-                    "Incompatible"
+                    "Comparison operator"
                 ),
                 TypeMismatchCase(
                     B.program(
                         B.join(P),
                         value = B.pay(P to B.b(true))  // outcome must be int
                     ),
-                    "Outcome value must be an int"
+                    "Outcome value must be int"
                 )
             ) { case ->
                 val exception = shouldThrow<StaticError> {
@@ -381,7 +381,7 @@ class TypeCheckerTest : FreeSpec({
                 )
                 val exception = shouldThrow<StaticError> { typeCheck(bad) }
                 // just assert that an error message was produced (type mismatch)
-                exception.message shouldContain "Reveal type mismatch for 'H.s': expected int, got opt bool"
+                exception.message shouldContain "Reveal type mismatch for 'H.s': expected int, got bool"
             }
         }
     }
@@ -544,7 +544,7 @@ class TypeCheckerTest : FreeSpec({
                         value = B.pay(P to B.ite(bexpr, B.n(1), B.n(0)))
                     )
                     val exception = shouldThrow<StaticError> { typeCheck(program) }
-                    exception.message shouldContain "Incompatible"
+                    exception.message shouldContain "expects"
                 }
             }
         }
@@ -716,7 +716,7 @@ class TypeCheckerTest : FreeSpec({
                 )
             )
             val exception = shouldThrow<StaticError> { typeCheck(bad) }
-            exception.message shouldContain "Bad initialization"
+            exception.message shouldContain "Bad let initialization"
         }
 
         "let bindings should shadow outer bindings" {
@@ -799,7 +799,7 @@ class TypeCheckerTest : FreeSpec({
                     )
                 )
             )
-            shouldThrow<StaticError> { typeCheck(badMixed) }.message shouldContain "Incompatible operator argument"
+            shouldThrow<StaticError> { typeCheck(badMixed) }.message shouldContain "alldiff"
 
             // booleans only
             val badBool = B.program(
@@ -811,7 +811,7 @@ class TypeCheckerTest : FreeSpec({
                     )
                 )
             )
-            shouldThrow<StaticError> { typeCheck(badBool) }.message shouldContain "Incompatible"
+            shouldThrow<StaticError> { typeCheck(badBool) }.message shouldContain "alldiff"
         }
     }
 
@@ -953,7 +953,7 @@ class TypeCheckerTest : FreeSpec({
                         B.yieldTo(P, listOf(B.bl("x"))),
                         value = B.pay(P to (B.m(P, "x") plus B.n(1)))
                     ),
-                    listOf("bool", "int", "Incompatible")
+                    listOf("bool", "int", "Arithmetic operator")
                 ),
                 ErrorMessageCase(
                     B.program(

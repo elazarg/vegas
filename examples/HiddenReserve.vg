@@ -10,7 +10,8 @@ game main() {
   yield Seller(r: hidden reserve) || { Buyer -> 200 };
   yield Buyer(b: price) || { Seller -> 200 };
   yield Seller(accept: bool) || { Buyer -> 200 };
-  
+  reveal Seller(r: reserve);
+
   withdraw (Seller.accept && Buyer.b >= Seller.r) ?
       { Seller -> 100 + (Buyer.b - Seller.r) * 10;
         Buyer  -> 100 + (10 - Buyer.b) * 10; }

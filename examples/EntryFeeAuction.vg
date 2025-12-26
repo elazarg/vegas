@@ -12,20 +12,26 @@ game main() {
   join Seller() $ 100 B1() $ 100 B2() $ 100;
   
   yield B1(enter: bool) B2(enter: bool);
-  yield B1(b: bid) where B1.enter || { Seller -> 150; B2 -> 150 };
-  yield B2(b: bid) where B2.enter || { Seller -> 150; B1 -> 150 };
+  yield B1(b: bid);
+  yield B2(b: bid);
 
   withdraw (B1.enter == null && B2.enter == null) ?
-      { Seller -> 100; B1 -> 100; B2 -> 100; }  // Both quit at entry
+      { Seller -> 100; B1 -> 100; B2 -> 100; }  // Both quit at entry decision
     : (B1.enter == null) ?
       { Seller -> 125; B1 -> 50; B2 -> 125; }  // B1 quit at entry
     : (B2.enter == null) ?
       { Seller -> 125; B1 -> 125; B2 -> 50; }  // B2 quit at entry
+    : (B1.b == null && B2.b == null) ?
+      { Seller -> 100 + (B1.enter ? 10 : 0) + (B2.enter ? 10 : 0); B1 -> 100 - (B1.enter ? 10 : 0); B2 -> 100 - (B2.enter ? 10 : 0); }  // Both quit after entry
+    : (B1.b == null) ?
+      { Seller -> 150; B1 -> 50; B2 -> 100; }  // B1 quit at bidding
+    : (B2.b == null) ?
+      { Seller -> 150; B1 -> 100; B2 -> 50; }  // B2 quit at bidding
     : {
       Seller -> 100
           + (B1.enter ? 10 : 0)
           + (B2.enter ? 10 : 0)
-          + winningBid(B1.enter, B1.b, B2.enter, B2.b) * 8;
+          + (B1.enter && B2.enter ? (B1.b >= B2.b ? B1.b : B2.b) * 8 : (B1.enter ? B1.b * 8 : (B2.enter ? B2.b * 8 : 0)));
 
       B1 ->
           !B1.enter ? 100

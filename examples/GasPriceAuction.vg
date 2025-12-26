@@ -10,7 +10,8 @@ game main() {
   yield Miner(t: hidden thr) || { Client -> 200 };
   yield Client(b: bid) || { Miner -> 200 };
   yield Miner(accept: bool) || { Client -> 200 };
-  
+  reveal Miner(t: thr);
+
   withdraw (Miner.accept && Client.b >= Miner.t) ?
       { Miner  -> 100 + Client.b * 10;
         Client -> 100 + (10 - Client.b) * 10; }
