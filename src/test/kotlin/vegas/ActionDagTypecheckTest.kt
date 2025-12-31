@@ -12,7 +12,7 @@ class ActionDagTypecheckTest : FreeSpec({
     "typechecker should reject invalid DAG structures" - {
 
         "should reject reading hidden field before reveal" {
-            val ast = parseFile("examples/Invalid_ReadHiddenField.vg")
+            val ast = parseFile("src/test/resources/non-examples/Invalid_ReadHiddenField.vg")
 
             var caught = false
             try {

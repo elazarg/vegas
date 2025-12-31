@@ -565,7 +565,9 @@ internal class ProtocolTyper(
 
     data class State(
         val roles: Set<RoleId> = emptySet(),
-        val fields: Map<FieldRef, TypeExp> = emptyMap()
+        val fields: Map<FieldRef, TypeExp> = emptyMap(),
+        // Track committed fields that haven't been revealed yet, with their source node for error reporting
+        val unrevealedCommits: Map<FieldRef, Ast> = emptyMap()
     )
 
     fun typeGame(game: Ext) {
@@ -575,6 +577,11 @@ internal class ProtocolTyper(
     private fun typeExt(ext: Ext, st: State) {
         when (ext) {
             is Ext.Value -> {
+                // Check that all commits have been revealed
+                if (st.unrevealedCommits.isNotEmpty()) {
+                    val (field, node) = st.unrevealedCommits.entries.first()
+                    throw StaticError("Commit of '$field' has no corresponding reveal", node)
+                }
                 // Pass View to Outcome to allow var scoping
                 val view = View(roles = st.roles, fields = st.fields, vars = emptyMap())
                 typeOutcome(ext.outcome, view)
@@ -636,7 +643,21 @@ internal class ProtocolTyper(
                 }
 
                 val newFields = st.fields + deltaMaps.flatMap { it.entries }.associate { it.key to it.value }
-                typeExt(ext.ext, State(roles = roles2, fields = newFields))
+
+                // Track commit/reveal for the "commits must be revealed" invariant
+                val newUnrevealed = st.unrevealedCommits.toMutableMap()
+                for (q in ext.qs) {
+                    for ((k, _) in q.params) {
+                        val fr = FieldRef(q.role.id, k.id)
+                        when (ext.kind) {
+                            Kind.COMMIT -> newUnrevealed[fr] = q  // Track commit
+                            Kind.REVEAL -> newUnrevealed.remove(fr)  // Mark as revealed
+                            else -> {}
+                        }
+                    }
+                }
+
+                typeExt(ext.ext, State(roles = roles2, fields = newFields, unrevealedCommits = newUnrevealed))
             }
         }
     }
