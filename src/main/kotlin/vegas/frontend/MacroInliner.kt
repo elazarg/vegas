@@ -101,10 +101,6 @@ private fun inlineMacrosInExp(exp: Exp, macroEnv: Map<VarId, MacroDec>): Exp = w
         exp = inlineMacrosInExp(exp.exp, macroEnv)
     )
 
-    is Exp.Const.Hidden -> exp.copy(
-        value = inlineMacrosInExp(exp.value as Exp, macroEnv) as Exp.Const
-    )
-
     // Leaves: no inlining needed
     is Exp.Var, is Exp.Field, is Exp.Const.Num, is Exp.Const.Bool,
     is Exp.Const.Address, Exp.Const.UNDEFINED -> exp
@@ -182,10 +178,6 @@ private fun substituteParams(exp: Exp, substitution: Map<VarId, Exp>): Exp = whe
             exp = substituteParams(exp.exp, newSubstitution)  // body uses shadowed substitution
         )
     }
-
-    is Exp.Const.Hidden -> exp.copy(
-        value = substituteParams(exp.value as Exp, substitution) as Exp.Const
-    )
 
     // Leaves: no substitution needed
     is Exp.Field, is Exp.Const.Num, is Exp.Const.Bool,

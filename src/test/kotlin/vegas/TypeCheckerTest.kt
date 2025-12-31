@@ -25,7 +25,6 @@ private object B {
     fun n(i: Int) = Const.Num(i)
     fun b(v: Boolean) = Const.Bool(v)
     fun addr(i: Int) = Const.Address(i)
-    fun hid(e: Const) = Const.Hidden(e)
 
     // variables / members
     fun v(name: String) = Var(VarId(name))
@@ -51,7 +50,7 @@ private object B {
     fun i(name: String) = VarDec(v(name), INT)
     fun bl(name: String) = VarDec(v(name), BOOL)
     fun opt(t: TypeExp) = Opt(t)
-    fun hidden(t: TypeExp) = Hidden(t)
+    // Hidden is an internal type created by TypeChecker for commit fields
 
     // queries and binds
     private fun q(role: Role, params: List<VarDec> = emptyList(), deposit: Int = 0, where: Exp = b(true), handler: Outcome? = null) =
@@ -62,6 +61,9 @@ private object B {
 
     fun yieldTo(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
         Ext.Bind(Kind.YIELD, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
+
+    fun commitTo(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
+        Ext.Bind(Kind.COMMIT, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
 
     fun reveal(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
         Ext.Bind(Kind.REVEAL, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
@@ -304,30 +306,31 @@ class TypeCheckerTest : FreeSpec({
         }
     }
 
-    "Type System - Hidden Types" - {
+    "Type System - Hidden Types (via commit)" - {
 
-        "should handle hidden type declarations" - {
+        "should handle commit declarations (creates hidden fields)" - {
             withData(nameFn = { it.toString() },
-                // join H(); yield H(secret: hidden int)
+                // join H(); commit H(secret: int)
                 B.program(
                     B.join(H),
-                    B.yieldTo(H, listOf(B.dec("secret", B.hidden(INT))))
+                    B.commitTo(H, listOf(B.i("secret")))
                 ),
-                // type door = {0,1,2}; join H(); yield H(car: hidden door)
+                // type door = {0,1,2}; join H(); commit H(car: door)
                 B.program(
                     types = mapOf(TypeId("door") to Subset(setOf(B.n(0), B.n(1), B.n(2)))),
                     B.join(H),
-                    B.yieldTo(H, listOf(B.dec("car", B.hidden(TypeId("door")))))
+                    B.commitTo(H, listOf(B.dec("car", TypeId("door"))))
                 ),
-                // join H(); yield H(x: hidden int, y: int)
+                // join H(); commit H(x: int); yield H(y: int)
                 B.program(
                     B.join(H),
-                    B.yieldTo(H, listOf(B.dec("x", B.hidden(INT)), B.dec("y", INT)))
+                    B.commitTo(H, listOf(B.i("x"))),
+                    B.yieldTo(H, listOf(B.i("y")))
                 ),
-                // join H(); yield H(a: hidden bool, b: hidden bool)
+                // join H(); commit H(a: bool, b: bool)
                 B.program(
                     B.join(H),
-                    B.yieldTo(H, listOf(B.dec("a", B.hidden(BOOL)), B.dec("b", B.hidden(BOOL))))
+                    B.commitTo(H, listOf(B.bl("a"), B.bl("b")))
                 )
             ) { prog ->
                 shouldNotThrow<StaticError> { typeCheck(prog) }
@@ -336,26 +339,26 @@ class TypeCheckerTest : FreeSpec({
 
         "should validate reveal operations" - {
 
-            "accepts revealing hidden values" {
+            "accepts revealing committed values" {
                 val validReveals = listOf(
-                    // join H(); yield H(s: hidden int); reveal H(s: int)
+                    // join H(); commit H(s: int); reveal H(s: int)
                     B.program(
                         B.join(H),
-                        B.yieldTo(H, listOf(B.dec("s", B.hidden(INT)))),
-                        B.reveal(H, listOf(B.dec("s", INT)))
+                        B.commitTo(H, listOf(B.i("s"))),
+                        B.reveal(H, listOf(B.i("s")))
                     ),
-                    // type door = {0,1,2}; join H(); yield H(car: hidden door); reveal H(car: door)
+                    // type door = {0,1,2}; join H(); commit H(car: door); reveal H(car: door)
                     B.program(
                         types = mapOf(TypeId("door") to Subset(setOf(B.n(0), B.n(1), B.n(2)))),
                         B.join(H),
-                        B.yieldTo(H, listOf(B.dec("car", B.hidden(TypeId("door"))))),
+                        B.commitTo(H, listOf(B.dec("car", TypeId("door")))),
                         B.reveal(H, listOf(B.dec("car", TypeId("door"))))
                     ),
-                    // join H(); yield H(a: hidden int, b: hidden bool); reveal H(a: int, b: bool)
+                    // join H(); commit H(a: int, b: bool); reveal H(a: int, b: bool)
                     B.program(
                         B.join(H),
-                        B.yieldTo(H, listOf(B.dec("a", B.hidden(INT)), B.dec("b", B.hidden(BOOL)))),
-                        B.reveal(H, listOf(B.dec("a", INT), B.dec("b", BOOL)))
+                        B.commitTo(H, listOf(B.i("a"), B.bl("b"))),
+                        B.reveal(H, listOf(B.i("a"), B.bl("b")))
                     )
                 )
                 validReveals.forEach { program ->
@@ -363,7 +366,7 @@ class TypeCheckerTest : FreeSpec({
                 }
             }
 
-            "rejects revealing non-hidden values" {
+            "rejects revealing non-committed values" {
                 val bad = B.program(
                     B.join(H),
                     B.yieldTo(H, listOf(B.i("public"))),
@@ -376,7 +379,7 @@ class TypeCheckerTest : FreeSpec({
             "rejects type mismatches in reveal" {
                 val bad = B.program(
                     B.join(H),
-                    B.yieldTo(H, listOf(B.dec("s", B.hidden(INT)))),
+                    B.commitTo(H, listOf(B.i("s"))),
                     B.reveal(H, listOf(B.bl("s"))) // mismatch: int vs bool
                 )
                 val exception = shouldThrow<StaticError> { typeCheck(bad) }
@@ -826,7 +829,7 @@ class TypeCheckerTest : FreeSpec({
                 types,
                 B.join(Host, deposit = 100),
                 B.join(Guest, deposit = 100),
-                B.yieldTo(Host, listOf(B.dec("car", B.hidden(TypeId("door")))), handler = B.pay(Guest to B.n(200))),
+                B.commitTo(Host, listOf(B.dec("car", TypeId("door"))), handler = B.pay(Guest to B.n(200))),
                 B.yieldTo(
                     Guest, listOf(B.dec("choice", TypeId("door"))),
                     handler = B.pay(Host to B.n(200))

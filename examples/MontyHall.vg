@@ -16,7 +16,7 @@ type door = {0, 1, 2}
 game main() {
   join Host() $ 20;
   join Guest() $ 20;
-  yield Host(car: hidden door) || { Guest -> 40 };
+  commit Host(car: door) || { Guest -> 40 };
   yield Guest(d: door) || { Host -> 40 };
   yield Host(goat: door) where Host.goat != Guest.d || { Guest -> 40 };
   yield Guest(switch: bool) || { Host -> 40 };

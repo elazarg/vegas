@@ -7,7 +7,7 @@ type reserve = {3 .. 7}
 game main() {
   join Seller() $ 100 Buyer() $ 100;
   
-  yield Seller(r: hidden reserve) || { Buyer -> 200 };
+  commit Seller(r: reserve) || { Buyer -> 200 };
   yield Buyer(b: price) || { Seller -> 200 };
   yield Seller(accept: bool) || { Buyer -> 200 };
   reveal Seller(r: reserve);

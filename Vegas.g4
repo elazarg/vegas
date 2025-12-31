@@ -26,8 +26,8 @@ typeExp
     | name=typeId                         # IdTypeExp
     ;
 
-ext : kind=('join' | 'yield' | 'reveal' | 'random') query+ ';' ext  # ReceiveExt
-    | 'withdraw' outcome                                            # WithdrawExt
+ext : kind=('join' | 'yield' | 'reveal' | 'commit' | 'random') query+ ';' ext  # ReceiveExt
+    | 'withdraw' outcome                                                       # WithdrawExt
     ;
 
 query : role=roleId ('(' (decls+=varDec (',' decls+=varDec)*)? ')')? ('$' deposit=INT)? ('where' cond=exp)? ('||' handler=outcome)? ;
@@ -60,7 +60,7 @@ exp
     | 'let!' dec=varDec '=' init=exp 'in' body=exp           # LetExp
     ;
 
-varDec : name=varId ':' hidden='hidden'? type=typeExp;
+varDec : name=varId ':' type=typeExp;
 
 typeId: LOWER_ID ;
 varId : LOWER_ID;

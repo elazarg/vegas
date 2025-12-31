@@ -6,7 +6,7 @@ type door = {0, 1, 2}
 game main() {
   random Host() $ 100;
   join Guest() $ 100;
-  yield Host(car: hidden door);
+  commit Host(car: door);
   yield Guest(d: door) || { Host -> 200 };
   yield Host(goat: door) where Host.goat != Guest.d && Host.goat != Host.car;
   yield Guest(switch: bool) || { Host -> 200 };

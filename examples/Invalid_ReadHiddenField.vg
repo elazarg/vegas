@@ -1,4 +1,4 @@
-// Invalid: B tries to read A's hidden field before it is revealed
+// Invalid: B tries to read A's committed field before it is revealed
 // This is a test case for invalid code that should be rejected by the compiler
 // Distribution semantics: pot (200 wei) - but this code is invalid
 
@@ -7,7 +7,7 @@ type bit = {0, 1}
 game main() {
   join A() $ 100;
   join B() $ 100;
-  yield A(secret: hidden bit);
-  yield B(guess: bit) where B.guess == A.secret;  // ERROR: reads hidden field
+  commit A(secret: bit);
+  yield B(guess: bit) where B.guess == A.secret;  // ERROR: reads committed field
   withdraw { A -> 0; B -> 200 }
 }

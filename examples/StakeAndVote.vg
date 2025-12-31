@@ -4,7 +4,7 @@
 game main() {
   join V1() $ 100 V2() $ 100 Protocol() $ 100;
   
-  yield Protocol(correct: hidden bool);
+  commit Protocol(correct: bool);
   
   yield V1(v: bool) V2(v: bool);
   

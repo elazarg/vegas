@@ -7,7 +7,7 @@ game main() {
   join Alice() $ 10 Bob() $ 10;
 
   // Alice commits to the pre-image (the secret key)
-  yield Alice(secret: hidden int) || { Bob -> 20 };
+  commit Alice(secret: int) || { Bob -> 20 };
 
   // Bob inspects the commitment (abstractly) and funds the contract
   yield Bob(fund: bool) || { Alice -> 20 };

@@ -52,7 +52,6 @@ sealed class Exp : Ast() {
         data class Num(val n: Int) : Const()
         data class Bool(val truth: Boolean) : Const()
         data class Address(val n: Int) : Const()
-        data class Hidden(val value: Const) : Const()
     }
 
     data class Let(val dec: VarDec, val init: Exp, val exp: Exp) : Exp()
@@ -82,7 +81,7 @@ data class MacroParam(
     val type: TypeExp
 ) : Ast()
 
-enum class Kind { JOIN, YIELD, REVEAL, JOIN_CHANCE }
+enum class Kind { JOIN, YIELD, REVEAL, COMMIT, JOIN_CHANCE }
 
 sealed class TypeExp : Ast() {
     object INT : TypeExp(), IntClass
@@ -90,7 +89,9 @@ sealed class TypeExp : Ast() {
     object ADDRESS : TypeExp()
     object EMPTY : TypeExp()
 
+    // Hidden is an internal type created for commit fields - not user-facing syntax
     data class Hidden(val type: TypeExp) : TypeExp()
+
     data class TypeId(val name: String) : TypeExp() {
         override fun toString(): String = name
     }
@@ -169,11 +170,6 @@ internal fun Exp.freeVars(bound: Set<VarId> = emptySet()): Set<VarId> {
                 val b2 = HashSet(b)
                 b2.add(e.dec.v.id)
                 go(e.exp, b2)
-            }
-
-            is Exp.Const.Hidden -> {
-                // hidden(payload) – just recurse into payload
-                go(e.value as Exp, b)
             }
 
             is Exp.Const.Num,
