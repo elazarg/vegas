@@ -4,15 +4,13 @@
 // Payoff structure:
 // - Fair play: Winner gets 9, loser gets 3 (both recover 50% of deposit)
 //   * Winner utility: +3, Loser utility: -3
-// - Quit punishment: Quitter gets 1 (loses 83% of deposit, utility -5)
-//   * Non-quitter gets 11 (utility +5)
-// - Both quit: Split evenly (6 each, no change)
+// - Quit punishment: Quitter forfeits all to survivor (via split handler)
 
 game main() {
   join A() $ 6;
   join B() $ 6;
-  commit A(c: bool) || { B -> 12 };
-  yield B(c: bool) || { A -> 12 };
+  commit or split A(c: bool);
+  yield or split B(c: bool);
   reveal A(c: bool);
   withdraw { A -> (A.c != B.c) ? 9 : 3 ;      // Fair play: winner gets 9, loser gets 3
              B -> (A.c == B.c) ? 9 : 3 }

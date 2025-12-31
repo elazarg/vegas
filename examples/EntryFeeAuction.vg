@@ -11,9 +11,9 @@ macro winningBid(e1: bool, b1: bid, e2: bool, b2: bid): bid =
 game main() {
   join Seller() $ 100 B1() $ 100 B2() $ 100;
   
-  yield B1(enter: bool) B2(enter: bool);
-  yield B1(b: bid);
-  yield B2(b: bid);
+  yield or null B1(enter: bool) B2(enter: bool);
+  yield or null B1(b: bid);
+  yield or null B2(b: bid);
 
   withdraw (B1.enter == null && B2.enter == null) ?
       { Seller -> 100; B1 -> 100; B2 -> 100; }  // Both quit at entry decision

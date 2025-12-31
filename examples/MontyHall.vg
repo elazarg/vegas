@@ -5,9 +5,7 @@
 // - Fair play: Winner gets 40 (all), loser gets 0
 //   * Winner utility: +20, Loser utility: -20
 //   * Note: In this betting game, loser loses entire deposit (no partial recovery)
-// - Quit punishment: Quitter gets 0 (loses 100% of deposit, utility -20)
-//   * Non-quitter gets 40 (utility +20)
-//   * Quitting has same outcome as losing, but triggers abandonment
+// - Quit punishment: Quitter gets 0, non-quitter gets 40 (via split handler)
 //
 // This is a zero-sum betting game where partial deposit recovery doesn't make sense.
 
@@ -16,11 +14,11 @@ type door = {0, 1, 2}
 game main() {
   join Host() $ 20;
   join Guest() $ 20;
-  commit Host(car: door) || { Guest -> 40 };
-  yield Guest(d: door) || { Host -> 40 };
-  yield Host(goat: door) where Host.goat != Guest.d || { Guest -> 40 };
-  yield Guest(switch: bool) || { Host -> 40 };
+  commit or split Host(car: door);
+  yield or split Guest(d: door);
+  yield or split Host(goat: door) where Host.goat != Guest.d;
+  yield or split Guest(switch: bool);
   reveal Host(car: door) where Host.goat != Host.car;
-  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;  // Fair play
+  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;
              Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 0 : 40 }
 }

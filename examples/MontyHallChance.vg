@@ -7,9 +7,9 @@ game main() {
   random Host() $ 100;
   join Guest() $ 100;
   commit Host(car: door);
-  yield Guest(d: door) || { Host -> 200 };
+  yield or split Guest(d: door);
   yield Host(goat: door) where Host.goat != Guest.d && Host.goat != Host.car;
-  yield Guest(switch: bool) || { Host -> 200 };
+  yield or split Guest(switch: bool);
   reveal Host(car: door);
   withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 120 : 80;  Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 80 : 120 }
 }

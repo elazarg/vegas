@@ -8,13 +8,13 @@ type d2 = {1, 3, 4, 5, 9}
 game main() {
   join X() $ 100;
   join O() $ 100;
-  yield X(c1: d1) || { O -> 200 };
-  yield O(c1: d2) where alldiff(X.c1, O.c1) || { X -> 200 };
-  yield X(c2: d) where alldiff(X.c1, O.c1, X.c2) || { O -> 200 };
-  yield O(c2: d) where alldiff(X.c1, O.c1, X.c2, O.c2) || { X -> 200 };
-  yield X(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3) || { O -> 200 };
-  yield O(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3) || { X -> 200 };
-  yield X(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4) || { O -> 200 };
-  yield O(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4, O.c4) || { X -> 200 };
+  yield or split X(c1: d1);
+  yield or split O(c1: d2) where alldiff(X.c1, O.c1);
+  yield or split X(c2: d) where alldiff(X.c1, O.c1, X.c2);
+  yield or split O(c2: d) where alldiff(X.c1, O.c1, X.c2, O.c2);
+  yield or split X(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3);
+  yield or split O(c3: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3);
+  yield or split X(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4);
+  yield or split O(c4: d) where alldiff(X.c1, O.c1, X.c2, O.c2, X.c3, O.c3, X.c4, O.c4);
   withdraw { X -> 100; O -> 100 }
 }

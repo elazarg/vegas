@@ -3,7 +3,7 @@
 
 game main() {
   join S1() $ 100 S2() $ 100;
-  yield S1(useShared: bool) S2(useShared: bool);
+  yield or null S1(useShared: bool) S2(useShared: bool);
   withdraw (S1.useShared == null && S2.useShared == null) ?
       { S1 -> 100; S2 -> 100; }  // Both quit, deposits returned
     : (S1.useShared == null) ?

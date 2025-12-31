@@ -38,33 +38,53 @@ Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : optio
 Module GameProtocol.
 
 Record W0  : Type := {
-  hidden_c_Odd : Hidden bool;
-
 }.
 
 Record W1  : Type := {
-  hidden_c_Even : Hidden bool;
-
 }.
 
 Record W2 
   (w0 : UnlessQuit Odd (@W0))
   (w1 : UnlessQuit Even (@W1))
  : Type := {
-  c_Odd : bool;
+  hidden_c_Odd : Hidden bool;
 
   W2_guard_have_w0 : IsHave w0;
-  W2_guard_reveal : c_Odd = reveal (getHave w0 W2_guard_have_w0).(hidden_c_Odd);
 }.
 
 Record W3 
   (w0 : UnlessQuit Odd (@W0))
   (w1 : UnlessQuit Even (@W1))
  : Type := {
-  c_Even : bool;
+  hidden_c_Even : Hidden bool;
 
   W3_guard_have_w1 : IsHave w1;
-  W3_guard_reveal : c_Even = reveal (getHave w1 W3_guard_have_w1).(hidden_c_Even);
+}.
+
+Record W4 
+  (w0 : UnlessQuit Odd (@W0))
+  (w1 : UnlessQuit Even (@W1))
+  (w2 : UnlessQuit Odd (@W2 w0 w1))
+  (w3 : UnlessQuit Even (@W3 w0 w1))
+ : Type := {
+  c_Odd : bool;
+
+  W4_guard_have_w0 : IsHave w0;
+  W4_guard_have_w2 : IsHave w2;
+  W4_guard_reveal : c_Odd = reveal (getHave w2 W4_guard_have_w2).(hidden_c_Odd);
+}.
+
+Record W5 
+  (w0 : UnlessQuit Odd (@W0))
+  (w1 : UnlessQuit Even (@W1))
+  (w2 : UnlessQuit Odd (@W2 w0 w1))
+  (w3 : UnlessQuit Even (@W3 w0 w1))
+ : Type := {
+  c_Even : bool;
+
+  W5_guard_have_w1 : IsHave w1;
+  W5_guard_have_w3 : IsHave w3;
+  W5_guard_reveal : c_Even = reveal (getHave w3 W5_guard_have_w3).(hidden_c_Even);
 }.
 
 Record ActionDag : Type := {
@@ -72,6 +92,8 @@ Record ActionDag : Type := {
   action1 : @W1;
   action2 : @W2 (@Have _ _ action0) (@Have _ _ action1);
   action3 : @W3 (@Have _ _ action0) (@Have _ _ action1);
+  action4 : @W4 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
+  action5 : @W5 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
 }.
 
 Record EventDag : Type := {
@@ -79,6 +101,8 @@ Record EventDag : Type := {
   event1 : UnlessQuit Even (@W1);
   event2 : UnlessQuit Odd (@W2 event0 event1);
   event3 : UnlessQuit Even (@W3 event0 event1);
+  event4 : UnlessQuit Odd (@W4 event0 event1 event2 event3);
+  event5 : UnlessQuit Even (@W5 event0 event1 event2 event3);
 }.
 
 End GameProtocol.

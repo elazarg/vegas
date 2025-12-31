@@ -24,7 +24,6 @@ private object B {
     // literals
     fun n(i: Int) = Const.Num(i)
     fun b(v: Boolean) = Const.Bool(v)
-    fun addr(i: Int) = Const.Address(i)
 
     // variables / members
     fun v(name: String) = Var(VarId(name))
@@ -33,7 +32,6 @@ private object B {
     fun not(e: Exp) = UnOp("!", e)
     fun isDef(e: Exp) = UnOp("isDefined", e)
     fun isUndef(e: Exp) = UnOp("isUndefined", e)
-    fun abs(e: Exp) = Call(v("abs"), listOf(e))
 
     fun ite(c: Exp, t: Exp, f: Exp) = Exp.Cond(c, t, f)
 
@@ -49,27 +47,22 @@ private object B {
     fun dec(name: String, t: TypeExp) = VarDec(v(name), t)
     fun i(name: String) = VarDec(v(name), INT)
     fun bl(name: String) = VarDec(v(name), BOOL)
-    fun opt(t: TypeExp) = Opt(t)
-    // Hidden is an internal type created by TypeChecker for commit fields
 
     // queries and binds
     private fun q(role: Role, params: List<VarDec> = emptyList(), deposit: Int = 0, where: Exp = b(true), handler: Outcome? = null) =
         Query(role = role, params = params, deposit = n(deposit), where = where, handler = handler)
 
     fun join(role: Role, params: List<VarDec> = emptyList(), deposit: Int = 0, where: Exp = b(true)) =
-        Ext.Bind(Kind.JOIN, listOf(q(role, params, deposit, where)), Ext.Value(Value(emptyMap())))
+        Ext.Bind(Kind.JOIN, listOf(q(role, params, deposit, where)), null, Ext.Value(Value(emptyMap())))
 
     fun yieldTo(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
-        Ext.Bind(Kind.YIELD, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
+        Ext.Bind(Kind.YIELD, listOf(q(role, params, 0, where, handler)), null, Ext.Value(Value(emptyMap())))
 
     fun commitTo(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
-        Ext.Bind(Kind.COMMIT, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
+        Ext.Bind(Kind.COMMIT, listOf(q(role, params, 0, where, handler)), null, Ext.Value(Value(emptyMap())))
 
     fun reveal(role: Role, params: List<VarDec>, where: Exp = b(true), handler: Outcome? = null) =
-        Ext.Bind(Kind.REVEAL, listOf(q(role, params, 0, where, handler)), Ext.Value(Value(emptyMap())))
-
-    fun joinChance(role: Role, where: Exp = b(true)) =
-        Ext.Bind(Kind.JOIN_CHANCE, listOf(q(role, emptyList(), 0, where)), Ext.Value(Value(emptyMap())))
+        Ext.Bind(Kind.REVEAL, listOf(q(role, params, 0, where, handler)), null, Ext.Value(Value(emptyMap())))
 
     // payouts
     fun pay(vararg outs: Pair<Role, Exp>) = Value(mapOf(*outs))
@@ -602,9 +595,10 @@ class TypeCheckerTest : FreeSpec({
         "null checking operators" - {
 
             "isDefined and isUndefined" {
+                // With new semantics: || null handler makes fields nullable, enabling isDefined/isUndefined
                 val program1 = B.program(
                     B.join(P), B.join(Q),
-                    B.yieldTo(P, listOf(B.dec("x", B.opt(INT)))), // <-- make x optional
+                    B.yieldTo(P, listOf(B.i("x")), handler = Null), // || null makes x optional
                     value = Value(
                         mapOf(
                             P to B.ite(B.isDef(B.m(P, "x")), B.n(100), B.n(0)), // int on both branches
@@ -617,7 +611,7 @@ class TypeCheckerTest : FreeSpec({
                 // Cannot return P.opt (opt(int)) as an int payout without an explicit unwrap/default.
                 val program2a = B.program(
                     B.join(P),
-                    B.yieldTo(P, listOf(B.dec("opt", B.opt(INT)))),
+                    B.yieldTo(P, listOf(B.i("opt")), handler = Null), // || null
                     value = B.pay(
                         P to B.ite(B.isUndef(B.m(P, "opt")), B.n(-100), B.n(0)) // both int
                     )
