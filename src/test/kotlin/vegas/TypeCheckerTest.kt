@@ -310,31 +310,45 @@ class TypeCheckerTest : FreeSpec({
 
         "should handle commit declarations (creates hidden fields)" - {
             withData(nameFn = { it.toString() },
-                // join H(); commit H(secret: int)
+                // join H(); commit H(secret: int); reveal H(secret: int)
                 B.program(
                     B.join(H),
-                    B.commitTo(H, listOf(B.i("secret")))
+                    B.commitTo(H, listOf(B.i("secret"))),
+                    B.reveal(H, listOf(B.i("secret")))
                 ),
-                // type door = {0,1,2}; join H(); commit H(car: door)
+                // type door = {0,1,2}; join H(); commit H(car: door); reveal H(car: door)
                 B.program(
                     types = mapOf(TypeId("door") to Subset(setOf(B.n(0), B.n(1), B.n(2)))),
                     B.join(H),
-                    B.commitTo(H, listOf(B.dec("car", TypeId("door"))))
+                    B.commitTo(H, listOf(B.dec("car", TypeId("door")))),
+                    B.reveal(H, listOf(B.dec("car", TypeId("door"))))
                 ),
-                // join H(); commit H(x: int); yield H(y: int)
+                // join H(); commit H(x: int); yield H(y: int); reveal H(x: int)
                 B.program(
                     B.join(H),
                     B.commitTo(H, listOf(B.i("x"))),
-                    B.yieldTo(H, listOf(B.i("y")))
+                    B.yieldTo(H, listOf(B.i("y"))),
+                    B.reveal(H, listOf(B.i("x")))
                 ),
-                // join H(); commit H(a: bool, b: bool)
+                // join H(); commit H(a: bool, b: bool); reveal H(a: bool, b: bool)
                 B.program(
                     B.join(H),
-                    B.commitTo(H, listOf(B.bl("a"), B.bl("b")))
+                    B.commitTo(H, listOf(B.bl("a"), B.bl("b"))),
+                    B.reveal(H, listOf(B.bl("a"), B.bl("b")))
                 )
             ) { prog ->
                 shouldNotThrow<StaticError> { typeCheck(prog) }
             }
+        }
+
+        "should reject commits without corresponding reveals" {
+            val bad = B.program(
+                B.join(H),
+                B.commitTo(H, listOf(B.i("secret")))
+                // missing: B.reveal(H, listOf(B.i("secret")))
+            )
+            val exception = shouldThrow<StaticError> { typeCheck(bad) }
+            exception.message shouldContain "no corresponding reveal"
         }
 
         "should validate reveal operations" - {

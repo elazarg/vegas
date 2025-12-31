@@ -1,0 +1,10 @@
+// Invalid: Reveal of a field that was never committed
+// This should be rejected - you can only reveal what was committed
+
+game main() {
+  join A() $ 100;
+  join B() $ 100;
+  yield A(x: bool);
+  reveal A(x: bool);  // ERROR: x was yielded, not committed
+  withdraw { A -> 100; B -> 100 }
+}

@@ -1,0 +1,10 @@
+// Invalid: Commit without corresponding reveal
+// This should be rejected - commits must eventually be revealed
+
+game main() {
+  join A() $ 100;
+  join B() $ 100;
+  commit A(secret: bool);
+  yield B(guess: bool);
+  withdraw { A -> 100; B -> 100 }
+}
