@@ -11,7 +11,7 @@
 game main() {
   join A() $ 6;
   join B() $ 6;
-  yield A(c: hidden bool) || { B -> 12 };
+  commit A(c: bool) || { B -> 12 };
   yield B(c: bool) || { A -> 12 };
   reveal A(c: bool);
   withdraw { A -> (A.c != B.c) ? 9 : 3 ;      // Fair play: winner gets 9, loser gets 3

@@ -316,7 +316,10 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
             Parameter(
                 name = vardec.v.id,
                 type = lowerType(vardec.type, typeEnv),
-                visible = !isHiddenType(vardec.type)
+                // Visibility is determined by command kind:
+                // - COMMIT: not visible (hidden commitment)
+                // - REVEAL, YIELD, JOIN: visible
+                visible = kind != Kind.COMMIT
             )
         },
         requires = Requirement(
@@ -340,11 +343,6 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
 }
 
 // ========== Type Lowering ==========
-
-private fun isHiddenType(type: AstType): Boolean = when (type) {
-    is AstType.Hidden -> true
-    else -> false
-}
 
 private fun lowerType(type: AstType, typeEnv: Map<AstType.TypeId, AstType>): Type {
     return when (type) {
@@ -443,7 +441,6 @@ private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr
         is AstExpr.Const.Num -> Expr.Const.IntVal(exp.n)
         is AstExpr.Const.Bool -> Expr.Const.BoolVal(exp.truth)
         is AstExpr.Const.Address -> Expr.Const.IntVal(exp.n)
-        is AstExpr.Const.Hidden -> lowerExpr(exp.value, typeEnv)
         AstExpr.Const.UNDEFINED -> error("UNDEFINED should not appear in IR")
 
         // Field references

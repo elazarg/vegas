@@ -46,16 +46,17 @@ private object Pretty {
  * Architecture:
  * 1. **Universe Pass**: Validate type definitions and check for alias cycles.
  * 2. **Macro Pass**: Validate macro signatures and bodies in a pure context (no roles/fields).
- * 3. **Protocol Pass**: Typecheck the game mechanics (Join/Yield/Reveal) and flow.
+ * 3. **Protocol Pass**: Typecheck the game mechanics (Join/Yield/Reveal/Commit) and flow.
  * 4. **IR/DAG Pass**: Compile to IR to validate causal structure (legacy).
  *
  * Key Invariants:
- * - **Hidden Visibility**: `hidden T` is opaque. It is only "opened" (treated as `T`) inside the `where`
- * clause of the owning role. This is enforced by the `View` layer.
+ * - **Commit Visibility**: Fields from `commit` are only visible to the owning role until `reveal`.
+ *   From other players' POV: commit = declaration, reveal = definition, yield = both.
+ * - **Deferred Where**: The `where` clause on `commit` is stored and checked at `reveal` time.
  * - **Optionality as Quit State**: The type `opt T` does not mean "nullable" in the general programming
  * sense. It specifically means "this value might be missing because the actor Quit".
- * - `YIELD` without a handler produces `opt T` (unsafe).
- * - `YIELD` with a handler produces `T` (safe).
+ * - `YIELD`/`COMMIT` without a handler produces `opt T` (unsafe).
+ * - `YIELD`/`COMMIT` with a handler produces `T` (safe).
  * - `JOIN` always produces `T` (cannot quit from join).
  */
 fun typeCheck(program: GameAst) {
@@ -155,7 +156,7 @@ internal class TypeUniverse(
     fun validateValueAnnotationType(t: TypeExp, node: Ast) {
         fun go(x: TypeExp) {
             when (resolve(x)) {
-                is Hidden -> throw StaticError("'hidden' is only allowed on action parameters", node)
+                is Hidden -> throw StaticError("'hidden' is internal-only; use 'commit' command instead", node)
                 is Opt -> throw StaticError("'opt' is internal-only (quit optionality); not allowed in annotations", node)
                 is TypeId -> {} // already validated by validateDefined
                 else -> {}
@@ -295,10 +296,6 @@ internal class ExprTyper(
         is Exp.Const.Num -> Subset(setOf(e))
         is Exp.Const.Bool -> BOOL
         is Exp.Const.Address -> ADDRESS
-
-        is Exp.Const.Hidden -> {
-            throw StaticError("Hidden literals are not supported in expressions. They are only valid as action parameters.", e)
-        }
 
         is Exp.Var -> view.vars[e.id] ?: throw StaticError("Variable '${e.id.name}' is undefined", e)
 
@@ -600,6 +597,7 @@ internal class ProtocolTyper(
                     val role = q.role.id
                     val isJoin = ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE
                     val isReveal = ext.kind == Kind.REVEAL
+                    val isCommit = ext.kind == Kind.COMMIT
 
                     if (isJoin) roles2 += role
                     else if (role !in roles2) throw StaticError("$role is not a role", q.role)
@@ -614,6 +612,12 @@ internal class ProtocolTyper(
                             }
                             // Reveal preserves previous structure (opt hidden T -> opt T)
                             isReveal -> revealTypeOf(fr, tRaw, st.fields, q)
+                            // Commit wraps in Hidden (internally) - creates the commitment
+                            isCommit -> {
+                                val base = universe.resolve(tRaw)
+                                // Commit with handler guarantees presence, otherwise Opt
+                                if (q.handler != null) Hidden(base) else Opt(Hidden(base))
+                            }
                             // Yield with handler guarantees presence (non-nullable)
                             q.handler != null -> stripOpt(universe.resolve(tRaw))
                             // Yield without handler is nullable (Opt T)
@@ -625,6 +629,7 @@ internal class ProtocolTyper(
                     checkWhere(q, st.copy(roles = roles2), m)
 
                     // Handler Policy B: Handlers can read all currently visible fields
+                    // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal
                     if (!isJoin && !isReveal) checkHandler(q, roles2, st.fields)
 
                     deltaMaps += m

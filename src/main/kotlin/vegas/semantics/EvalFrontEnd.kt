@@ -67,7 +67,7 @@ fun eval(exp: Exp, env: Env<Const>): Const {
             eval(e.exp, env + (e.dec.v.id to v))
         }
 
-        is Num, is Bool, is Hidden, is Address -> e
+        is Num, is Bool, is Address -> e
         UNDEFINED -> UNDEFINED
     }
 

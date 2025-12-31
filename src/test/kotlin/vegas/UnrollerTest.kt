@@ -421,7 +421,7 @@ class UnrollerTest : FreeSpec({
             val code = """
                 join Alice() $ 100;
                 join Bob() $ 100;
-                yield Alice(secret: hidden bool);
+                commit Alice(secret: bool);
                 yield Bob(guess: bool);
                 withdraw (Alice.secret == Bob.guess)
                     ? { Alice -> 0; Bob -> 20 }

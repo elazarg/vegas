@@ -70,7 +70,7 @@ join Alice() $ 100;
 join Bob() $ 100;
 
 // Alice commits a secret (hidden)
-yield Alice(secret: hidden bool);
+commit Alice(secret: bool);
 
 // Bob tries to respond, but cannot see Alice's secret
 // Bob should only be able to quit
@@ -92,10 +92,10 @@ join Alice() $ 100;
 join Bob() $ 100;
 
 // Alice commits x (hidden)
-yield Alice(x: hidden bool);
+commit Alice(x: bool);
 
 // Alice commits y - can condition on x because Alice sees her own commits
-yield Alice(y: hidden bool);
+commit Alice(y: bool);
 
 // Bob acts
 yield Bob(z: bool);
@@ -167,7 +167,7 @@ join Bob() $ 100;
 yield Alice(x: bool);
 
 // Alice's second write - hidden (overwrites with COMMIT visibility)
-yield Alice(x: hidden bool);
+commit Alice(x: bool);
 
 // Bob tries to use Alice.x
 // Since Alice's ACTUAL write is hidden, Bob should not see it

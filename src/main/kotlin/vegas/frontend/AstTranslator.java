@@ -299,6 +299,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
             case "join" -> Kind.JOIN;
             case "yield" -> Kind.YIELD;
             case "reveal" -> Kind.REVEAL;
+            case "commit" -> Kind.COMMIT;
             case "random" -> Kind.JOIN_CHANCE;
             default -> throw new AssertionError();
         };
@@ -306,7 +307,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     private VarDec vardec(VarDecContext ctx) {
         TypeExp type = type(ctx);
-        return new VarDec(var(ctx.varId()), (ctx.hidden != null) ? withSpan(new TypeExp.Hidden(type), ctx.typeExp()) : type);
+        return new VarDec(var(ctx.varId()), type);
     }
 
     private TypeExp type(VarDecContext ctx) {

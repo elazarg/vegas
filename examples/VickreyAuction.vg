@@ -17,9 +17,9 @@ game main() {
 
   // Bids are hidden to prevent price matching/adjusting
   // Sequential yields with handlers - if a bidder quits, they forfeit their deposit to Seller
-  yield B1(b: hidden bid) || { Seller -> 200; B2 -> 100; B3 -> 100 };
-  yield B2(b: hidden bid) || { Seller -> 200; B1 -> 100; B3 -> 100 };
-  yield B3(b: hidden bid) || { Seller -> 200; B1 -> 100; B2 -> 100 };
+  commit B1(b: bid) || { Seller -> 200; B2 -> 100; B3 -> 100 };
+  commit B2(b: bid) || { Seller -> 200; B1 -> 100; B3 -> 100 };
+  commit B3(b: bid) || { Seller -> 200; B1 -> 100; B2 -> 100 };
 
   reveal B1(b: bid);
   reveal B2(b: bid);

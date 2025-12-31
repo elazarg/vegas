@@ -7,7 +7,7 @@ type bid = {0 .. 8}
 game main() {
   join Miner() $ 100 Client() $ 100;
   
-  yield Miner(t: hidden thr) || { Client -> 200 };
+  commit Miner(t: thr) || { Client -> 200 };
   yield Client(b: bid) || { Miner -> 200 };
   yield Miner(accept: bool) || { Client -> 200 };
   reveal Miner(t: thr);

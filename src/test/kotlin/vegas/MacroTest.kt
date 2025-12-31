@@ -266,12 +266,14 @@ class MacroTest : FreeSpec({
             inlined.macros.size shouldBe 0
         }
 
-        "macros with hidden values in expressions" {
+        "macros with commit-reveal patterns" {
             val code = """
                 type num = {1..5}
                 macro addBonus(x: int, bonus: int): int = x + bonus;
-                join A(secret: hidden num) $ 100;
+                join A() $ 100;
                 join B(public: num) $ 100;
+                commit A(secret: num);
+                reveal A(secret: num);
                 withdraw {
                     A -> addBonus(B.public, 10);
                     B -> addBonus(B.public, 5);

@@ -37,7 +37,7 @@ game main() {
   
   // Host hides the car (compiler generates commitment);
   // if Host does not play, Guest gets the entire pot
-  yield Host(car: hidden door) || { Guest -> 40 };
+  commit Host(car: door) || { Guest -> 40 };
   
   // Guest makes a public choice
   yield Guest(d: door) || { Host -> 40 };
