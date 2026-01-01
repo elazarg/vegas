@@ -29,6 +29,8 @@ fun generateVyper(contract: EvmContract): String {
         // Add timeout infrastructure
         appendLine("TIMEOUT: constant(uint256) = $TIMEOUT_SECONDS  # 24 hours in seconds")
         appendLine("bailed: HashMap[Role, bool]")
+        // Commitment tag for role/actor-bound commit-reveal (computed at deploy time)
+        appendLine("COMMIT_TAG: immutable(bytes32)")
         if (contract.storage.isNotEmpty()) appendLine()
 
         // Constructor
@@ -88,11 +90,12 @@ private fun StringBuilder.renderStorage(s: EvmStorageSlot) {
 }
 
 private fun StringBuilder.renderConstructor(init: List<EvmStmt>) {
-    appendLine("@external")
+    appendLine("@deploy")
     appendLine("def __init__():")
     indent {
-        if (init.isEmpty()) appendLine("pass")
-        else init.forEach { renderStmt(it) }
+        // Initialize commit tag (computed at deploy time, verifiable from source)
+        appendLine("COMMIT_TAG = keccak256(\"VEGAS_COMMIT_V1\")")
+        init.forEach { renderStmt(it) }
     }
 }
 
@@ -187,18 +190,20 @@ private fun StringBuilder.renderCheckTimestampHelper() {
 
 private fun needsCheckReveal(c: EvmContract): Boolean {
     return c.actions.any { a ->
-        a.body.any { it is ExprStmt && it.expr is Call && it.expr.func == "_checkReveal" }
+        a.body.any { it is CheckReveal }
     }
 }
 
 private fun StringBuilder.renderCheckRevealHelper() {
-    // Helper to check commitment-reveal scheme
-    // Matches Solidity: _checkReveal(bytes32 commitment, bytes memory preimage)
+    // Helper to check commitment-reveal scheme with role/actor binding
+    // Binds commitment to (COMMIT_TAG, contract instance, role, actor, payload hash)
+    // This prevents mirroring attacks where one player reuses another's commitment
     appendLine("@internal")
     appendLine("@view")
-    appendLine("def _checkReveal(commitment: bytes32, preimage: Bytes[128]):")
+    appendLine("def _checkReveal(commitment: bytes32, role: Role, actor: address, payload: Bytes[256]):")
     indent {
-        appendLine("assert keccak256(preimage) == commitment, \"bad reveal\"")
+        appendLine("expected: bytes32 = keccak256(_abi_encode(COMMIT_TAG, self, role, actor, keccak256(payload)))")
+        appendLine("assert expected == commitment, \"bad reveal\"")
     }
 }
 
@@ -235,6 +240,12 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("if payout > 0:")
             appendLine("    success: bool = raw_call(${renderExpr(stmt.to)}, b\"\", value=convert(payout, uint256), revert_on_failure=False)")
             appendLine("    assert success, \"ETH send failed\"")
+        }
+        is CheckReveal -> {
+            // Verify commitment with role/actor binding to prevent copy-commit attacks
+            // Actor is always msg.sender (enforced by type system)
+            val payload = stmt.payload.joinToString(", ") { renderExpr(it) }
+            appendLine("self._checkReveal(${renderExpr(stmt.commitment)}, Role.${stmt.role.name}, msg.sender, _abi_encode($payload))")
         }
     }
 }

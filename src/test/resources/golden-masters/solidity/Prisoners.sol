@@ -69,9 +69,22 @@ contract Prisoners {
         _;
     }
     
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
+    bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+    
+    function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            COMMIT_TAG,
+            address(this),
+            role,
+            actor,
+            keccak256(payload)
+        ));
     }
+    
+    function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+        require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+    }
+    
     
     constructor() {
         lastTs = block.timestamp;
@@ -104,18 +117,18 @@ contract Prisoners {
     }
     
     function move_A_3(bool _c, uint256 _salt) public by(Role.A) action(Role.A, 4) depends(Role.B, 1) depends(Role.A, 3) depends(Role.B, 5) {
-        require((keccak256(abi.encodePacked(_c, _salt)) == A_c_hidden), "reveal failed for c");
+        _checkReveal(A_c_hidden, Role.A, msg.sender, abi.encode(_c, _salt));
         A_c = _c;
         done_A_c = true;
     }
     
     function move_B_5(bool _c, uint256 _salt) public by(Role.B) action(Role.B, 6) depends(Role.B, 1) depends(Role.A, 3) depends(Role.B, 5) {
-        require((keccak256(abi.encodePacked(_c, _salt)) == B_c_hidden), "reveal failed for c");
+        _checkReveal(B_c_hidden, Role.B, msg.sender, abi.encode(_c, _salt));
         B_c = _c;
         done_B_c = true;
     }
     
-    function withdraw_A() public by(Role.A) action(Role.A, 6) depends(Role.A, 4) depends(Role.B, 6) {
+    function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) depends(Role.B, 6) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
         int256 payout = ((done_A_c && done_B_c) ? ((A_c && B_c) ? 100 : ((A_c && (!B_c)) ? 0 : (((!A_c) && B_c) ? 200 : 90))) : ((!done_A_c) ? 0 : 200));
