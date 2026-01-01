@@ -727,7 +727,7 @@ class MacroIRTest : FreeSpec({
 
                 join A() $ 100;
                 join B() $ 100;
-                yield A(c: bool) B(c: bool);
+                yield or null A(c: bool) B(c: bool);
                 withdraw (A.c != null && B.c != null)
                 ?( { A -> prisonerPayoff(A.c, B.c); B -> prisonerPayoff(B.c, A.c) })
                 :(A.c == null) ? { A -> -100; B -> 10 }
@@ -737,7 +737,7 @@ class MacroIRTest : FreeSpec({
             val withoutMacros = """
                 join A() $ 100;
                 join B() $ 100;
-                yield A(c: bool) B(c: bool);
+                yield or null A(c: bool) B(c: bool);
                 withdraw (A.c != null && B.c != null)
                 ?(  (A.c && B.c )   ? { A -> -2; B -> -2 }
                     : (A.c && !B.c) ? { A ->  0; B -> -3 }
@@ -771,7 +771,7 @@ class MacroIRTest : FreeSpec({
                 macro oddPayoff(even: bool, odd: bool): int = (even <-> odd) ? -10 : 10;
 
                 join Odd() $ 100 Even() $ 100;
-                yield Odd(c: bool) Even(c: bool);
+                yield or null Odd(c: bool) Even(c: bool);
                 withdraw (Even.c != null && Odd.c != null) ?
                      { Even -> evenPayoff(Even.c, Odd.c); Odd -> oddPayoff(Even.c, Odd.c) }
                 : (Even.c == null && Odd.c != null) ? { Even -> -100; Odd -> 10 }
@@ -780,7 +780,7 @@ class MacroIRTest : FreeSpec({
 
             val withoutMacros = """
                 join Odd() $ 100 Even() $ 100;
-                yield Odd(c: bool) Even(c: bool);
+                yield or null Odd(c: bool) Even(c: bool);
                 withdraw (Even.c != null && Odd.c != null) ?
                      { Even -> ((Even.c <-> Odd.c) ? 10 : -10); Odd -> ((Even.c <-> Odd.c) ? -10 : 10) }
                 : (Even.c == null && Odd.c != null) ? { Even -> -100; Odd -> 10 }

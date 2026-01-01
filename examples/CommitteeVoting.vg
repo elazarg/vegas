@@ -7,7 +7,9 @@ game main() {
   join Chair() $ 100 M1() $ 100 M2() $ 100;
   
   yield Chair(p: bool) || { M1 -> 150; M2 -> 150 };
-  yield M1(v: bool) M2(v: bool);
+  yield or null
+    M1(v: bool)
+    M2(v: bool);
 
   withdraw (M1.v == null && M2.v == null) ?
       { Chair -> 100; M1 -> 100; M2 -> 100; }  // Both members quit

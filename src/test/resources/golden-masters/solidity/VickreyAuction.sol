@@ -10,12 +10,12 @@ contract VickreyAuction {
     uint256 constant public ACTION_B2_0 = 1;
     uint256 constant public ACTION_B3_0 = 2;
     uint256 constant public ACTION_Seller_0 = 3;
-    uint256 constant public ACTION_B1_1 = 4;
-    uint256 constant public ACTION_B2_2 = 5;
-    uint256 constant public ACTION_B3_3 = 6;
-    uint256 constant public ACTION_B1_4 = 7;
-    uint256 constant public ACTION_B2_5 = 8;
-    uint256 constant public ACTION_B3_6 = 9;
+    uint256 constant public ACTION_B1_2 = 4;
+    uint256 constant public ACTION_B1_3 = 5;
+    uint256 constant public ACTION_B2_4 = 6;
+    uint256 constant public ACTION_B2_5 = 7;
+    uint256 constant public ACTION_B3_6 = 8;
+    uint256 constant public ACTION_B3_7 = 9;
     mapping(address => Role) public roles;
     address public address_Seller;
     address public address_B1;
@@ -136,78 +136,78 @@ contract VickreyAuction {
         done_B3 = true;
     }
     
-    function move_B1_4(bytes32 _hidden_b) public by(Role.B1) action(Role.B1, 1) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
+    function move_B1_4(bytes32 _hidden_b) public by(Role.B1) action(Role.B1, 2) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
         B1_b_hidden = _hidden_b;
         done_B1_b_hidden = true;
     }
     
-    function move_B2_5(bytes32 _hidden_b) public by(Role.B2) action(Role.B2, 2) depends(Role.B1, 1) {
+    function move_B2_6(bytes32 _hidden_b) public by(Role.B2) action(Role.B2, 4) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
         B2_b_hidden = _hidden_b;
         done_B2_b_hidden = true;
     }
     
-    function move_B3_6(bytes32 _hidden_b) public by(Role.B3) action(Role.B3, 3) depends(Role.B2, 2) {
+    function move_B3_8(bytes32 _hidden_b) public by(Role.B3) action(Role.B3, 6) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
         B3_b_hidden = _hidden_b;
         done_B3_b_hidden = true;
     }
     
-    function move_B1_7(int256 _b, uint256 _salt) public by(Role.B1) action(Role.B1, 4) depends(Role.B1, 1) depends(Role.B3, 3) {
+    function move_B1_5(int256 _b, uint256 _salt) public by(Role.B1) action(Role.B1, 3) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
         require((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) || (_b == 1)) || (_b == 2)) || (_b == 3)) || (_b == 4)) || (_b == 5)) || (_b == 6)) || (_b == 7)) || (_b == 8)) || (_b == 9)) || (_b == 10)) || (_b == 11)) || (_b == 12)) || (_b == 13)) || (_b == 14)) || (_b == 15)) || (_b == 16)) || (_b == 17)) || (_b == 18)) || (_b == 19)) || (_b == 20)) || (_b == 21)) || (_b == 22)) || (_b == 23)) || (_b == 24)) || (_b == 25)) || (_b == 26)) || (_b == 27)) || (_b == 28)) || (_b == 29)) || (_b == 30)) || (_b == 31)) || (_b == 32)) || (_b == 33)) || (_b == 34)) || (_b == 35)) || (_b == 36)) || (_b == 37)) || (_b == 38)) || (_b == 39)) || (_b == 40)) || (_b == 41)) || (_b == 42)) || (_b == 43)) || (_b == 44)) || (_b == 45)) || (_b == 46)) || (_b == 47)) || (_b == 48)) || (_b == 49)) || (_b == 50)) || (_b == 51)) || (_b == 52)) || (_b == 53)) || (_b == 54)) || (_b == 55)) || (_b == 56)) || (_b == 57)) || (_b == 58)) || (_b == 59)) || (_b == 60)) || (_b == 61)) || (_b == 62)) || (_b == 63)) || (_b == 64)) || (_b == 65)) || (_b == 66)) || (_b == 67)) || (_b == 68)) || (_b == 69)) || (_b == 70)) || (_b == 71)) || (_b == 72)) || (_b == 73)) || (_b == 74)) || (_b == 75)) || (_b == 76)) || (_b == 77)) || (_b == 78)) || (_b == 79)) || (_b == 80)) || (_b == 81)) || (_b == 82)) || (_b == 83)) || (_b == 84)) || (_b == 85)) || (_b == 86)) || (_b == 87)) || (_b == 88)) || (_b == 89)) || (_b == 90)) || (_b == 91)) || (_b == 92)) || (_b == 93)) || (_b == 94)) || (_b == 95)) || (_b == 96)) || (_b == 97)) || (_b == 98)) || (_b == 99)) || (_b == 100)), "domain");
         _checkReveal(B1_b_hidden, Role.B1, msg.sender, abi.encode(_b, _salt));
         B1_b = _b;
         done_B1_b = true;
     }
     
-    function move_B2_8(int256 _b, uint256 _salt) public by(Role.B2) action(Role.B2, 5) depends(Role.B2, 2) depends(Role.B1, 4) {
+    function move_B2_7(int256 _b, uint256 _salt) public by(Role.B2) action(Role.B2, 5) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
         require((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) || (_b == 1)) || (_b == 2)) || (_b == 3)) || (_b == 4)) || (_b == 5)) || (_b == 6)) || (_b == 7)) || (_b == 8)) || (_b == 9)) || (_b == 10)) || (_b == 11)) || (_b == 12)) || (_b == 13)) || (_b == 14)) || (_b == 15)) || (_b == 16)) || (_b == 17)) || (_b == 18)) || (_b == 19)) || (_b == 20)) || (_b == 21)) || (_b == 22)) || (_b == 23)) || (_b == 24)) || (_b == 25)) || (_b == 26)) || (_b == 27)) || (_b == 28)) || (_b == 29)) || (_b == 30)) || (_b == 31)) || (_b == 32)) || (_b == 33)) || (_b == 34)) || (_b == 35)) || (_b == 36)) || (_b == 37)) || (_b == 38)) || (_b == 39)) || (_b == 40)) || (_b == 41)) || (_b == 42)) || (_b == 43)) || (_b == 44)) || (_b == 45)) || (_b == 46)) || (_b == 47)) || (_b == 48)) || (_b == 49)) || (_b == 50)) || (_b == 51)) || (_b == 52)) || (_b == 53)) || (_b == 54)) || (_b == 55)) || (_b == 56)) || (_b == 57)) || (_b == 58)) || (_b == 59)) || (_b == 60)) || (_b == 61)) || (_b == 62)) || (_b == 63)) || (_b == 64)) || (_b == 65)) || (_b == 66)) || (_b == 67)) || (_b == 68)) || (_b == 69)) || (_b == 70)) || (_b == 71)) || (_b == 72)) || (_b == 73)) || (_b == 74)) || (_b == 75)) || (_b == 76)) || (_b == 77)) || (_b == 78)) || (_b == 79)) || (_b == 80)) || (_b == 81)) || (_b == 82)) || (_b == 83)) || (_b == 84)) || (_b == 85)) || (_b == 86)) || (_b == 87)) || (_b == 88)) || (_b == 89)) || (_b == 90)) || (_b == 91)) || (_b == 92)) || (_b == 93)) || (_b == 94)) || (_b == 95)) || (_b == 96)) || (_b == 97)) || (_b == 98)) || (_b == 99)) || (_b == 100)), "domain");
         _checkReveal(B2_b_hidden, Role.B2, msg.sender, abi.encode(_b, _salt));
         B2_b = _b;
         done_B2_b = true;
     }
     
-    function move_B3_9(int256 _b, uint256 _salt) public by(Role.B3) action(Role.B3, 6) depends(Role.B3, 3) depends(Role.B2, 5) {
+    function move_B3_9(int256 _b, uint256 _salt) public by(Role.B3) action(Role.B3, 7) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
         require((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) || (_b == 1)) || (_b == 2)) || (_b == 3)) || (_b == 4)) || (_b == 5)) || (_b == 6)) || (_b == 7)) || (_b == 8)) || (_b == 9)) || (_b == 10)) || (_b == 11)) || (_b == 12)) || (_b == 13)) || (_b == 14)) || (_b == 15)) || (_b == 16)) || (_b == 17)) || (_b == 18)) || (_b == 19)) || (_b == 20)) || (_b == 21)) || (_b == 22)) || (_b == 23)) || (_b == 24)) || (_b == 25)) || (_b == 26)) || (_b == 27)) || (_b == 28)) || (_b == 29)) || (_b == 30)) || (_b == 31)) || (_b == 32)) || (_b == 33)) || (_b == 34)) || (_b == 35)) || (_b == 36)) || (_b == 37)) || (_b == 38)) || (_b == 39)) || (_b == 40)) || (_b == 41)) || (_b == 42)) || (_b == 43)) || (_b == 44)) || (_b == 45)) || (_b == 46)) || (_b == 47)) || (_b == 48)) || (_b == 49)) || (_b == 50)) || (_b == 51)) || (_b == 52)) || (_b == 53)) || (_b == 54)) || (_b == 55)) || (_b == 56)) || (_b == 57)) || (_b == 58)) || (_b == 59)) || (_b == 60)) || (_b == 61)) || (_b == 62)) || (_b == 63)) || (_b == 64)) || (_b == 65)) || (_b == 66)) || (_b == 67)) || (_b == 68)) || (_b == 69)) || (_b == 70)) || (_b == 71)) || (_b == 72)) || (_b == 73)) || (_b == 74)) || (_b == 75)) || (_b == 76)) || (_b == 77)) || (_b == 78)) || (_b == 79)) || (_b == 80)) || (_b == 81)) || (_b == 82)) || (_b == 83)) || (_b == 84)) || (_b == 85)) || (_b == 86)) || (_b == 87)) || (_b == 88)) || (_b == 89)) || (_b == 90)) || (_b == 91)) || (_b == 92)) || (_b == 93)) || (_b == 94)) || (_b == 95)) || (_b == 96)) || (_b == 97)) || (_b == 98)) || (_b == 99)) || (_b == 100)), "domain");
         _checkReveal(B3_b_hidden, Role.B3, msg.sender, abi.encode(_b, _salt));
         B3_b = _b;
         done_B3_b = true;
     }
     
-    function withdraw_B2() public by(Role.B2) action(Role.B2, 6) depends(Role.B3, 6) {
-        require((!claimed_B2), "already claimed");
-        claimed_B2 = true;
-        int256 payout = ((!done_B1_b) ? 100 : ((!done_B2_b) ? 0 : ((!done_B3_b) ? 100 : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100))));
-        if (payout > 0) {
-            (bool ok, ) = payable(address_B2).call{value: uint256(payout)}("");
-            require(ok, "ETH send failed");
-        }
-    }
-    
-    function withdraw_B3() public by(Role.B3) action(Role.B3, 7) depends(Role.B3, 6) {
-        require((!claimed_B3), "already claimed");
-        claimed_B3 = true;
-        int256 payout = ((!done_B1_b) ? 100 : ((!done_B2_b) ? 100 : ((!done_B3_b) ? 0 : ((B3_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100))));
-        if (payout > 0) {
-            (bool ok, ) = payable(address_B3).call{value: uint256(payout)}("");
-            require(ok, "ETH send failed");
-        }
-    }
-    
-    function withdraw_Seller() public by(Role.Seller) action(Role.Seller, 1) depends(Role.B3, 6) {
+    function withdraw_Seller() public by(Role.Seller) action(Role.Seller, 1) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
         require((!claimed_Seller), "already claimed");
         claimed_Seller = true;
-        int256 payout = ((!done_B1_b) ? 200 : ((!done_B2_b) ? 200 : ((!done_B3_b) ? 200 : (100 + ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))))));
+        int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (true ? (100 + (((((true ? 0 : 100) + (done_B1_b ? 0 : 100)) + (done_B2_b ? 0 : 100)) + (done_B3_b ? 0 : 100)) / ((((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) > 0) ? ((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) : 1))) : 0) : (100 + ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))));
         if (payout > 0) {
             (bool ok, ) = payable(address_Seller).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
         }
     }
     
-    function withdraw_B1() public by(Role.B1) action(Role.B1, 5) depends(Role.B3, 6) {
+    function withdraw_B1() public by(Role.B1) action(Role.B1, 4) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
         require((!claimed_B1), "already claimed");
         claimed_B1 = true;
-        int256 payout = ((!done_B1_b) ? 0 : ((!done_B2_b) ? 100 : ((!done_B3_b) ? 100 : ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100))));
+        int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B1_b ? (100 + (((((true ? 0 : 100) + (done_B1_b ? 0 : 100)) + (done_B2_b ? 0 : 100)) + (done_B3_b ? 0 : 100)) / ((((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) > 0) ? ((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) : 1))) : 0) : ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100));
         if (payout > 0) {
             (bool ok, ) = payable(address_B1).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
+    }
+    
+    function withdraw_B2() public by(Role.B2) action(Role.B2, 6) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+        require((!claimed_B2), "already claimed");
+        claimed_B2 = true;
+        int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B2_b ? (100 + (((((true ? 0 : 100) + (done_B1_b ? 0 : 100)) + (done_B2_b ? 0 : 100)) + (done_B3_b ? 0 : 100)) / ((((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) > 0) ? ((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) : 1))) : 0) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_B2).call{value: uint256(payout)}("");
+            require(ok, "ETH send failed");
+        }
+    }
+    
+    function withdraw_B3() public by(Role.B3) action(Role.B3, 8) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+        require((!claimed_B3), "already claimed");
+        claimed_B3 = true;
+        int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B3_b ? (100 + (((((true ? 0 : 100) + (done_B1_b ? 0 : 100)) + (done_B2_b ? 0 : 100)) + (done_B3_b ? 0 : 100)) / ((((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) > 0) ? ((((true ? 1 : 0) + (done_B1_b ? 1 : 0)) + (done_B2_b ? 1 : 0)) + (done_B3_b ? 1 : 0)) : 1))) : 0) : ((B3_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (100 - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : 100));
+        if (payout > 0) {
+            (bool ok, ) = payable(address_B3).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
         }
     }

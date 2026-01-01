@@ -7,7 +7,7 @@ game main() {
   join Issuer() $ 12;
   join Alice() $ 12;
   join Bob() $ 12;
-  yield Issuer(c: choice) Alice(c: choice) Bob(c: choice);
+  yield or null Issuer(c: choice) Alice(c: choice) Bob(c: choice);
   
   withdraw (Alice.c != null && Bob.c != null && Issuer.c != null)
        ? ((Alice.c == Bob.c)

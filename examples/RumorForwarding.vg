@@ -5,7 +5,7 @@ game main() {
   join A() $ 100 B() $ 100 C() $ 100;
   
   yield A(send: bool) || { B -> 150; C -> 150 };
-  yield B(forward: bool) C(forward: bool) where A.send;
+  yield or null B(forward: bool) C(forward: bool) where A.send;
 
   withdraw !A.send ?
       { A -> 100; B -> 100; C -> 100; }  // No rumor, deposits returned

@@ -70,7 +70,6 @@ Record W5
   (w1 : UnlessQuit B1 (@W1))
   (w2 : UnlessQuit B2 (@W2))
   (w3 : UnlessQuit B3 (@W3))
-  (w4 : UnlessQuit B1 (@W4 w0 w1 w2 w3))
  : Type := {
   hidden_b_B2 : Hidden Z;
 
@@ -83,8 +82,6 @@ Record W6
   (w1 : UnlessQuit B1 (@W1))
   (w2 : UnlessQuit B2 (@W2))
   (w3 : UnlessQuit B3 (@W3))
-  (w4 : UnlessQuit B1 (@W4 w0 w1 w2 w3))
-  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3 w4))
  : Type := {
   hidden_b_B3 : Hidden Z;
 
@@ -98,8 +95,8 @@ Record W7
   (w2 : UnlessQuit B2 (@W2))
   (w3 : UnlessQuit B3 (@W3))
   (w4 : UnlessQuit B1 (@W4 w0 w1 w2 w3))
-  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3 w4))
-  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3 w4 w5))
+  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3))
+  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3))
  : Type := {
   b_B1 : Z;
 
@@ -115,9 +112,8 @@ Record W8
   (w2 : UnlessQuit B2 (@W2))
   (w3 : UnlessQuit B3 (@W3))
   (w4 : UnlessQuit B1 (@W4 w0 w1 w2 w3))
-  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3 w4))
-  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3 w4 w5))
-  (w7 : UnlessQuit B1 (@W7 w0 w1 w2 w3 w4 w5 w6))
+  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3))
+  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3))
  : Type := {
   b_B2 : Z;
 
@@ -133,10 +129,8 @@ Record W9
   (w2 : UnlessQuit B2 (@W2))
   (w3 : UnlessQuit B3 (@W3))
   (w4 : UnlessQuit B1 (@W4 w0 w1 w2 w3))
-  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3 w4))
-  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3 w4 w5))
-  (w7 : UnlessQuit B1 (@W7 w0 w1 w2 w3 w4 w5 w6))
-  (w8 : UnlessQuit B2 (@W8 w0 w1 w2 w3 w4 w5 w6 w7))
+  (w5 : UnlessQuit B2 (@W5 w0 w1 w2 w3))
+  (w6 : UnlessQuit B3 (@W6 w0 w1 w2 w3))
  : Type := {
   b_B3 : Z;
 
@@ -152,11 +146,11 @@ Record ActionDag : Type := {
   action2 : @W2;
   action3 : @W3;
   action4 : @W4 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
-  action5 : @W5 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4);
-  action6 : @W6 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5);
+  action5 : @W5 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
+  action6 : @W6 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
   action7 : @W7 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5) (@Have _ _ action6);
-  action8 : @W8 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5) (@Have _ _ action6) (@Have _ _ action7);
-  action9 : @W9 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5) (@Have _ _ action6) (@Have _ _ action7) (@Have _ _ action8);
+  action8 : @W8 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5) (@Have _ _ action6);
+  action9 : @W9 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4) (@Have _ _ action5) (@Have _ _ action6);
 }.
 
 Record EventDag : Type := {
@@ -165,11 +159,11 @@ Record EventDag : Type := {
   event2 : UnlessQuit B2 (@W2);
   event3 : UnlessQuit B3 (@W3);
   event4 : UnlessQuit B1 (@W4 event0 event1 event2 event3);
-  event5 : UnlessQuit B2 (@W5 event0 event1 event2 event3 event4);
-  event6 : UnlessQuit B3 (@W6 event0 event1 event2 event3 event4 event5);
+  event5 : UnlessQuit B2 (@W5 event0 event1 event2 event3);
+  event6 : UnlessQuit B3 (@W6 event0 event1 event2 event3);
   event7 : UnlessQuit B1 (@W7 event0 event1 event2 event3 event4 event5 event6);
-  event8 : UnlessQuit B2 (@W8 event0 event1 event2 event3 event4 event5 event6 event7);
-  event9 : UnlessQuit B3 (@W9 event0 event1 event2 event3 event4 event5 event6 event7 event8);
+  event8 : UnlessQuit B2 (@W8 event0 event1 event2 event3 event4 event5 event6);
+  event9 : UnlessQuit B3 (@W9 event0 event1 event2 event3 event4 event5 event6);
 }.
 
 End GameProtocol.

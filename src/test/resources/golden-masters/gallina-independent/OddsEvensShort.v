@@ -41,33 +41,49 @@ Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : optio
 Module GameProtocol.
 
 Record W0  : Type := {
-  hidden_c_Odd : Hidden bool;
-
 }.
 
 Record W1  : Type := {
-  hidden_c_Even : Hidden bool;
-
 }.
 
 Record W2 
   (w0 : Maybe Odd (@W0))
   (w1 : Maybe Even (@W1))
  : Type := {
-  c_Odd : bool;
+  hidden_c_Odd : Hidden bool;
 
-  W2_guard_w0_present : IsPresent w0;
-  W2_guard_reveal : c_Odd = reveal (getPresent w0 W2_guard_w0_present).(hidden_c_Odd);
 }.
 
 Record W3 
   (w0 : Maybe Odd (@W0))
   (w1 : Maybe Even (@W1))
  : Type := {
+  hidden_c_Even : Hidden bool;
+
+}.
+
+Record W4 
+  (w0 : Maybe Odd (@W0))
+  (w1 : Maybe Even (@W1))
+  (w2 : Maybe Odd (@W2 w0 w1))
+  (w3 : Maybe Even (@W3 w0 w1))
+ : Type := {
+  c_Odd : bool;
+
+  W4_guard_w2_present : IsPresent w2;
+  W4_guard_reveal : c_Odd = reveal (getPresent w2 W4_guard_w2_present).(hidden_c_Odd);
+}.
+
+Record W5 
+  (w0 : Maybe Odd (@W0))
+  (w1 : Maybe Even (@W1))
+  (w2 : Maybe Odd (@W2 w0 w1))
+  (w3 : Maybe Even (@W3 w0 w1))
+ : Type := {
   c_Even : bool;
 
-  W3_guard_w1_present : IsPresent w1;
-  W3_guard_reveal : c_Even = reveal (getPresent w1 W3_guard_w1_present).(hidden_c_Even);
+  W5_guard_w3_present : IsPresent w3;
+  W5_guard_reveal : c_Even = reveal (getPresent w3 W5_guard_w3_present).(hidden_c_Even);
 }.
 
 Record EventDag : Type := {
@@ -75,6 +91,8 @@ Record EventDag : Type := {
   event1 : Maybe Even (@W1);
   event2 : Maybe Odd (@W2 event0 event1);
   event3 : Maybe Even (@W3 event0 event1);
+  event4 : Maybe Odd (@W4 event0 event1 event2 event3);
+  event5 : Maybe Even (@W5 event0 event1 event2 event3);
 }.
 
 End GameProtocol.

@@ -271,7 +271,7 @@ private fun buildVisibilityMap(
     phases: List<Phase>,
 ): Map<FieldRef, Visibility> {
     val map = mutableMapOf<FieldRef, Visibility>()
-    sig.parameters.map { p ->
+    sig.parameters.forEach { p ->
         val field = FieldRef(role, p.name)
         map[field] = if (!p.visible) {
             Visibility.COMMIT
@@ -552,18 +552,203 @@ private fun lowerExpr(exp: AstExpr, typeEnv: Map<AstType.TypeId, AstType>): Expr
 
 // ========== Payoff Extraction ==========
 
-// Collect all handlers from AST in causal order
+/**
+ * Represents a handler with its associated queries.
+ * @param queries The queries this handler applies to
+ * @param handler The outcome handler (per-query or group)
+ * @param isGroup True if this is a group handler (ext.handler), false if per-query (q.handler)
+ * @param phaseIndex The index of the phase this handler belongs to (for alive computation)
+ */
+private data class HandlerInfo(
+    val queries: List<Query>,
+    val handler: Outcome,
+    val isGroup: Boolean,
+    val phaseIndex: Int
+)
+
+/**
+ * Collect all handlers from AST in causal order.
+ * Returns both per-query handlers and group handlers, each tagged with its phase index.
+ */
+private fun collectAllHandlers(ext: Ext): List<HandlerInfo> {
+    fun go(ext: Ext, phaseIndex: Int): List<HandlerInfo> {
+        return when (ext) {
+            is Ext.Bind -> {
+                val result = mutableListOf<HandlerInfo>()
+
+                // Group handler (applies to entire step)
+                if (ext.handler != null) {
+                    result.add(HandlerInfo(ext.qs, ext.handler, isGroup = true, phaseIndex))
+                }
+
+                // Per-query handlers (single-party only, already validated by type checker)
+                ext.qs.forEach { q ->
+                    if (q.handler != null) {
+                        result.add(HandlerInfo(listOf(q), q.handler, isGroup = false, phaseIndex))
+                    }
+                }
+
+                result + go(ext.ext, phaseIndex + 1)
+            }
+            is Ext.BindSingle -> {
+                val result = mutableListOf<HandlerInfo>()
+
+                // Group handler
+                if (ext.handler != null) {
+                    result.add(HandlerInfo(listOf(ext.q), ext.handler, isGroup = true, phaseIndex))
+                }
+
+                // Per-query handler
+                if (ext.q.handler != null) {
+                    result.add(HandlerInfo(listOf(ext.q), ext.q.handler, isGroup = false, phaseIndex))
+                }
+
+                result + go(ext.ext, phaseIndex + 1)
+            }
+            is Ext.Value -> emptyList()
+        }
+    }
+    return go(ext, 0)
+}
+
+// Legacy: Collect per-query handlers only (for backward compatibility)
 private fun collectHandlers(ext: Ext): List<Pair<Query, Outcome>> {
     return when (ext) {
         is Ext.Bind -> {
-            val handlers = ext.qs.mapNotNull { q -> q.handler?.let { Pair(q, it) } }
+            // Filter out Null handlers - they only affect type optionality, not payoffs
+            val handlers = ext.qs.mapNotNull { q ->
+                q.handler?.takeIf { it !is Outcome.Null }?.let { Pair(q, it) }
+            }
             handlers + collectHandlers(ext.ext)
         }
         is Ext.BindSingle -> {
-            val handler = ext.q.handler?.let { listOf(Pair(ext.q, it)) } ?: emptyList()
+            // Filter out Null handlers - they only affect type optionality, not payoffs
+            val handler = ext.q.handler
+                ?.takeIf { it !is Outcome.Null }
+                ?.let { listOf(Pair(ext.q, it)) }
+                ?: emptyList()
             handler + collectHandlers(ext.ext)
         }
         is Ext.Value -> emptyList()
+    }
+}
+
+/**
+ * Compute stake[\r] = sum of all join deposits for role r
+ */
+private fun computeStakes(ext: Ext): Map<RoleId, Int> {
+    val stakes = mutableMapOf<RoleId, Int>()
+    fun collect(e: Ext) {
+        when (e) {
+            is Ext.Bind -> {
+                if (e.kind == Kind.JOIN || e.kind == Kind.JOIN_CHANCE) {
+                    e.qs.forEach { q ->
+                        stakes[q.role.id] = (stakes[q.role.id] ?: 0) + q.deposit.n
+                    }
+                }
+                collect(e.ext)
+            }
+            is Ext.BindSingle -> {
+                if (e.kind == Kind.JOIN || e.kind == Kind.JOIN_CHANCE) {
+                    stakes[e.q.role.id] = (stakes[e.q.role.id] ?: 0) + e.q.deposit.n
+                }
+                collect(e.ext)
+            }
+            is Ext.Value -> {}
+        }
+    }
+    collect(ext)
+    return stakes
+}
+
+/**
+ * Compute alive(r) — global predicate: has role NOT timed out anywhere?
+ *
+ * For split/burn handlers, a role is "alive" if all their params (including hidden commits)
+ * have been submitted. This differs from the original reveal-requirement semantics.
+ */
+private fun computeAliveExpr(role: RoleId, phases: List<Phase>): Expr {
+    val checks = mutableListOf<Expr>()
+
+    phases.forEach { phase ->
+        val sig = phase.actions[role] ?: return@forEach
+        if (sig.join != null) return@forEach  // skip join actions (can't timeout)
+
+        sig.parameters.forEach { param ->
+            // Check ALL params (including hidden commits) for split/burn alive computation
+            // A role is dead if they failed to submit ANY required param
+            val field = FieldRef(role, param.name)
+            checks.add(Expr.IsDefined(field))
+        }
+    }
+
+    return if (checks.isEmpty()) Expr.Const.BoolVal(true)
+    else checks.reduce { a, b -> Expr.And(a, b) }
+}
+
+/**
+ * Compute step-local failure condition: did any participant in this step fail?
+ * Returns: ∃r ∈ stepParticipants: ¬doneInStep(r)
+ */
+private fun computeStepFailureCondition(queries: List<Query>): Expr {
+    val failureChecks: List<Expr> = queries.flatMap { q ->
+        q.params.map { p ->
+            val field = FieldRef(q.role.id, p.v.id)
+            Expr.Not(Expr.IsDefined(field))
+        }
+    }
+
+    return if (failureChecks.isEmpty()) Expr.Const.BoolVal(false)
+    else failureChecks.reduce { a, b -> Expr.Or(a, b) }
+}
+
+/**
+ * Generate payoff expressions for split/burn handlers.
+ */
+private fun generateSplitBurnPayoffs(
+    handler: Outcome,
+    allRoles: Set<RoleId>,
+    stakes: Map<RoleId, Int>,
+    phases: List<Phase>
+): Map<RoleId, Expr> {
+    // Compute alive(r) for all roles
+    val aliveExprs = allRoles.associateWith { computeAliveExpr(it, phases) }
+
+    // survivorCount = Σ (alive(r) ? 1 : 0)
+    val survivorCountTerms: List<Expr> = allRoles.map { r ->
+        Expr.Ite(aliveExprs[r]!!, Expr.Const.IntVal(1), Expr.Const.IntVal(0))
+    }
+    val survivorCount = survivorCountTerms.reduce { a, b -> Expr.Add(a, b) }
+
+    // forfeit = Σ (alive(r) ? 0 : stake[r])
+    val forfeitTerms: List<Expr> = allRoles.map { r ->
+        Expr.Ite(aliveExprs[r]!!, Expr.Const.IntVal(0), Expr.Const.IntVal(stakes[r] ?: 0))
+    }
+    val forfeit = forfeitTerms.reduce { a, b -> Expr.Add(a, b) }
+
+    // safeCount = max(1, survivorCount) to avoid div-by-zero
+    val safeCount = Expr.Ite(
+        Expr.Gt(survivorCount, Expr.Const.IntVal(0)),
+        survivorCount,
+        Expr.Const.IntVal(1)
+    )
+
+    return when (handler) {
+        is Outcome.Split -> allRoles.associateWith { r ->
+            // alive(r) ? stake[r] + forfeit/safeCount : 0
+            val stake = stakes[r] ?: 0
+            Expr.Ite(
+                aliveExprs[r]!!,
+                Expr.Add(Expr.Const.IntVal(stake), Expr.Div(forfeit, safeCount)),
+                Expr.Const.IntVal(0)
+            )
+        }
+        is Outcome.Burn -> allRoles.associateWith { r ->
+            // alive(r) ? stake[r] : 0
+            val stake = stakes[r] ?: 0
+            Expr.Ite(aliveExprs[r]!!, Expr.Const.IntVal(stake), Expr.Const.IntVal(0))
+        }
+        else -> error("Expected Split or Burn, got $handler")
     }
 }
 
@@ -595,16 +780,72 @@ private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
 }
 
 private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
-    val handlers = collectHandlers(ext)
+    val allHandlers = collectAllHandlers(ext)
     val terminalOutcome = extractTerminalOutcome(ext)
+    val phases = collectPhases(ext, typeEnv)
+    val stakes = computeStakes(ext)
+    val allRoles = phases.flatMap { it.roles() }.toSet()
 
-    val mergedOutcome = if (handlers.isNotEmpty()) {
-        mergeHandlersIntoOutcome(handlers, terminalOutcome)
-    } else {
-        terminalOutcome
+    // Check if there are any split/burn handlers (not null - null just makes fields optional)
+    val hasSplitBurn = allHandlers.any { it.handler is Outcome.Split || it.handler is Outcome.Burn }
+    // Filter out null handlers - they don't affect payoffs, just type optionality
+    val effectiveHandlers = allHandlers.filter { it.handler !is Outcome.Null }
+
+    if (!hasSplitBurn) {
+        // No split/burn - use legacy path for per-query handlers only
+        val perQueryHandlers = collectHandlers(ext)
+        val mergedOutcome = if (perQueryHandlers.isNotEmpty()) {
+            mergeHandlersIntoOutcome(perQueryHandlers, terminalOutcome)
+        } else {
+            terminalOutcome
+        }
+        return desugarOutcome(mergedOutcome, typeEnv)
     }
 
-    return desugarOutcome(mergedOutcome, typeEnv)
+    // With split/burn handlers, we need to build payoffs with proper failure conditions
+    // Start with terminal outcome payoffs
+    var currentPayoffs = desugarOutcome(terminalOutcome, typeEnv)
+
+    // Process handlers in reverse order (innermost first, then wrap with outer conditions)
+    // Use effectiveHandlers which excludes null handlers (they don't affect payoffs)
+    for (handlerInfo in effectiveHandlers.reversed()) {
+        val (queries, handler, _, phaseIndex) = handlerInfo
+
+        // Compute step failure condition: any participant in step failed
+        val stepFailed = computeStepFailureCondition(queries)
+
+        // For split/burn, only consider phases up to (and including) this handler's phase
+        // This ensures alive(r) only checks params from phases that have been reached
+        val relevantPhases = phases.take(phaseIndex + 1)
+
+        val handlerPayoffs: Map<RoleId, Expr> = when (handler) {
+            is Outcome.Split, is Outcome.Burn -> {
+                // Use alive(r) computed from phases up to this handler's phase
+                generateSplitBurnPayoffs(handler, allRoles, stakes, relevantPhases)
+            }
+
+            is Outcome.Value -> {
+                // Regular custom outcome - desugar normally
+                desugarOutcome(handler, typeEnv)
+            }
+
+            else -> {
+                // Should not happen after type checking
+                error("Unexpected handler type: $handler")
+            }
+        }
+
+        // Wrap: if stepFailed then handlerPayoffs else currentPayoffs
+        currentPayoffs = allRoles.associateWith { role ->
+            Expr.Ite(
+                stepFailed,
+                handlerPayoffs[role] ?: Expr.Const.IntVal(0),
+                currentPayoffs[role] ?: Expr.Const.IntVal(0)
+            )
+        }
+    }
+
+    return currentPayoffs
 }
 
 private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
@@ -636,6 +877,15 @@ private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstTyp
             // let! x = init in outcome  ~~>  outcome[x := init]
             val outcomeWithSubstitution = substituteVarInOutcome(outcome.outcome, outcome.dec.v.id, outcome.init)
             desugarOutcome(outcomeWithSubstitution, typeEnv)
+        }
+
+        // Split, Burn, and Null are handled specially during payoff extraction
+        // They should not reach here in normal flow
+        is Outcome.Split, is Outcome.Burn -> {
+            error("Split/Burn handlers must be processed via extractPayoffs, not desugarOutcome directly")
+        }
+        is Outcome.Null -> {
+            error("Null handlers only affect type optionality, should not appear in outcome processing")
         }
     }
 }

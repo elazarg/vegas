@@ -26,11 +26,30 @@ typeExp
     | name=typeId                         # IdTypeExp
     ;
 
-ext : kind=('join' | 'yield' | 'reveal' | 'commit' | 'random') query+ ';' ext  # ReceiveExt
-    | 'withdraw' outcome                                                       # WithdrawExt
+ext : kind=('join' | 'yield' | 'reveal' | 'commit' | 'random') ('or' handler=groupHandler)? query+ ';' ext  # ReceiveExt
+    | 'withdraw' outcome                                                                                    # WithdrawExt
     ;
 
-query : role=roleId ('(' (decls+=varDec (',' decls+=varDec)*)? ')')? ('$' deposit=INT)? ('where' cond=exp)? ('||' handler=outcome)? ;
+// Per-query handlers: only brace-wrapped outcomes (not split/burn keywords)
+query : role=roleId ('(' (decls+=varDec (',' decls+=varDec)*)? ')')? ('$' deposit=INT)? ('where' cond=exp)? ('||' handler=queryHandler)? ;
+
+// Query handlers: outcomes for individual query timeouts
+queryHandler
+    : <assoc=right> cond=exp '?' ifTrue=queryHandler ':' ifFalse=queryHandler # IfQueryHandler
+    | 'let' dec=varDec '=' init=exp 'in' body=queryHandler                    # LetQueryHandler
+    | '(' queryHandler ')'                                                     # ParenQueryHandler
+    | '{' items+=item+ '}'                                                     # OutcomeQueryHandler
+    | 'split'                                                                  # SplitQueryHandler
+    | 'burn'                                                                   # BurnQueryHandler
+    | 'null'                                                                   # NullQueryHandler
+    ;
+
+// Group handlers: split, burn, or null for multi-party steps
+groupHandler
+    : 'split'  # SplitHandler
+    | 'burn'   # BurnHandler
+    | 'null'   # NullHandler
+    ;
 
 outcome
     : <assoc=right> cond=exp '?' ifTrue=outcome ':' ifFalse=outcome # IfOutcome

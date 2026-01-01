@@ -131,7 +131,7 @@ contract Prisoners {
     function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) depends(Role.B, 6) {
         require((!claimed_A), "already claimed");
         claimed_A = true;
-        int256 payout = ((done_A_c && done_B_c) ? ((A_c && B_c) ? 100 : ((A_c && (!B_c)) ? 0 : (((!A_c) && B_c) ? 200 : 90))) : ((!done_A_c) ? 0 : 200));
+        int256 payout = (((!done_A_c) || (!done_B_c)) ? (done_A_c ? (100 + (((done_A_c ? 0 : 100) + (done_B_c ? 0 : 100)) / ((((done_A_c ? 1 : 0) + (done_B_c ? 1 : 0)) > 0) ? ((done_A_c ? 1 : 0) + (done_B_c ? 1 : 0)) : 1))) : 0) : ((A_c && B_c) ? 100 : ((A_c && (!B_c)) ? 0 : (((!A_c) && B_c) ? 200 : 90))));
         if (payout > 0) {
             (bool ok, ) = payable(address_A).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -141,7 +141,7 @@ contract Prisoners {
     function withdraw_B() public by(Role.B) action(Role.B, 7) depends(Role.A, 4) depends(Role.B, 6) {
         require((!claimed_B), "already claimed");
         claimed_B = true;
-        int256 payout = ((done_A_c && done_B_c) ? ((A_c && B_c) ? 100 : ((A_c && (!B_c)) ? 200 : (((!A_c) && B_c) ? 0 : 110))) : ((!done_A_c) ? 200 : 0));
+        int256 payout = (((!done_A_c) || (!done_B_c)) ? (done_B_c ? (100 + (((done_A_c ? 0 : 100) + (done_B_c ? 0 : 100)) / ((((done_A_c ? 1 : 0) + (done_B_c ? 1 : 0)) > 0) ? ((done_A_c ? 1 : 0) + (done_B_c ? 1 : 0)) : 1))) : 0) : ((A_c && B_c) ? 100 : ((A_c && (!B_c)) ? 200 : (((!A_c) && B_c) ? 0 : 110))));
         if (payout > 0) {
             (bool ok, ) = payable(address_B).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

@@ -10,7 +10,7 @@ macro xor(a: bool, b: bool): bool = (a <-!-> b);
 game main() {
   join P1() $ 100 P2() $ 100;
   
-  yield P1(m: move) P2(m: move);
+  yield or null P1(m: move) P2(m: move);
 
   withdraw (P1.m == null && P2.m == null) ?
       { P1 -> 100; P2 -> 100; }  // Both quit, deposits returned

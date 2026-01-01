@@ -4,8 +4,10 @@
 game main() {
   join V1() $ 100 V2() $ 100 V3() $ 100;
   
-  // Simultaneous yield auto-expands to commit+reveal with front-running protection
-  yield V1(b: bool) V2(b: bool) V3(b: bool);
+  yield or null
+    V1(b: bool)
+    V2(b: bool)
+    V3(b: bool);
   
   withdraw (V1.b != null && V2.b != null && V3.b != null) ?
   {

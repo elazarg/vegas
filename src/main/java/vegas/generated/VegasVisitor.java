@@ -88,6 +88,76 @@ public interface VegasVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitQuery(VegasParser.QueryContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code IfQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitIfQueryHandler(VegasParser.IfQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code LetQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitLetQueryHandler(VegasParser.LetQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code ParenQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitParenQueryHandler(VegasParser.ParenQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code OutcomeQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitOutcomeQueryHandler(VegasParser.OutcomeQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code SplitQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSplitQueryHandler(VegasParser.SplitQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code BurnQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitBurnQueryHandler(VegasParser.BurnQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code NullQueryHandler}
+	 * labeled alternative in {@link VegasParser#queryHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitNullQueryHandler(VegasParser.NullQueryHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code SplitHandler}
+	 * labeled alternative in {@link VegasParser#groupHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSplitHandler(VegasParser.SplitHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code BurnHandler}
+	 * labeled alternative in {@link VegasParser#groupHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitBurnHandler(VegasParser.BurnHandlerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code NullHandler}
+	 * labeled alternative in {@link VegasParser#groupHandler}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitNullHandler(VegasParser.NullHandlerContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code IfOutcome}
 	 * labeled alternative in {@link VegasParser#outcome}.
 	 * @param ctx the parse tree

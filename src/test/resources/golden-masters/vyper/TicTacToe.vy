@@ -284,25 +284,6 @@ def move_O_9(_c4: int256):
     self.lastTs = block.timestamp
 
 @external
-def withdraw_O():
-    assert self.roles[msg.sender] == Role.O, "bad role"
-    self._check_timestamp(Role.O)
-    assert not self.bailed[Role.O], "you bailed"
-    assert not self.actionDone[Role.O][10], "already done"
-    self._check_timestamp(Role.O)
-    if not self.bailed[Role.O]:
-        assert self.actionDone[Role.O][9], "dependency not satisfied"
-    assert (not self.claimed_O), "already claimed"
-    self.claimed_O = True
-    payout: int256 = 200 if (not self.done_X_c1) else 0 if (not self.done_O_c1) else 200 if (not self.done_X_c2) else 0 if (not self.done_O_c2) else 200 if (not self.done_X_c3) else 0 if (not self.done_O_c3) else 200 if (not self.done_X_c4) else 0 if (not self.done_O_c4) else 100
-    if payout > 0:
-        success: bool = raw_call(self.address_O, b"", value=convert(payout, uint256), revert_on_failure=False)
-        assert success, "ETH send failed"
-    self.actionDone[Role.O][10] = True
-    self.actionTimestamp[Role.O][10] = block.timestamp
-    self.lastTs = block.timestamp
-
-@external
 def withdraw_X():
     assert self.roles[msg.sender] == Role.X, "bad role"
     self._check_timestamp(Role.X)
@@ -313,12 +294,31 @@ def withdraw_X():
         assert self.actionDone[Role.O][9], "dependency not satisfied"
     assert (not self.claimed_X), "already claimed"
     self.claimed_X = True
-    payout: int256 = 0 if (not self.done_X_c1) else 200 if (not self.done_O_c1) else 0 if (not self.done_X_c2) else 200 if (not self.done_O_c2) else 0 if (not self.done_X_c3) else 200 if (not self.done_O_c3) else 0 if (not self.done_X_c4) else 200 if (not self.done_O_c4) else 100
+    payout: int256 = (100 + ((0 if self.done_X_c1 else 100 + 0 if True else 100) / (1 if self.done_X_c1 else 0 + 1 if True else 0) if ((1 if self.done_X_c1 else 0 + 1 if True else 0) > 0) else 1)) if self.done_X_c1 else 0 if (not self.done_X_c1) else (100 + ((0 if self.done_X_c1 else 100 + 0 if self.done_O_c1 else 100) / (1 if self.done_X_c1 else 0 + 1 if self.done_O_c1 else 0) if ((1 if self.done_X_c1 else 0 + 1 if self.done_O_c1 else 0) > 0) else 1)) if self.done_X_c1 else 0 if (not self.done_O_c1) else (100 + ((0 if (self.done_X_c1 and self.done_X_c2) else 100 + 0 if self.done_O_c1 else 100) / (1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if self.done_O_c1 else 0) if ((1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if self.done_O_c1 else 0) > 0) else 1)) if (self.done_X_c1 and self.done_X_c2) else 0 if (not self.done_X_c2) else (100 + ((0 if (self.done_X_c1 and self.done_X_c2) else 100 + 0 if (self.done_O_c1 and self.done_O_c2) else 100) / (1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) if ((1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) > 0) else 1)) if (self.done_X_c1 and self.done_X_c2) else 0 if (not self.done_O_c2) else (100 + ((0 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 100 + 0 if (self.done_O_c1 and self.done_O_c2) else 100) / (1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) if ((1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) > 0) else 1)) if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 if (not self.done_X_c3) else (100 + ((0 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 100 + 0 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 100) / (1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) if ((1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) > 0) else 1)) if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 if (not self.done_O_c3) else (100 + ((0 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 100 + 0 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 100) / (1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) if ((1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) > 0) else 1)) if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 if (not self.done_X_c4) else (100 + ((0 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 100 + 0 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 100) / (1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 0) if ((1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 0) > 0) else 1)) if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 if (not self.done_O_c4) else 100
     if payout > 0:
         success: bool = raw_call(self.address_X, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
     self.actionDone[Role.X][9] = True
     self.actionTimestamp[Role.X][9] = block.timestamp
+    self.lastTs = block.timestamp
+
+@external
+def withdraw_O():
+    assert self.roles[msg.sender] == Role.O, "bad role"
+    self._check_timestamp(Role.O)
+    assert not self.bailed[Role.O], "you bailed"
+    assert not self.actionDone[Role.O][10], "already done"
+    self._check_timestamp(Role.O)
+    if not self.bailed[Role.O]:
+        assert self.actionDone[Role.O][9], "dependency not satisfied"
+    assert (not self.claimed_O), "already claimed"
+    self.claimed_O = True
+    payout: int256 = (100 + ((0 if self.done_X_c1 else 100 + 0 if True else 100) / (1 if self.done_X_c1 else 0 + 1 if True else 0) if ((1 if self.done_X_c1 else 0 + 1 if True else 0) > 0) else 1)) if True else 0 if (not self.done_X_c1) else (100 + ((0 if self.done_X_c1 else 100 + 0 if self.done_O_c1 else 100) / (1 if self.done_X_c1 else 0 + 1 if self.done_O_c1 else 0) if ((1 if self.done_X_c1 else 0 + 1 if self.done_O_c1 else 0) > 0) else 1)) if self.done_O_c1 else 0 if (not self.done_O_c1) else (100 + ((0 if (self.done_X_c1 and self.done_X_c2) else 100 + 0 if self.done_O_c1 else 100) / (1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if self.done_O_c1 else 0) if ((1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if self.done_O_c1 else 0) > 0) else 1)) if self.done_O_c1 else 0 if (not self.done_X_c2) else (100 + ((0 if (self.done_X_c1 and self.done_X_c2) else 100 + 0 if (self.done_O_c1 and self.done_O_c2) else 100) / (1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) if ((1 if (self.done_X_c1 and self.done_X_c2) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) > 0) else 1)) if (self.done_O_c1 and self.done_O_c2) else 0 if (not self.done_O_c2) else (100 + ((0 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 100 + 0 if (self.done_O_c1 and self.done_O_c2) else 100) / (1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) if ((1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if (self.done_O_c1 and self.done_O_c2) else 0) > 0) else 1)) if (self.done_O_c1 and self.done_O_c2) else 0 if (not self.done_X_c3) else (100 + ((0 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 100 + 0 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 100) / (1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) if ((1 if ((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) > 0) else 1)) if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0 if (not self.done_O_c3) else (100 + ((0 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 100 + 0 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 100) / (1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) if ((1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0) > 0) else 1)) if ((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) else 0 if (not self.done_X_c4) else (100 + ((0 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 100 + 0 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 100) / (1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 0) if ((1 if (((self.done_X_c1 and self.done_X_c2) and self.done_X_c3) and self.done_X_c4) else 0 + 1 if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 0) > 0) else 1)) if (((self.done_O_c1 and self.done_O_c2) and self.done_O_c3) and self.done_O_c4) else 0 if (not self.done_O_c4) else 100
+    if payout > 0:
+        success: bool = raw_call(self.address_O, b"", value=convert(payout, uint256), revert_on_failure=False)
+        assert success, "ETH send failed"
+    self.actionDone[Role.O][10] = True
+    self.actionTimestamp[Role.O][10] = block.timestamp
     self.lastTs = block.timestamp
 
 @payable

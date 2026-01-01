@@ -5,8 +5,8 @@ type <java> "java.lang.Boolean" from "rt.jar" as bool;
 
 explicit global protocol OddsEvensShort(role Server, role Odd, role Even){
     connect Server to Odd;
-    Hidden_c(hidden) from Odd to Server;
     connect Server to Even;
+    Hidden_c(hidden) from Odd to Server;
     Hidden_c(hidden) from Even to Server;
     Reveal_c(bool) from Odd to Server;
     Broadcast_c(bool) from Server to Even;

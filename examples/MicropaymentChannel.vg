@@ -6,7 +6,7 @@ type amt = {0 .. 10}
 game main() {
   join Sender() $ 100 Receiver() $ 100;
   
-  yield Sender(x: amt) Receiver(sign: bool);
+  yield or null Sender(x: amt) Receiver(sign: bool);
 
   withdraw (Sender.x == null && Receiver.sign == null) ?
       { Sender -> 100; Receiver -> 100; }  // Both quit, deposits returned

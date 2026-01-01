@@ -3,7 +3,7 @@
 
 game main() {
   join Producer() $ 100 Validator() $ 100 Users() $ 100;
-  yield Producer(publish: bool) Validator(avail: bool);
+  yield or null Producer(publish: bool) Validator(avail: bool);
 
   withdraw (Producer.publish == null && Validator.avail == null) ?
       { Producer -> 50; Validator -> 50; Users -> 200; }  // Both quit, Users benefit

@@ -164,25 +164,6 @@ def move_Host_6(_car: int256, _salt: uint256):
     self.lastTs = block.timestamp
 
 @external
-def withdraw_Guest():
-    assert self.roles[msg.sender] == Role.Guest, "bad role"
-    self._check_timestamp(Role.Guest)
-    assert not self.bailed[Role.Guest], "you bailed"
-    assert not self.actionDone[Role.Guest][6], "already done"
-    self._check_timestamp(Role.Host)
-    if not self.bailed[Role.Host]:
-        assert self.actionDone[Role.Host][6], "dependency not satisfied"
-    assert (not self.claimed_Guest), "already claimed"
-    self.claimed_Guest = True
-    payout: int256 = 40 if (not self.done_Host_car) else 0 if (not self.done_Guest_d) else 40 if (not self.done_Host_goat) else 0 if (not self.done_Guest_switch) else 40 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 0
-    if payout > 0:
-        success: bool = raw_call(self.address_Guest, b"", value=convert(payout, uint256), revert_on_failure=False)
-        assert success, "ETH send failed"
-    self.actionDone[Role.Guest][6] = True
-    self.actionTimestamp[Role.Guest][6] = block.timestamp
-    self.lastTs = block.timestamp
-
-@external
 def withdraw_Host():
     assert self.roles[msg.sender] == Role.Host, "bad role"
     self._check_timestamp(Role.Host)
@@ -193,12 +174,31 @@ def withdraw_Host():
         assert self.actionDone[Role.Host][6], "dependency not satisfied"
     assert (not self.claimed_Host), "already claimed"
     self.claimed_Host = True
-    payout: int256 = 0 if (not self.done_Host_car) else 40 if (not self.done_Guest_d) else 0 if (not self.done_Host_goat) else 40 if (not self.done_Guest_switch) else 0 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 40
+    payout: int256 = (20 + ((0 if self.done_Host_car else 20 + 0 if True else 20) / (1 if self.done_Host_car else 0 + 1 if True else 0) if ((1 if self.done_Host_car else 0 + 1 if True else 0) > 0) else 1)) if self.done_Host_car else 0 if (not self.done_Host_car) else (20 + ((0 if self.done_Host_car else 20 + 0 if self.done_Guest_d else 20) / (1 if self.done_Host_car else 0 + 1 if self.done_Guest_d else 0) if ((1 if self.done_Host_car else 0 + 1 if self.done_Guest_d else 0) > 0) else 1)) if self.done_Host_car else 0 if (not self.done_Guest_d) else (20 + ((0 if (self.done_Host_car and self.done_Host_goat) else 20 + 0 if self.done_Guest_d else 20) / (1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if self.done_Guest_d else 0) if ((1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if self.done_Guest_d else 0) > 0) else 1)) if (self.done_Host_car and self.done_Host_goat) else 0 if (not self.done_Host_goat) else (20 + ((0 if (self.done_Host_car and self.done_Host_goat) else 20 + 0 if (self.done_Guest_d and self.done_Guest_switch) else 20) / (1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if (self.done_Guest_d and self.done_Guest_switch) else 0) if ((1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if (self.done_Guest_d and self.done_Guest_switch) else 0) > 0) else 1)) if (self.done_Host_car and self.done_Host_goat) else 0 if (not self.done_Guest_switch) else 0 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 40
     if payout > 0:
         success: bool = raw_call(self.address_Host, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
     self.actionDone[Role.Host][7] = True
     self.actionTimestamp[Role.Host][7] = block.timestamp
+    self.lastTs = block.timestamp
+
+@external
+def withdraw_Guest():
+    assert self.roles[msg.sender] == Role.Guest, "bad role"
+    self._check_timestamp(Role.Guest)
+    assert not self.bailed[Role.Guest], "you bailed"
+    assert not self.actionDone[Role.Guest][6], "already done"
+    self._check_timestamp(Role.Host)
+    if not self.bailed[Role.Host]:
+        assert self.actionDone[Role.Host][6], "dependency not satisfied"
+    assert (not self.claimed_Guest), "already claimed"
+    self.claimed_Guest = True
+    payout: int256 = (20 + ((0 if self.done_Host_car else 20 + 0 if True else 20) / (1 if self.done_Host_car else 0 + 1 if True else 0) if ((1 if self.done_Host_car else 0 + 1 if True else 0) > 0) else 1)) if True else 0 if (not self.done_Host_car) else (20 + ((0 if self.done_Host_car else 20 + 0 if self.done_Guest_d else 20) / (1 if self.done_Host_car else 0 + 1 if self.done_Guest_d else 0) if ((1 if self.done_Host_car else 0 + 1 if self.done_Guest_d else 0) > 0) else 1)) if self.done_Guest_d else 0 if (not self.done_Guest_d) else (20 + ((0 if (self.done_Host_car and self.done_Host_goat) else 20 + 0 if self.done_Guest_d else 20) / (1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if self.done_Guest_d else 0) if ((1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if self.done_Guest_d else 0) > 0) else 1)) if self.done_Guest_d else 0 if (not self.done_Host_goat) else (20 + ((0 if (self.done_Host_car and self.done_Host_goat) else 20 + 0 if (self.done_Guest_d and self.done_Guest_switch) else 20) / (1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if (self.done_Guest_d and self.done_Guest_switch) else 0) if ((1 if (self.done_Host_car and self.done_Host_goat) else 0 + 1 if (self.done_Guest_d and self.done_Guest_switch) else 0) > 0) else 1)) if (self.done_Guest_d and self.done_Guest_switch) else 0 if (not self.done_Guest_switch) else 40 if ((self.Guest_d != self.Host_car) == self.Guest_switch) else 0
+    if payout > 0:
+        success: bool = raw_call(self.address_Guest, b"", value=convert(payout, uint256), revert_on_failure=False)
+        assert success, "ETH send failed"
+    self.actionDone[Role.Guest][6] = True
+    self.actionTimestamp[Role.Guest][6] = block.timestamp
     self.lastTs = block.timestamp
 
 @payable

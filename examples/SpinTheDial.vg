@@ -8,7 +8,7 @@ macro even(x: int): bool = (x == 0 || x == 2 || x == 4 || x == 6);
 game main() {
   join P1() $ 100 P2() $ 100;
   
-  yield P1(a: move) P2(b: move);
+  yield or null P1(a: move) P2(b: move);
 
   withdraw (P1.a == null && P2.b == null) ?
       { P1 -> 100; P2 -> 100; }  // Both quit, deposits returned

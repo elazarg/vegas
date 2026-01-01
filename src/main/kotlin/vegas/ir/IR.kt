@@ -71,9 +71,6 @@ fun Expr.Const.asInt(): Int = when (this) {
  *       WF condition: Fields in condition must appear in sees.
  * condition: Logical guard enabling action.
  *
- * UNDEFINED SEMANTICS:
- * If condition references undefined field (action not yet complete),
- * condition evaluates to false (action not enabled).
  * All backends implement via "done flags": <action>_<param>_done.
  */
 data class Requirement(

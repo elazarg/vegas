@@ -4,7 +4,7 @@
 game main() {
   join Validator() $ 100 Watcher() $ 100 Protocol() $ 100;
   
-  yield Validator(cheat: bool) Watcher(monitor: bool);
+  yield or null Validator(cheat: bool) Watcher(monitor: bool);
 
   withdraw (Validator.cheat == null && Watcher.monitor == null) ?
       { Validator -> 50; Watcher -> 50; Protocol -> 200; }  // Both quit, Protocol benefits

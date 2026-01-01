@@ -12,31 +12,47 @@ Inductive Role : Type := | Even | Odd.
 Module GameProtocol.
 
 Record W0  : Type := {
-  hidden_c_Odd : Hidden bool;
-
 }.
 
 Record W1  : Type := {
-  hidden_c_Even : Hidden bool;
-
 }.
 
 Record W2 
   (w0 : @W0)
   (w1 : @W1)
  : Type := {
-  c_Odd : bool;
+  hidden_c_Odd : Hidden bool;
 
-  W2_guard_reveal : c_Odd = reveal w0.(hidden_c_Odd);
 }.
 
 Record W3 
   (w0 : @W0)
   (w1 : @W1)
  : Type := {
+  hidden_c_Even : Hidden bool;
+
+}.
+
+Record W4 
+  (w0 : @W0)
+  (w1 : @W1)
+  (w2 : @W2 w0 w1)
+  (w3 : @W3 w0 w1)
+ : Type := {
+  c_Odd : bool;
+
+  W4_guard_reveal : c_Odd = reveal w2.(hidden_c_Odd);
+}.
+
+Record W5 
+  (w0 : @W0)
+  (w1 : @W1)
+  (w2 : @W2 w0 w1)
+  (w3 : @W3 w0 w1)
+ : Type := {
   c_Even : bool;
 
-  W3_guard_reveal : c_Even = reveal w1.(hidden_c_Even);
+  W5_guard_reveal : c_Even = reveal w3.(hidden_c_Even);
 }.
 
 Record ActionDag : Type := {
@@ -44,6 +60,8 @@ Record ActionDag : Type := {
   action1 : @W1;
   action2 : @W2 action0 action1;
   action3 : @W3 action0 action1;
+  action4 : @W4 action0 action1 action2 action3;
+  action5 : @W5 action0 action1 action2 action3;
 }.
 
 End GameProtocol.
