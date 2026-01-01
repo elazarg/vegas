@@ -123,6 +123,20 @@ sealed class EvmStmt {
     object Pass : EvmStmt()
 
     data class SendEth(val to: EvmExpr, val amount: EvmExpr) : EvmStmt()
+
+    /**
+     * Verify a commitment-reveal: checks that
+     *   _commitmentHash(role, msg.sender, abi.encode(payload...)) == commitment
+     *
+     * This binds commitments to role/actor/instance, preventing copy-commit attacks.
+     * The actor is implicitly msg.sender - this is enforced by the type to prevent
+     * accidentally passing the wrong actor.
+     */
+    data class CheckReveal(
+        val commitment: EvmExpr,
+        val role: RoleId,            // The role being revealed for
+        val payload: List<EvmExpr>
+    ) : EvmStmt()
 }
 
 // ==========================================

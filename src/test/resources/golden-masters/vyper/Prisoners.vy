@@ -31,9 +31,11 @@ B_c_hidden: bytes32
 done_B_c_hidden: bool
 TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds
 bailed: HashMap[Role, bool]
+COMMIT_TAG: immutable(bytes32)
 
-@external
+@deploy
 def __init__():
+    COMMIT_TAG = keccak256("VEGAS_COMMIT_V1")
     self.lastTs = block.timestamp
 
 @external
@@ -116,7 +118,7 @@ def move_A_3(_c: bool, _salt: uint256):
     self._check_timestamp(Role.B)
     if not self.bailed[Role.B]:
         assert self.actionDone[Role.B][5], "dependency not satisfied"
-    assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.A_c_hidden), "reveal failed for c"
+    self._checkReveal(self.A_c_hidden, Role.A, msg.sender, _abi_encode(_c, _salt))
     self.A_c = _c
     self.done_A_c = True
     self.actionDone[Role.A][4] = True
@@ -138,7 +140,7 @@ def move_B_5(_c: bool, _salt: uint256):
     self._check_timestamp(Role.B)
     if not self.bailed[Role.B]:
         assert self.actionDone[Role.B][5], "dependency not satisfied"
-    assert (keccak256(concat(convert(c, bytes32), convert(salt, bytes32))) == self.B_c_hidden), "reveal failed for c"
+    self._checkReveal(self.B_c_hidden, Role.B, msg.sender, _abi_encode(_c, _salt))
     self.B_c = _c
     self.done_B_c = True
     self.actionDone[Role.B][6] = True
@@ -150,7 +152,7 @@ def withdraw_A():
     assert self.roles[msg.sender] == Role.A, "bad role"
     self._check_timestamp(Role.A)
     assert not self.bailed[Role.A], "you bailed"
-    assert not self.actionDone[Role.A][6], "already done"
+    assert not self.actionDone[Role.A][5], "already done"
     self._check_timestamp(Role.A)
     if not self.bailed[Role.A]:
         assert self.actionDone[Role.A][4], "dependency not satisfied"
@@ -163,8 +165,8 @@ def withdraw_A():
     if payout > 0:
         success: bool = raw_call(self.address_A, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.A][6] = True
-    self.actionTimestamp[Role.A][6] = block.timestamp
+    self.actionDone[Role.A][5] = True
+    self.actionTimestamp[Role.A][5] = block.timestamp
     self.lastTs = block.timestamp
 
 @external
@@ -201,4 +203,10 @@ def _check_timestamp(role: Role):
     if block.timestamp > self.lastTs + TIMEOUT:
         self.bailed[role] = True
         self.lastTs = block.timestamp
+
+@internal
+@view
+def _checkReveal(commitment: bytes32, role: Role, actor: address, payload: Bytes[256]):
+    expected: bytes32 = keccak256(_abi_encode(COMMIT_TAG, self, role, actor, keccak256(payload)))
+    assert expected == commitment, "bad reveal"
 

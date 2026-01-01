@@ -67,9 +67,22 @@ contract OddsEvensShort {
         _;
     }
     
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
+    bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+    
+    function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            COMMIT_TAG,
+            address(this),
+            role,
+            actor,
+            keccak256(payload)
+        ));
     }
+    
+    function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+        require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+    }
+    
     
     constructor() {
         lastTs = block.timestamp;
@@ -96,18 +109,18 @@ contract OddsEvensShort {
     }
     
     function move_Odd_1(bool _c, uint256 _salt) public by(Role.Odd) action(Role.Odd, 2) depends(Role.Odd, 1) depends(Role.Even, 3) {
-        require((keccak256(abi.encodePacked(_c, _salt)) == Odd_c_hidden), "reveal failed for c");
+        _checkReveal(Odd_c_hidden, Role.Odd, msg.sender, abi.encode(_c, _salt));
         Odd_c = _c;
         done_Odd_c = true;
     }
     
     function move_Even_3(bool _c, uint256 _salt) public by(Role.Even) action(Role.Even, 4) depends(Role.Odd, 1) depends(Role.Even, 3) {
-        require((keccak256(abi.encodePacked(_c, _salt)) == Even_c_hidden), "reveal failed for c");
+        _checkReveal(Even_c_hidden, Role.Even, msg.sender, abi.encode(_c, _salt));
         Even_c = _c;
         done_Even_c = true;
     }
     
-    function withdraw_Even() public by(Role.Even) action(Role.Even, 4) depends(Role.Odd, 2) depends(Role.Even, 4) {
+    function withdraw_Even() public by(Role.Even) action(Role.Even, 5) depends(Role.Odd, 2) depends(Role.Even, 4) {
         require((!claimed_Even), "already claimed");
         claimed_Even = true;
         int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 126 : 74) : (((!done_Even_c) && done_Odd_c) ? 20 : ((done_Even_c && (!done_Odd_c)) ? 180 : 100)));
@@ -117,7 +130,7 @@ contract OddsEvensShort {
         }
     }
     
-    function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 5) depends(Role.Odd, 2) depends(Role.Even, 4) {
+    function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 3) depends(Role.Odd, 2) depends(Role.Even, 4) {
         require((!claimed_Odd), "already claimed");
         claimed_Odd = true;
         int256 payout = ((done_Even_c && done_Odd_c) ? ((Even_c == Odd_c) ? 74 : 126) : (((!done_Even_c) && done_Odd_c) ? 180 : ((done_Even_c && (!done_Odd_c)) ? 20 : 100)));

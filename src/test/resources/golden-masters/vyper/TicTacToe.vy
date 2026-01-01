@@ -43,9 +43,11 @@ O_c4: int256
 done_O_c4: bool
 TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds
 bailed: HashMap[Role, bool]
+COMMIT_TAG: immutable(bytes32)
 
-@external
+@deploy
 def __init__():
+    COMMIT_TAG = keccak256("VEGAS_COMMIT_V1")
     self.lastTs = block.timestamp
 
 @external
@@ -305,7 +307,7 @@ def withdraw_X():
     assert self.roles[msg.sender] == Role.X, "bad role"
     self._check_timestamp(Role.X)
     assert not self.bailed[Role.X], "you bailed"
-    assert not self.actionDone[Role.X][11], "already done"
+    assert not self.actionDone[Role.X][9], "already done"
     self._check_timestamp(Role.O)
     if not self.bailed[Role.O]:
         assert self.actionDone[Role.O][9], "dependency not satisfied"
@@ -315,8 +317,8 @@ def withdraw_X():
     if payout > 0:
         success: bool = raw_call(self.address_X, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.X][11] = True
-    self.actionTimestamp[Role.X][11] = block.timestamp
+    self.actionDone[Role.X][9] = True
+    self.actionTimestamp[Role.X][9] = block.timestamp
     self.lastTs = block.timestamp
 
 @payable

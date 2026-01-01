@@ -109,9 +109,22 @@ private fun StringBuilder.renderInfrastructureModifiers() {
             _;
         }
 
-        function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-            require((keccak256(preimage) == commitment), "bad reveal");
+        bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+        
+        function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+            return keccak256(abi.encode(
+                COMMIT_TAG,
+                address(this),
+                role,
+                actor,
+                keccak256(payload)
+            ));
         }
+        
+        function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+            require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+        }
+
     """.trimIndent())
 }
 
@@ -174,6 +187,12 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("    (bool ok, ) = payable(${renderExpr(stmt.to)}).call{value: uint256(payout)}(\"\");")
             appendLine("    require(ok, \"ETH send failed\");")
             appendLine("}")
+        }
+        is CheckReveal -> {
+            // Verify commitment with role/actor binding to prevent mirroring attacks
+            // Actor is always msg.sender (enforced by type system)
+            val payload = stmt.payload.joinToString(", ") { renderExpr(it) }
+            appendLine("_checkReveal(${renderExpr(stmt.commitment)}, $roleEnumName.${stmt.role.name}, msg.sender, abi.encode($payload));")
         }
     }
 }

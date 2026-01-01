@@ -81,9 +81,22 @@ contract TicTacToe {
         _;
     }
     
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
+    bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+    
+    function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            COMMIT_TAG,
+            address(this),
+            role,
+            actor,
+            keccak256(payload)
+        ));
     }
+    
+    function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+        require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+    }
+    
     
     constructor() {
         lastTs = block.timestamp;
@@ -170,7 +183,7 @@ contract TicTacToe {
         }
     }
     
-    function withdraw_X() public by(Role.X) action(Role.X, 11) depends(Role.O, 9) {
+    function withdraw_X() public by(Role.X) action(Role.X, 9) depends(Role.O, 9) {
         require((!claimed_X), "already claimed");
         claimed_X = true;
         int256 payout = ((!done_X_c1) ? 0 : ((!done_O_c1) ? 200 : ((!done_X_c2) ? 0 : ((!done_O_c2) ? 200 : ((!done_X_c3) ? 0 : ((!done_O_c3) ? 200 : ((!done_X_c4) ? 0 : ((!done_O_c4) ? 200 : 100))))))));

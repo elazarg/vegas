@@ -47,9 +47,11 @@ B3_b_hidden: bytes32
 done_B3_b_hidden: bool
 TIMEOUT: constant(uint256) = 86400  # 24 hours in seconds
 bailed: HashMap[Role, bool]
+COMMIT_TAG: immutable(bytes32)
 
-@external
+@deploy
 def __init__():
+    COMMIT_TAG = keccak256("VEGAS_COMMIT_V1")
     self.lastTs = block.timestamp
 
 @external
@@ -183,7 +185,7 @@ def move_B1_7(_b: int256, _salt: uint256):
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][3], "dependency not satisfied"
     assert (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) or (_b == 1)) or (_b == 2)) or (_b == 3)) or (_b == 4)) or (_b == 5)) or (_b == 6)) or (_b == 7)) or (_b == 8)) or (_b == 9)) or (_b == 10)) or (_b == 11)) or (_b == 12)) or (_b == 13)) or (_b == 14)) or (_b == 15)) or (_b == 16)) or (_b == 17)) or (_b == 18)) or (_b == 19)) or (_b == 20)) or (_b == 21)) or (_b == 22)) or (_b == 23)) or (_b == 24)) or (_b == 25)) or (_b == 26)) or (_b == 27)) or (_b == 28)) or (_b == 29)) or (_b == 30)) or (_b == 31)) or (_b == 32)) or (_b == 33)) or (_b == 34)) or (_b == 35)) or (_b == 36)) or (_b == 37)) or (_b == 38)) or (_b == 39)) or (_b == 40)) or (_b == 41)) or (_b == 42)) or (_b == 43)) or (_b == 44)) or (_b == 45)) or (_b == 46)) or (_b == 47)) or (_b == 48)) or (_b == 49)) or (_b == 50)) or (_b == 51)) or (_b == 52)) or (_b == 53)) or (_b == 54)) or (_b == 55)) or (_b == 56)) or (_b == 57)) or (_b == 58)) or (_b == 59)) or (_b == 60)) or (_b == 61)) or (_b == 62)) or (_b == 63)) or (_b == 64)) or (_b == 65)) or (_b == 66)) or (_b == 67)) or (_b == 68)) or (_b == 69)) or (_b == 70)) or (_b == 71)) or (_b == 72)) or (_b == 73)) or (_b == 74)) or (_b == 75)) or (_b == 76)) or (_b == 77)) or (_b == 78)) or (_b == 79)) or (_b == 80)) or (_b == 81)) or (_b == 82)) or (_b == 83)) or (_b == 84)) or (_b == 85)) or (_b == 86)) or (_b == 87)) or (_b == 88)) or (_b == 89)) or (_b == 90)) or (_b == 91)) or (_b == 92)) or (_b == 93)) or (_b == 94)) or (_b == 95)) or (_b == 96)) or (_b == 97)) or (_b == 98)) or (_b == 99)) or (_b == 100)), "domain"
-    assert (keccak256(concat(convert(b, bytes32), convert(salt, bytes32))) == self.B1_b_hidden), "reveal failed for b"
+    self._checkReveal(self.B1_b_hidden, Role.B1, msg.sender, _abi_encode(_b, _salt))
     self.B1_b = _b
     self.done_B1_b = True
     self.actionDone[Role.B1][4] = True
@@ -203,7 +205,7 @@ def move_B2_8(_b: int256, _salt: uint256):
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][4], "dependency not satisfied"
     assert (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) or (_b == 1)) or (_b == 2)) or (_b == 3)) or (_b == 4)) or (_b == 5)) or (_b == 6)) or (_b == 7)) or (_b == 8)) or (_b == 9)) or (_b == 10)) or (_b == 11)) or (_b == 12)) or (_b == 13)) or (_b == 14)) or (_b == 15)) or (_b == 16)) or (_b == 17)) or (_b == 18)) or (_b == 19)) or (_b == 20)) or (_b == 21)) or (_b == 22)) or (_b == 23)) or (_b == 24)) or (_b == 25)) or (_b == 26)) or (_b == 27)) or (_b == 28)) or (_b == 29)) or (_b == 30)) or (_b == 31)) or (_b == 32)) or (_b == 33)) or (_b == 34)) or (_b == 35)) or (_b == 36)) or (_b == 37)) or (_b == 38)) or (_b == 39)) or (_b == 40)) or (_b == 41)) or (_b == 42)) or (_b == 43)) or (_b == 44)) or (_b == 45)) or (_b == 46)) or (_b == 47)) or (_b == 48)) or (_b == 49)) or (_b == 50)) or (_b == 51)) or (_b == 52)) or (_b == 53)) or (_b == 54)) or (_b == 55)) or (_b == 56)) or (_b == 57)) or (_b == 58)) or (_b == 59)) or (_b == 60)) or (_b == 61)) or (_b == 62)) or (_b == 63)) or (_b == 64)) or (_b == 65)) or (_b == 66)) or (_b == 67)) or (_b == 68)) or (_b == 69)) or (_b == 70)) or (_b == 71)) or (_b == 72)) or (_b == 73)) or (_b == 74)) or (_b == 75)) or (_b == 76)) or (_b == 77)) or (_b == 78)) or (_b == 79)) or (_b == 80)) or (_b == 81)) or (_b == 82)) or (_b == 83)) or (_b == 84)) or (_b == 85)) or (_b == 86)) or (_b == 87)) or (_b == 88)) or (_b == 89)) or (_b == 90)) or (_b == 91)) or (_b == 92)) or (_b == 93)) or (_b == 94)) or (_b == 95)) or (_b == 96)) or (_b == 97)) or (_b == 98)) or (_b == 99)) or (_b == 100)), "domain"
-    assert (keccak256(concat(convert(b, bytes32), convert(salt, bytes32))) == self.B2_b_hidden), "reveal failed for b"
+    self._checkReveal(self.B2_b_hidden, Role.B2, msg.sender, _abi_encode(_b, _salt))
     self.B2_b = _b
     self.done_B2_b = True
     self.actionDone[Role.B2][5] = True
@@ -223,7 +225,7 @@ def move_B3_9(_b: int256, _salt: uint256):
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][5], "dependency not satisfied"
     assert (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((_b == 0) or (_b == 1)) or (_b == 2)) or (_b == 3)) or (_b == 4)) or (_b == 5)) or (_b == 6)) or (_b == 7)) or (_b == 8)) or (_b == 9)) or (_b == 10)) or (_b == 11)) or (_b == 12)) or (_b == 13)) or (_b == 14)) or (_b == 15)) or (_b == 16)) or (_b == 17)) or (_b == 18)) or (_b == 19)) or (_b == 20)) or (_b == 21)) or (_b == 22)) or (_b == 23)) or (_b == 24)) or (_b == 25)) or (_b == 26)) or (_b == 27)) or (_b == 28)) or (_b == 29)) or (_b == 30)) or (_b == 31)) or (_b == 32)) or (_b == 33)) or (_b == 34)) or (_b == 35)) or (_b == 36)) or (_b == 37)) or (_b == 38)) or (_b == 39)) or (_b == 40)) or (_b == 41)) or (_b == 42)) or (_b == 43)) or (_b == 44)) or (_b == 45)) or (_b == 46)) or (_b == 47)) or (_b == 48)) or (_b == 49)) or (_b == 50)) or (_b == 51)) or (_b == 52)) or (_b == 53)) or (_b == 54)) or (_b == 55)) or (_b == 56)) or (_b == 57)) or (_b == 58)) or (_b == 59)) or (_b == 60)) or (_b == 61)) or (_b == 62)) or (_b == 63)) or (_b == 64)) or (_b == 65)) or (_b == 66)) or (_b == 67)) or (_b == 68)) or (_b == 69)) or (_b == 70)) or (_b == 71)) or (_b == 72)) or (_b == 73)) or (_b == 74)) or (_b == 75)) or (_b == 76)) or (_b == 77)) or (_b == 78)) or (_b == 79)) or (_b == 80)) or (_b == 81)) or (_b == 82)) or (_b == 83)) or (_b == 84)) or (_b == 85)) or (_b == 86)) or (_b == 87)) or (_b == 88)) or (_b == 89)) or (_b == 90)) or (_b == 91)) or (_b == 92)) or (_b == 93)) or (_b == 94)) or (_b == 95)) or (_b == 96)) or (_b == 97)) or (_b == 98)) or (_b == 99)) or (_b == 100)), "domain"
-    assert (keccak256(concat(convert(b, bytes32), convert(salt, bytes32))) == self.B3_b_hidden), "reveal failed for b"
+    self._checkReveal(self.B3_b_hidden, Role.B3, msg.sender, _abi_encode(_b, _salt))
     self.B3_b = _b
     self.done_B3_b = True
     self.actionDone[Role.B3][6] = True
@@ -235,7 +237,7 @@ def withdraw_B2():
     assert self.roles[msg.sender] == Role.B2, "bad role"
     self._check_timestamp(Role.B2)
     assert not self.bailed[Role.B2], "you bailed"
-    assert not self.actionDone[Role.B2][10], "already done"
+    assert not self.actionDone[Role.B2][6], "already done"
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
@@ -245,8 +247,8 @@ def withdraw_B2():
     if payout > 0:
         success: bool = raw_call(self.address_B2, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.B2][10] = True
-    self.actionTimestamp[Role.B2][10] = block.timestamp
+    self.actionDone[Role.B2][6] = True
+    self.actionTimestamp[Role.B2][6] = block.timestamp
     self.lastTs = block.timestamp
 
 @external
@@ -254,7 +256,7 @@ def withdraw_B3():
     assert self.roles[msg.sender] == Role.B3, "bad role"
     self._check_timestamp(Role.B3)
     assert not self.bailed[Role.B3], "you bailed"
-    assert not self.actionDone[Role.B3][11], "already done"
+    assert not self.actionDone[Role.B3][7], "already done"
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
@@ -264,8 +266,8 @@ def withdraw_B3():
     if payout > 0:
         success: bool = raw_call(self.address_B3, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.B3][11] = True
-    self.actionTimestamp[Role.B3][11] = block.timestamp
+    self.actionDone[Role.B3][7] = True
+    self.actionTimestamp[Role.B3][7] = block.timestamp
     self.lastTs = block.timestamp
 
 @external
@@ -273,7 +275,7 @@ def withdraw_Seller():
     assert self.roles[msg.sender] == Role.Seller, "bad role"
     self._check_timestamp(Role.Seller)
     assert not self.bailed[Role.Seller], "you bailed"
-    assert not self.actionDone[Role.Seller][12], "already done"
+    assert not self.actionDone[Role.Seller][1], "already done"
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
@@ -283,8 +285,8 @@ def withdraw_Seller():
     if payout > 0:
         success: bool = raw_call(self.address_Seller, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.Seller][12] = True
-    self.actionTimestamp[Role.Seller][12] = block.timestamp
+    self.actionDone[Role.Seller][1] = True
+    self.actionTimestamp[Role.Seller][1] = block.timestamp
     self.lastTs = block.timestamp
 
 @external
@@ -292,7 +294,7 @@ def withdraw_B1():
     assert self.roles[msg.sender] == Role.B1, "bad role"
     self._check_timestamp(Role.B1)
     assert not self.bailed[Role.B1], "you bailed"
-    assert not self.actionDone[Role.B1][13], "already done"
+    assert not self.actionDone[Role.B1][5], "already done"
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
@@ -302,8 +304,8 @@ def withdraw_B1():
     if payout > 0:
         success: bool = raw_call(self.address_B1, b"", value=convert(payout, uint256), revert_on_failure=False)
         assert success, "ETH send failed"
-    self.actionDone[Role.B1][13] = True
-    self.actionTimestamp[Role.B1][13] = block.timestamp
+    self.actionDone[Role.B1][5] = True
+    self.actionTimestamp[Role.B1][5] = block.timestamp
     self.lastTs = block.timestamp
 
 @payable
@@ -318,4 +320,10 @@ def _check_timestamp(role: Role):
     if block.timestamp > self.lastTs + TIMEOUT:
         self.bailed[role] = True
         self.lastTs = block.timestamp
+
+@internal
+@view
+def _checkReveal(commitment: bytes32, role: Role, actor: address, payload: Bytes[256]):
+    expected: bytes32 = keccak256(_abi_encode(COMMIT_TAG, self, role, actor, keccak256(payload)))
+    assert expected == commitment, "bad reveal"
 

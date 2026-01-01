@@ -23,7 +23,7 @@ fun compileToEvm(game: GameIR): EvmContract {
 
     // Build per-role withdraw actions
     val sinks = dag.sinks()
-    val withdrawActions = buildWithdrawActions(game, sinks, linearization.size)
+    val withdrawActions = buildWithdrawActions(game, sinks, dag)
 
     val actions = gameActions + withdrawActions
 
@@ -220,23 +220,14 @@ private fun buildAction(
             add(Assign(Member(BuiltIn.Self, "done_${role.name}"), BoolLit(true)))
         }
 
-        // Reveal Verification
+        // Reveal Verification - uses role/actor-bound commitments to prevent copy-commit attacks
         if (kind == Visibility.REVEAL) {
             spec.params.forEach { p ->
-                // hash(param, salt) == stored_commitment
-                val input = VarId(inputParam( p.name, false))
-                val salt = VarId(inputParam( VarId("salt"), false))
-                val packed = AbiEncode(listOf(Var(input), Var(salt)), isPacked = true) // Solidity style packing
-                val hash = Keccak256(packed)
-
+                val input = Var(VarId(inputParam(p.name, false)))
+                val salt = Var(VarId(inputParam(VarId("salt"), false)))
                 val commitment = Member(BuiltIn.Self, storageName(meta.struct.owner, p.name, true))
 
-                add(
-                    Require(
-                        Binary(BinaryOp.EQ, hash, commitment),
-                        "reveal failed for ${p.name}"
-                    )
-                )
+                add(CheckReveal(commitment, meta.struct.owner, listOf(input, salt)))
             }
         }
 
@@ -273,10 +264,21 @@ private fun buildAction(
 private fun buildWithdrawActions(
     game: GameIR,
     sinks: Set<ActionId>,
-    startIdx: Int
+    dag: ActionDag
 ): List<EvmAction> {
-    return game.payoffs.entries.mapIndexed { i, (role, expr) ->
-        val actionId: ActionId = role to (startIdx + i)
+    // Compute max action ID per role to avoid collisions
+    val maxIdPerRole = mutableMapOf<RoleId, Int>()
+    dag.metas.forEach { meta ->
+        val role = meta.struct.owner
+        val actionSeq = dag.topo().filter { it.first == role }.maxOfOrNull { it.second } ?: 0
+        maxIdPerRole[role] = maxOf(maxIdPerRole.getOrDefault(role, 0), actionSeq)
+    }
+
+    return game.payoffs.entries.map { (role, expr) ->
+        // Use next available ID for this role (max + 1)
+        val nextId = (maxIdPerRole[role] ?: 0) + 1
+        maxIdPerRole[role] = nextId  // Update for potential multiple withdraws per role
+        val actionId: ActionId = role to nextId
         val claimedFlag = "claimed_${role.name}"
 
         val body = buildList<EvmStmt> {

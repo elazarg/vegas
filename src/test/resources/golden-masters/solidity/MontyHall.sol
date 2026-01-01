@@ -72,9 +72,22 @@ contract MontyHall {
         _;
     }
     
-    function _checkReveal(bytes32 commitment, bytes memory preimage) internal pure {
-        require((keccak256(preimage) == commitment), "bad reveal");
+    bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+    
+    function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            COMMIT_TAG,
+            address(this),
+            role,
+            actor,
+            keccak256(payload)
+        ));
     }
+    
+    function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+        require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+    }
+    
     
     constructor() {
         lastTs = block.timestamp;
@@ -122,12 +135,12 @@ contract MontyHall {
     function move_Host_6(int256 _car, uint256 _salt) public by(Role.Host) action(Role.Host, 6) depends(Role.Host, 2) depends(Role.Host, 4) depends(Role.Guest, 5) {
         require((((_car == 0) || (_car == 1)) || (_car == 2)), "domain");
         require((Host_goat != _car), "domain");
-        require((keccak256(abi.encodePacked(_car, _salt)) == Host_car_hidden), "reveal failed for car");
+        _checkReveal(Host_car_hidden, Role.Host, msg.sender, abi.encode(_car, _salt));
         Host_car = _car;
         done_Host_car = true;
     }
     
-    function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 7) depends(Role.Host, 6) {
+    function withdraw_Guest() public by(Role.Guest) action(Role.Guest, 6) depends(Role.Host, 6) {
         require((!claimed_Guest), "already claimed");
         claimed_Guest = true;
         int256 payout = ((!done_Host_car) ? 40 : ((!done_Guest_d) ? 0 : ((!done_Host_goat) ? 40 : ((!done_Guest_switch) ? 0 : (((Guest_d != Host_car) == Guest_switch) ? 40 : 0)))));
@@ -137,7 +150,7 @@ contract MontyHall {
         }
     }
     
-    function withdraw_Host() public by(Role.Host) action(Role.Host, 8) depends(Role.Host, 6) {
+    function withdraw_Host() public by(Role.Host) action(Role.Host, 7) depends(Role.Host, 6) {
         require((!claimed_Host), "already claimed");
         claimed_Host = true;
         int256 payout = ((!done_Host_car) ? 0 : ((!done_Guest_d) ? 40 : ((!done_Host_goat) ? 0 : ((!done_Guest_switch) ? 40 : (((Guest_d != Host_car) == Guest_switch) ? 0 : 40)))));
