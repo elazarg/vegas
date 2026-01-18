@@ -1,5 +1,6 @@
 package vegas.frontend;
 
+import vegas.StaticError;
 import vegas.generated.VegasBaseVisitor;
 import vegas.generated.VegasParser.*;
 import org.antlr.v4.runtime.Token;
@@ -55,12 +56,14 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
         GameDecContext gameDec = ctx.gameDec();
         String gameName = gameDec.name.getText();
 
+        Ext game = ext(gameDec.ext());
         // For now, only 'main' is supported
         if (!gameName.equals("main")) {
-            throw new RuntimeException("Only 'game main()' is supported; found 'game " + gameName + "()' at line " + gameDec.getStart().getLine());
+            String reason = "Only 'game main()' is supported; found 'game " + gameName + "()'";
+            throw new StaticError(reason, game);
         }
 
-        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), ext(gameDec.ext()));
+        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), game);
     }
 
     private Map<TypeExp.TypeId, TypeExp> map(List<TypeDecContext> ctxs) {
