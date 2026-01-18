@@ -62,6 +62,9 @@ private fun inlineMacrosInOutcome(outcome: Outcome, macroEnv: Map<VarId, MacroDe
         init = inlineMacrosInExp(outcome.init, macroEnv),
         outcome = inlineMacrosInOutcome(outcome.outcome, macroEnv)
     )
+
+    // Split, Burn, and Null are terminal - no expressions to inline
+    is Outcome.Split, is Outcome.Burn, is Outcome.Null -> outcome
 }
 
 /** Inline macros in Exp - this is the core inlining logic */

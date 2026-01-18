@@ -1,11 +1,10 @@
-// Dominance: A always gets more regardless of choices (test case for strategy dominance)
-// Distribution semantics: pot (20 wei) favors A in all outcomes
+// Dominance: A always can get more regardless of B's choices (test case for strategy dominance)
 
 game main() {
   join A() $ 10;
   join B() $ 10;
-  yield A(c: bool) B(c: bool);
-  withdraw (A.c != B.c)
+  yield or split A(c: bool) B(c: bool);
+  withdraw (A.c)
       ? { A -> 15; B -> 5 }
-      : { A -> 15; B -> 5 }
+      : { A -> 5; B -> 15 }
 }

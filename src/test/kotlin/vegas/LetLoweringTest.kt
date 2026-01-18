@@ -49,12 +49,14 @@ class LetLoweringTest : FreeSpec({
     fun join(vararg roles: Role): Ext = Ext.Bind(
         Kind.JOIN,
         roles.map { Query(it, emptyList(), n(0), b(true)) },
+        null,
         Ext.Value(Value(emptyMap()))
     )
 
     fun yieldTo(role: Role, params: List<VarDec>): Ext = Ext.Bind(
         Kind.YIELD,
         listOf(Query(role, params, n(0), b(true))),
+        null,
         Ext.Value(Value(emptyMap()))
     )
 

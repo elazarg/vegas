@@ -6,11 +6,12 @@ type ticket = {0, 1, 2}
 game main() {
   join P1() $ 100 P2() $ 100 P3() $ 100;
   random RNG() $ 100;
-  
-  yield P1(t: ticket) P2(t: ticket) P3(t: ticket);
-  
+
+  yield or split P1(t: ticket) P2(t: ticket) P3(t: ticket);
+
   yield RNG(w: ticket);
-  
+
+  // Winner gets full pot, losers get 0
   withdraw {
       P1 -> (P1.t == RNG.w ? 400 : 0);
       P2 -> (P2.t == RNG.w ? 400 : 0);

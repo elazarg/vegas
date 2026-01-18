@@ -113,6 +113,9 @@ fun renameVarInOutcome(outcome: Outcome, from: VarId, to: VarId): Outcome {
             val newBody = renameVarInOutcome(outcome.outcome, from, to)
             copySpan(Outcome.Let(newDec, newInit, newBody), outcome)
         }
+
+        // Split, Burn, and Null are terminal - no expressions to rename
+        is Outcome.Split, is Outcome.Burn, is Outcome.Null -> outcome
     }
 }
 
@@ -219,6 +222,9 @@ fun substituteVarInOutcome(outcome: Outcome, varId: VarId, replacement: Exp): Ou
                 }
             }
         }
+
+        // Split, Burn, and Null are terminal - no expressions to substitute
+        is Outcome.Split, is Outcome.Burn, is Outcome.Null -> outcome
     }
 }
 
@@ -260,5 +266,8 @@ private fun desugar(outcome: Outcome, names: List<Pair<VarDec, Exp>>): Outcome.V
         val outcomeWithSubstitution = substituteVarInOutcome(outcome.outcome, outcome.dec.v.id, outcome.init)
         desugar(outcomeWithSubstitution, names)
     }
+
+    // Split, Burn, and Null cannot be desugared at AST level - they require IR-level handling
+    is Outcome.Split, is Outcome.Burn, is Outcome.Null -> error("Split/Burn/Null handlers require IR-level desugaring")
 }
 

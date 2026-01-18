@@ -7,12 +7,10 @@
 game main() {
   join A() $ 100;
   join B() $ 100;
-  yield A(c: bool) B(c: bool); // true means cooperate
-  withdraw (A.c != null && B.c != null)
-  ?(  (A.c && B.c )   ? { A -> 100; B -> 100 }  // Both cooperate: split evenly
-      : (A.c && !B.c) ? { A -> 0; B -> 200 }    // A cooperates, B defects: B gets all
-      : (!A.c && B.c) ? { A -> 200; B -> 0 }    // A defects, B cooperates: A gets all
-      :                 { A -> 90; B -> 110 }   // Both defect: slight advantage to B
-  ):(A.c == null) ? { A -> 0; B -> 200 }        // A quit, B wins
-  :{ A -> 200; B -> 0 }                          // B quit, A wins
+  yield or split A(c: bool) B(c: bool); // true means cooperate; quitter forfeits all
+  withdraw
+    (A.c && B.c )   ? { A -> 100; B -> 100 }  // Both cooperate: split evenly
+  : (A.c && !B.c) ? { A -> 0; B -> 200 }      // A cooperates, B defects: B gets all
+  : (!A.c && B.c) ? { A -> 200; B -> 0 }      // A defects, B cooperates: A gets all
+  :                 { A -> 90; B -> 110 }     // Both defect: slight advantage to B
 }

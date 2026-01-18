@@ -565,6 +565,7 @@ internal class ProtocolTyper(
 
     data class State(
         val roles: Set<RoleId> = emptySet(),
+        val randomRoles: Set<RoleId> = emptySet(),  // Roles joined with 'random' - they can never quit
         val fields: Map<FieldRef, TypeExp> = emptyMap(),
         // Track committed fields that haven't been revealed yet, with their source node for error reporting
         val unrevealedCommits: Map<FieldRef, Ast> = emptyMap()
@@ -586,31 +587,49 @@ internal class ProtocolTyper(
                 val view = View(roles = st.roles, fields = st.fields, vars = emptyMap())
                 typeOutcome(ext.outcome, view)
             }
-            is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.ext), st)
+            is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.handler, ext.ext), st)
             is Ext.Bind -> {
                 ext.qs.forEach { q -> q.params.forEach { (_, t) -> universe.validateDefined(t, q) } }
 
+                // Validate group handler (ext.handler)
+                validateGroupHandler(ext)
+
+                // Validate per-query handlers
                 if ((ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE) && ext.qs.any { it.handler != null }) {
                     throw StaticError("Quit handlers are not allowed on JOIN", ext)
                 }
                 if (ext.qs.size > 1 && ext.kind != Kind.JOIN && ext.kind != Kind.JOIN_CHANCE && ext.qs.any { it.handler != null }) {
-                    throw StaticError("Quit handlers not supported on simultaneous actions", ext)
+                    throw StaticError("Per-query handlers not supported on simultaneous actions; use group handler instead", ext)
                 }
 
                 val deltaMaps = mutableListOf<Map<FieldRef, TypeExp>>()
                 val roles2 = st.roles.toMutableSet()
+                val randomRoles2 = st.randomRoles.toMutableSet()
 
                 for (q in ext.qs) {
                     val role = q.role.id
                     val isJoin = ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE
+                    val isRandom = ext.kind == Kind.JOIN_CHANCE
                     val isReveal = ext.kind == Kind.REVEAL
                     val isCommit = ext.kind == Kind.COMMIT
 
-                    if (isJoin) roles2 += role
-                    else if (role !in roles2) throw StaticError("$role is not a role", q.role)
+                    if (isJoin) {
+                        roles2 += role
+                        if (isRandom) randomRoles2 += role
+                    } else if (role !in roles2) {
+                        throw StaticError("$role is not a role", q.role)
+                    }
 
                     val m = q.params.associate { (k, tRaw) ->
                         val fr = FieldRef(role, k.id)
+                        // Nullable only if explicit `|| null` handler is used
+                        // Default (no handler) = implicit burn = non-nullable
+                        // TODO: When a player quits (burn/split), they must still validate pending commits:
+                        //       - Reveal committed values
+                        //       - Check where clauses on those commits
+                        //       This is not yet enforced.
+                        val isNullHandler = q.handler is Outcome.Null || ext.handler is Outcome.Null
+
                         val t = when {
                             // Join fields are strictly present (non-nullable)
                             isJoin -> {
@@ -622,18 +641,18 @@ internal class ProtocolTyper(
                             // Commit wraps in Hidden (internally) - creates the commitment
                             isCommit -> {
                                 val base = universe.resolve(tRaw)
-                                // Commit with handler guarantees presence, otherwise Opt
-                                if (q.handler != null) Hidden(base) else Opt(Hidden(base))
+                                // Commit with null handler produces nullable hidden, otherwise non-nullable
+                                if (isNullHandler) Opt(Hidden(base)) else Hidden(base)
                             }
-                            // Yield with handler guarantees presence (non-nullable)
-                            q.handler != null -> stripOpt(universe.resolve(tRaw))
-                            // Yield without handler is nullable (Opt T)
-                            else -> Opt(universe.resolve(tRaw))
+                            // Explicit null handler → nullable (Opt T)
+                            isNullHandler -> Opt(universe.resolve(tRaw))
+                            // Everything else (no handler = implicit burn, or split/burn/value) → non-nullable
+                            else -> stripOpt(universe.resolve(tRaw))
                         }
                         fr to t
                     }
 
-                    checkWhere(q, st.copy(roles = roles2), m)
+                    checkWhere(q, st.copy(roles = roles2, randomRoles = randomRoles2), m)
 
                     // Handler Policy B: Handlers can read all currently visible fields
                     // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal
@@ -657,7 +676,7 @@ internal class ProtocolTyper(
                     }
                 }
 
-                typeExt(ext.ext, State(roles = roles2, fields = newFields, unrevealedCommits = newUnrevealed))
+                typeExt(ext.ext, State(roles = roles2, randomRoles = randomRoles2, fields = newFields, unrevealedCommits = newUnrevealed))
             }
         }
     }
@@ -711,7 +730,13 @@ internal class ProtocolTyper(
 
     private fun checkHandler(q: Query, roles: Set<RoleId>, visibleFields: Map<FieldRef, TypeExp>) {
         val h = q.handler ?: return
-        if (h !is Outcome.Value) throw StaticError("Quit handler must be a simple withdraw outcome", h)
+
+        // Split, Burn, and Null are valid for single-query handlers
+        if (h is Outcome.Split || h is Outcome.Burn || h is Outcome.Null) {
+            return  // No further validation needed - these handle allocation automatically
+        }
+
+        if (h !is Outcome.Value) throw StaticError("Quit handler must be a simple withdraw outcome, split, burn, or null", h)
 
         val expected = roles - q.role.id
         val got = h.ts.keys.map { it.id }.toSet()
@@ -723,6 +748,28 @@ internal class ProtocolTyper(
             val t = expr.type(e, view)
             if (!expr.isSubtype(t, INT)) throw StaticError("Handler payout must be int", e)
         }
+    }
+
+    /**
+     * Validate group-level handler on Ext.Bind.
+     * Group handlers apply to the entire step (as opposed to per-query handlers).
+     */
+    private fun validateGroupHandler(ext: Ext.Bind) {
+        val handler = ext.handler ?: return
+
+        // Handlers only allowed on yield/reveal/commit (not join or random)
+        if (ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE) {
+            throw StaticError("Group handlers not allowed on join/random (cannot timeout)", ext)
+        }
+
+        // Multi-party steps: only split/burn/null allowed
+        if (ext.qs.size > 1) {
+            if (handler !is Outcome.Split && handler !is Outcome.Burn && handler !is Outcome.Null) {
+                throw StaticError("Multi-party steps only allow 'split', 'burn', or 'null' handlers, not custom outcomes", ext)
+            }
+        }
+
+        // Single-party steps: allow split, burn, null, or custom outcome (validated via checkHandler)
     }
 
     private fun typeOutcome(o: Outcome, view: View) {
@@ -755,6 +802,9 @@ internal class ProtocolTyper(
                 val innerView = view.copy(vars = view.vars + (o.dec.v.id to o.dec.type))
                 typeOutcome(o.outcome, innerView)
             }
+
+            // Split, Burn, and Null are terminal handlers with no inner expressions
+            is Outcome.Split, is Outcome.Burn, is Outcome.Null -> { /* valid by construction */ }
         }
     }
 

@@ -19,8 +19,8 @@ data class Role(val id: RoleId) : Ast() {
 }
 
 sealed class Ext : Ast() {
-    data class Bind(val kind: Kind, val qs: List<Query>, val ext: Ext) : Ext(), Step
-    data class BindSingle(val kind: Kind, val q: Query, val ext: Ext) : Ext(), Step
+    data class Bind(val kind: Kind, val qs: List<Query>, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
+    data class BindSingle(val kind: Kind, val q: Query, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
     data class Value(val outcome: Outcome) : Ext()
 }
 
@@ -65,6 +65,11 @@ sealed class Outcome : Ast() {
 
     data class Value(val ts: Map<Role, Exp>) : Outcome()
     data class Let(val dec: VarDec, val init: Exp, val outcome: Outcome) : Outcome()
+
+    // Group failure handlers for simultaneous steps
+    object Split : Outcome()
+    object Burn : Outcome()
+    object Null : Outcome()
 }
 
 data class VarDec(val v: Exp.Var, val type: TypeExp)

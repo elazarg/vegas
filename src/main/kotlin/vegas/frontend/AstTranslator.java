@@ -1,5 +1,6 @@
 package vegas.frontend;
 
+import vegas.StaticError;
 import vegas.generated.VegasBaseVisitor;
 import vegas.generated.VegasParser.*;
 import org.antlr.v4.runtime.Token;
@@ -55,12 +56,14 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
         GameDecContext gameDec = ctx.gameDec();
         String gameName = gameDec.name.getText();
 
+        Ext game = ext(gameDec.ext());
         // For now, only 'main' is supported
         if (!gameName.equals("main")) {
-            throw new RuntimeException("Only 'game main()' is supported; found 'game " + gameName + "()' at line " + gameDec.getStart().getLine());
+            String reason = "Only 'game main()' is supported; found 'game " + gameName + "()'";
+            throw new StaticError(reason, game);
         }
 
-        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), ext(gameDec.ext()));
+        return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), game);
     }
 
     private Map<TypeExp.TypeId, TypeExp> map(List<TypeDecContext> ctxs) {
@@ -139,18 +142,85 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
     public Ext visitReceiveExt(ReceiveExtContext ctx) {
         Ext ext = ext(ctx.ext());
         Kind kind = toKind(ctx.kind);
-        if (ctx.query().size() == 1)
-            return new Ext.BindSingle(kind, query(ctx.query().getFirst()), ext);
+        Outcome groupHandler = groupHandler(ctx.handler);
+
+        List<QueryContext> queryCtxs = ctx.query();
+
+        if (queryCtxs.size() == 1)
+            return new Ext.BindSingle(kind, query(queryCtxs.getFirst()), groupHandler, ext);
         else
-            return new Ext.Bind(kind, list(ctx.query(), this::query), ext);
+            return new Ext.Bind(kind, list(queryCtxs, this::query), groupHandler, ext);
     }
 
     private Query query(QueryContext ctx) {
-        return withSpan(new Query(role(ctx.roleId()), list(ctx.decls, this::vardec), num(ctx.deposit), where(ctx.cond), handler(ctx.handler)), ctx);
+        return withSpan(new Query(role(ctx.roleId()), list(ctx.decls, this::vardec), num(ctx.deposit), where(ctx.cond), queryHandler(ctx.handler)), ctx);
     }
 
-    private Outcome handler(OutcomeContext handler) {
-        return handler != null ? outcome(handler) : null;
+    private Outcome queryHandler(QueryHandlerContext handler) {
+        if (handler == null) return null;
+        Ast node = handler.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in query handler at line " + handler.getStart().getLine());
+        return (Outcome) withSpan(node, handler);
+    }
+
+    private Outcome groupHandler(GroupHandlerContext handler) {
+        if (handler == null) return null;
+        Ast node = handler.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in group handler at line " + handler.getStart().getLine());
+        return (Outcome) withSpan(node, handler);
+    }
+
+    // Query handler visitors - return Outcome
+    @Override
+    public Outcome visitIfQueryHandler(IfQueryHandlerContext ctx) {
+        return new Outcome.Cond(exp(ctx.cond), queryHandler(ctx.ifTrue), queryHandler(ctx.ifFalse));
+    }
+
+    @Override
+    public Outcome visitLetQueryHandler(LetQueryHandlerContext ctx) {
+        return new Outcome.Let(vardec(ctx.dec), exp(ctx.init), queryHandler(ctx.body));
+    }
+
+    @Override
+    public Outcome visitParenQueryHandler(ParenQueryHandlerContext ctx) {
+        return queryHandler(ctx.queryHandler());
+    }
+
+    @Override
+    public Outcome visitOutcomeQueryHandler(OutcomeQueryHandlerContext ctx) {
+        Map<Role, Exp> m = ctx.items.stream().collect(toMap(e -> role(e.role), e -> exp(e.exp())));
+        return new Outcome.Value(m);
+    }
+
+    @Override
+    public Outcome visitSplitQueryHandler(SplitQueryHandlerContext ctx) {
+        return withSpan(Outcome.Split.INSTANCE, ctx);
+    }
+
+    @Override
+    public Outcome visitBurnQueryHandler(BurnQueryHandlerContext ctx) {
+        return withSpan(Outcome.Burn.INSTANCE, ctx);
+    }
+
+    @Override
+    public Outcome visitNullQueryHandler(NullQueryHandlerContext ctx) {
+        return withSpan(Outcome.Null.INSTANCE, ctx);
+    }
+
+    // Group handler visitors - return Outcome (Split, Burn, or Null)
+    @Override
+    public Outcome visitSplitHandler(SplitHandlerContext ctx) {
+        return withSpan(Outcome.Split.INSTANCE, ctx);
+    }
+
+    @Override
+    public Outcome visitBurnHandler(BurnHandlerContext ctx) {
+        return withSpan(Outcome.Burn.INSTANCE, ctx);
+    }
+
+    @Override
+    public Outcome visitNullHandler(NullHandlerContext ctx) {
+        return withSpan(Outcome.Null.INSTANCE, ctx);
     }
 
     private Exp where(ExpContext cond) {
