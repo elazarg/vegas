@@ -2,6 +2,7 @@ package vegas
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.datatest.withData
+import vegas.frontend.compileToIR
 import vegas.frontend.parseFile
 import vegas.frontend.inlineMacros
 import java.io.File
@@ -18,21 +19,16 @@ class ExamplesValidationTest : FreeSpec({
         file.extension == "vg" && !file.nameWithoutExtension.startsWith("Invalid_")
     }?.sorted() ?: emptyList()
 
-    // Examples excluded due to known language design limitations (not bugs in transformation)
+    // Examples excluded from this test due to known language design limitations.
+    // These are tested elsewhere (see comments) to ensure they remain valid.
     val knownLanguageLimitations = setOf(
         // MontyHallChance: Demonstrates the declaration/definition split for hidden values.
         // The constraint "Host.goat != Host.car" belongs logically at the declaration site
         // (where Host.car is yielded as hidden), but can only be verified server-side at
         // the reveal site. Current language syntax doesn't support deferred constraints
         // (e.g., "where reveal Host.car != Host.goat").
-        "MontyHallChance",
-
-        // TwoRobotCorridor: Uses simultaneous yields which produce nullable fields (opt T),
-        // but the macro robotPayoff expects non-nullable arguments. Macros are pure functions
-        // that cannot accept opt types - they would need to handle null cases explicitly,
-        // defeating their purpose. The withdraw section would need to inline the macro logic
-        // or add explicit null checks before calling the macro.
-        "TwoRobotCorridor"
+        // NOTE: IR compilation is tested in UnrollerTest.kt ("produces identical EFG for MontyHallChance")
+        "MontyHallChance"
     )
 
     val examples = exampleFiles
@@ -66,6 +62,28 @@ class ExamplesValidationTest : FreeSpec({
                 inlineMacros(ast)
             } catch (e: Exception) {
                 throw AssertionError("Failed to inline macros in $exampleName.vg", e)
+            }
+        }
+    }
+
+    "All examples should compile to IR successfully" - {
+        withData(examples) { exampleName ->
+            val ast = try {
+                parseFile("examples/$exampleName.vg")
+            } catch (e: Exception) {
+                throw AssertionError("Failed to parse $exampleName.vg", e)
+            }
+
+            val inlined = try {
+                inlineMacros(ast)
+            } catch (e: Exception) {
+                throw AssertionError("Failed to inline macros in $exampleName.vg", e)
+            }
+
+            try {
+                compileToIR(inlined)
+            } catch (e: Exception) {
+                throw AssertionError("Failed to compile $exampleName.vg to IR", e)
             }
         }
     }

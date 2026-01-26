@@ -6,20 +6,11 @@ type time = {0, 1, 2}
 game main() {
   join R1() $ 100 R2() $ 100;
 
-  yield R1(courteous: bool) R2(courteous: bool);
-  yield R1(t: time) R2(t: time);
+  yield or split R1(courteous: bool) R2(courteous: bool);
+  yield or split R1(t: time) R2(t: time);
 
   withdraw
-    // Handle quit cases
-    (R1.courteous == null || R1.t == null) && (R2.courteous == null || R2.t == null) ?
-      { R1 -> 100; R2 -> 100; }  // Both quit: return deposits
-    : (R1.courteous == null || R1.t == null) ?
-      { R1 -> 50; R2 -> 150; }  // R1 quit: penalized
-    : (R2.courteous == null || R2.t == null) ?
-      { R1 -> 150; R2 -> 50; }  // R2 quit: penalized
-
-    // Handle collision-free entry
-    : (R1.t != R2.t) ?
+      (R1.t != R2.t) ?
       { R1 -> 100 + (10 - R1.t) * 10; R2 -> 100 + (10 - R2.t) * 10; }  // Earlier entry bonus
 
     // Handle collisions based on courtesy
