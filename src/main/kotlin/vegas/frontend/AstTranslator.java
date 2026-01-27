@@ -60,7 +60,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
         // For now, only 'main' is supported
         if (!gameName.equals("main")) {
             String reason = "Only 'game main()' is supported; found 'game " + gameName + "()'";
-            throw new StaticError(reason, game);
+            throw new StaticError(reason, withSpan(game, ctx.gameDec().gameId()));
         }
 
         return new GameAst("", "", map(ctx.typeDec()), macros(ctx.macroDec()), game);
