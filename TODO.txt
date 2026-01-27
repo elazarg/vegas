@@ -1,6 +1,0 @@
-TODO:
-* Generate clients / client stubs
-* Support ERC-20 / ERC-777 tokens (code generation)
-* Support multi-token games
-* Support solidity pure functions
-* Support variable deposits
