@@ -1,0 +1,18 @@
+[versions]
+kotlin = "2.3.0"
+antlr = "4.13.2"
+kotest = "6.1.1"
+lsp4j = "0.24.0"
+classgraph = "4.8.184"
+
+[libraries]
+classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
+kotest-runner = { module = "io.kotest:kotest-runner-junit5-jvm", version.ref = "kotest" }
+kotest-assertions = { module = "io.kotest:kotest-assertions-core-jvm", version.ref = "kotest" }
+kotest-property = { module = "io.kotest:kotest-property-jvm", version.ref = "kotest" }
+antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
+lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version.ref = "lsp4j" }
+lsp4j-jsonrpc = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc", version.ref = "lsp4j" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

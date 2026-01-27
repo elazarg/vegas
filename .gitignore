@@ -1,6 +1,9 @@
 CLAUDE.md
 lsp/server/*.jar
 
+.gradle
+build/
+
 __pycache__
 .diff
 .idea
