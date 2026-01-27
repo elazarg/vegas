@@ -281,7 +281,7 @@ private fun buildWithdrawActions(
         val actionId: ActionId = role to nextId
         val claimedFlag = "claimed_${role.name}"
 
-        val body = buildList<EvmStmt> {
+        val body = buildList {
             // require(!claimed_Role, "already claimed")
             add(Require(
                 Unary(UnaryOp.NOT, Member(BuiltIn.Self, claimedFlag)),

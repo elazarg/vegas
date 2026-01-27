@@ -13,7 +13,7 @@ import vegas.ir.Expr
  * - [Play]: A role makes a choice (explicit action or quit)
  * - [FinalizeFrontier]: Internal step that finalizes accumulated partial frontier
  */
-internal sealed class Label {
+sealed class Label {
     /**
      * Player move: a role assigns values to their parameters.
      *
@@ -40,7 +40,7 @@ internal sealed class Label {
 /**
  * Tag identifying the kind of play move.
  */
-internal sealed class PlayTag {
+sealed class PlayTag {
     /**
      * Explicit action: role assigns parameters for this action.
      * @property actionId The action being executed
@@ -58,7 +58,7 @@ internal sealed class PlayTag {
  * Create a frontier slice where all parameters of the given actions are set to [Expr.Const.Quit].
  * This represents the "quit" choice where a strategic player opts out of all actions at a frontier.
  */
-internal fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
+fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
     actions.flatMap { actionId ->
         dag.params(actionId).map { FieldRef(role, it.name) to Expr.Const.Quit }
     }.toMap()

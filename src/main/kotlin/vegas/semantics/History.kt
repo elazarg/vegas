@@ -9,7 +9,7 @@ import vegas.ir.Expr
  * A map from field references to values representing one layer of action writes.
  * This is the atomic unit of state update in the frontier-based game tree construction.
  */
-internal typealias FrontierAssignmentSlice = Map<FieldRef, Expr.Const>
+typealias FrontierAssignmentSlice = Map<FieldRef, Expr.Const>
 
 /**
  * Visible snapshot to 'who' at a given frontier: others' Hidden appear as Opaque.
@@ -24,7 +24,7 @@ internal typealias FrontierAssignmentSlice = Map<FieldRef, Expr.Const>
  * @param who The role for whom this view is being constructed
  * @return Redacted frontier slice as seen by [who]
  */
-internal fun redacted(messages: FrontierAssignmentSlice, who: RoleId): FrontierAssignmentSlice =
+fun redacted(messages: FrontierAssignmentSlice, who: RoleId): FrontierAssignmentSlice =
     messages.mapValues { (fieldRef, v) ->
         val (r, _) = fieldRef
         if (r == who) {
@@ -48,7 +48,7 @@ internal fun redacted(messages: FrontierAssignmentSlice, who: RoleId): FrontierA
  * @property lastFrontier The most recent frontier slice
  * @property past The previous state (null for initial empty state)
  */
-internal data class History(
+data class History(
     val lastFrontier: FrontierAssignmentSlice = emptyMap(),
     val past: History? = null,
 ) {
@@ -71,7 +71,7 @@ internal data class History(
  * Per-role knowledge: redacted views of history for information set construction.
  * Each role's knowledge is an History where others' hidden values appear as Opaque.
  */
-internal typealias HistoryViews = Map<RoleId, History>
+typealias HistoryViews = Map<RoleId, History>
 
 /**
  * Check if a role has ever abandoned (written [Expr.Const.Quit]) anywhere in the history.
@@ -80,7 +80,7 @@ internal typealias HistoryViews = Map<RoleId, History>
  * @param role The role to check
  * @return true if this role has written Quit to any of their fields
  */
-internal fun History.quit(role: RoleId): Boolean =
+fun History.quit(role: RoleId): Boolean =
     lastFrontier.any { (field, v) -> field.owner == role && v == Expr.Const.Quit } ||
             (past?.quit(role) ?: false)
 
@@ -92,7 +92,7 @@ internal fun History.quit(role: RoleId): Boolean =
  * @param pkt The packet of parameter assignments
  * @return A frontier slice mapping FieldRef to Expr.Const
  */
-internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, Expr.Const>): FrontierAssignmentSlice =
+fun toFrontierMap(role: RoleId, pkt: Map<VarId, Expr.Const>): FrontierAssignmentSlice =
     pkt.mapKeys { (v, _) -> FieldRef(role, v) }
 
 /**
@@ -109,7 +109,7 @@ internal fun toFrontierMap(role: RoleId, pkt: Map<VarId, Expr.Const>): FrontierA
  * Note: This is computed on-demand rather than stored in Configuration
  * to save memory in large trees (partial is frequently updated).
  */
-internal fun reconstructViews(globalHistory: History, roles: Set<RoleId>): HistoryViews {
+fun reconstructViews(globalHistory: History, roles: Set<RoleId>): HistoryViews {
     // 1. Unwind the stack to get slices in chronological order (Root -> Leaf)
     val slices = ArrayDeque<FrontierAssignmentSlice>()
     var curr: History? = globalHistory

@@ -6,7 +6,7 @@ import vegas.ir.asBool
 import vegas.ir.asInt
 import vegas.ir.Expr.Const.*
 
-internal fun eval(readField: (FieldRef)-> Expr.Const, e: Expr): Expr.Const {
+fun eval(readField: (FieldRef)-> Expr.Const, e: Expr): Expr.Const {
     fun eq(a: Expr.Const, b: Expr.Const): Boolean = when {
         a is IntVal && b is IntVal -> a.v == b.v
         a is BoolVal && b is BoolVal -> a.v == b.v

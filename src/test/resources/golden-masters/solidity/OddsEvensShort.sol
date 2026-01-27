@@ -131,7 +131,7 @@ contract OddsEvensShort {
     function withdraw_Odd() public by(Role.Odd) action(Role.Odd, 4) depends(Role.Odd, 3) depends(Role.Even, 5) {
         require((!claimed_Odd), "already claimed");
         claimed_Odd = true;
-        int256 payout = (((!done_Odd_c) || (!done_Even_c)) ? (done_Odd_c ? (100 + (((done_Odd_c ? 0 : 100) + (done_Even_c ? 0 : 100)) / ((((done_Odd_c ? 1 : 0) + (done_Even_c ? 1 : 0)) > 0) ? ((done_Odd_c ? 1 : 0) + (done_Even_c ? 1 : 0)) : 1))) : 0) : ((Even_c == Odd_c) ? 74 : 126));
+        int256 payout = (((!done_Odd_c) || (!done_Even_c)) ? (done_Odd_c ? (int256(100) + (((done_Odd_c ? int256(0) : int256(100)) + (done_Even_c ? int256(0) : int256(100))) / ((((done_Odd_c ? int256(1) : int256(0)) + (done_Even_c ? int256(1) : int256(0))) > int256(0)) ? ((done_Odd_c ? int256(1) : int256(0)) + (done_Even_c ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((Even_c == Odd_c) ? int256(74) : int256(126)));
         if (payout > 0) {
             (bool ok, ) = payable(address_Odd).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");
@@ -141,7 +141,7 @@ contract OddsEvensShort {
     function withdraw_Even() public by(Role.Even) action(Role.Even, 6) depends(Role.Odd, 3) depends(Role.Even, 5) {
         require((!claimed_Even), "already claimed");
         claimed_Even = true;
-        int256 payout = (((!done_Odd_c) || (!done_Even_c)) ? (done_Even_c ? (100 + (((done_Odd_c ? 0 : 100) + (done_Even_c ? 0 : 100)) / ((((done_Odd_c ? 1 : 0) + (done_Even_c ? 1 : 0)) > 0) ? ((done_Odd_c ? 1 : 0) + (done_Even_c ? 1 : 0)) : 1))) : 0) : ((Even_c == Odd_c) ? 126 : 74));
+        int256 payout = (((!done_Odd_c) || (!done_Even_c)) ? (done_Even_c ? (int256(100) + (((done_Odd_c ? int256(0) : int256(100)) + (done_Even_c ? int256(0) : int256(100))) / ((((done_Odd_c ? int256(1) : int256(0)) + (done_Even_c ? int256(1) : int256(0))) > int256(0)) ? ((done_Odd_c ? int256(1) : int256(0)) + (done_Even_c ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((Even_c == Odd_c) ? int256(126) : int256(74)));
         if (payout > 0) {
             (bool ok, ) = payable(address_Even).call{value: uint256(payout)}("");
             require(ok, "ETH send failed");

@@ -2,6 +2,7 @@ CLAUDE.md
 lsp/server/*.jar
 
 __pycache__
+.venv/
 .diff
 .idea
 .claude

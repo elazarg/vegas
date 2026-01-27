@@ -135,3 +135,8 @@ withdraw (Alice.x != null)
 4.  **Backend Generation**:
     - **Solidity**: Generates functions with `depends` modifiers and bail logic.
     - **Gambit**: Generates a game tree where concurrent DAG nodes share information sets.
+
+## Related langauges
+
+https://github.com/marlowe-lang
+
