@@ -14,8 +14,9 @@
         <kotlin.version>2.3.0</kotlin.version>
         <antlr.version>4.13.2</antlr.version>
         <java.version>25</java.version>
+        <kotlin.compiler.jvmTarget>25</kotlin.compiler.jvmTarget>
         <kotest.version>5.9.1</kotest.version>
-        <junit.version>5.13.4</junit.version>
+        <junit.version>6.0.2</junit.version>
     </properties>
     <dependencies>
         <dependency>
@@ -141,15 +142,12 @@
                         <include>**/*Test.*</include>
                         <include>**/*Spec.*</include>
                     </includes>
-                    <systemPropertyVariables>
-                        <kotest.framework.classpath.scanning.autoscan.disable>true</kotest.framework.classpath.scanning.autoscan.disable>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.14.1</version>
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
@@ -173,7 +171,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.8.0</version>
                 <configuration>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
