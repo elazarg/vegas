@@ -10,7 +10,7 @@ let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext) {
   // Resolve the JAR path relative to the extension root so packaging/debug both work
-  const serverPath = context.asAbsolutePath('server/vegas-0.1-jar-with-dependencies.jar');
+  const serverPath = context.asAbsolutePath('server/vegas.jar');
 
   const serverOptions: ServerOptions = {
     command: 'java',
