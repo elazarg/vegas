@@ -13,7 +13,6 @@ import vegas.runtime.LocalRuntime
 /**
  * Tests that payoff computation produces correct results.
  *
- * This addresses TESTING-GAPS.md §3.2.4:
  * "No test evaluates payoff expressions against a known game outcome and checks
  * the numeric result."
  *
@@ -61,6 +60,7 @@ class PayoffEvaluationTest : FreeSpec({
             val payoffs = playToTerminal(game)
             payoffs.values.sum() shouldBe 200
         }
+
 
         "Dominance: payoffs sum to 20" {
             val game = loadGame("Dominance")

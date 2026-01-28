@@ -248,9 +248,9 @@ internal class TreeUnroller(
         // This happens in two cases:
         // 1. Role has actions but no parameters (e.g., reveal with pre-assigned value)
         // 2. Role has already quit in history (but has actions in current frontier)
-        if ((roleMoves == null || roleMoves.isEmpty()) && !isChance) {
+        if (roleMoves.isNullOrEmpty() && !isChance) {
             val actionsForRole = config.actionsByRole(ir.dag)[role]
-            if (actionsForRole != null && actionsForRole.isNotEmpty()) {
+            if (!actionsForRole.isNullOrEmpty()) {
                 val allParams = actionsForRole.flatMap { ir.dag.params(it) }
                 val hasQuit = config.history.quit(role)
 
@@ -266,7 +266,7 @@ internal class TreeUnroller(
         }
 
         // If still no moves, skip to next role
-        if (roleMoves == null || roleMoves.isEmpty()) {
+        if (roleMoves.isNullOrEmpty()) {
             return buildRoleDecisions(config, roles, movesByRole, roleIndex + 1, policy)
         }
 

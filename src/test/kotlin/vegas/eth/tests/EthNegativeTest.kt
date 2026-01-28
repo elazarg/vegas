@@ -16,13 +16,13 @@ import vegas.ir.Visibility
 /**
  * Negative tests for EVM contracts: verify that illegal operations are rejected.
  *
- * This addresses critical gaps from TESTING-GAPS.md §5:
- * - Guard enforcement on contract (§5.2.1)
- * - Role enforcement (§5.2.2)
- * - Action ordering enforcement (§5.2.3)
- * - Deposit validation (§5.2.4)
- * - Commitment integrity (§5.2.5)
- * - Replay protection (§5.2.6)
+ * This addresses
+ * - Guard enforcement on contract
+ * - Role enforcement
+ * - Action ordering enforcement
+ * - Deposit validation
+ * - Commitment integrity
+ * - Replay protection
  *
  * Equivalence class partitioning: ONE representative test per failure mode.
  */
@@ -40,7 +40,7 @@ class EthNegativeTest : FunSpec({
     }
 
     /**
-     * §5.2.2 Role Enforcement: Wrong address submitting a move should revert.
+     * Role Enforcement: Wrong address submitting a move should revert.
      *
      * Test: A's account tries to call B's function.
      */
@@ -77,7 +77,7 @@ class EthNegativeTest : FunSpec({
     }
 
     /**
-     * §5.2.3 Action Ordering: Submitting an action before its dependency should revert.
+     * ction Ordering: Submitting an action before its dependency should revert.
      *
      * Test: Try to submit a yield action before completing the join action.
      */
@@ -103,7 +103,7 @@ class EthNegativeTest : FunSpec({
     }
 
     /**
-     * §5.2.4 Deposit Validation: Joining with wrong deposit amount should revert.
+     * Deposit Validation: Joining with wrong deposit amount should revert.
      *
      * Test: Try to join with less wei than required.
      */
@@ -132,7 +132,7 @@ class EthNegativeTest : FunSpec({
     }
 
     /**
-     * §5.2.5 Commitment Integrity: Revealing a different value than committed should revert.
+     * Commitment Integrity: Revealing a different value than committed should revert.
      *
      * Test: Commit one value, try to reveal a different value.
      */
@@ -193,7 +193,7 @@ class EthNegativeTest : FunSpec({
     }
 
     /**
-     * §5.2.6 Replay Protection: Submitting the same action twice should revert.
+     * Replay Protection: Submitting the same action twice should revert.
      *
      * Test: Submit a join action, then try to submit it again.
      */
