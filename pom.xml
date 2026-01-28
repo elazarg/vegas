@@ -156,6 +156,9 @@
                         <include>**/*Test.*</include>
                         <include>**/*Spec.*</include>
                     </includes>
+                    <systemPropertyVariables>
+                        <kotest.framework.classpath.scanning.autoscan.disable>true</kotest.framework.classpath.scanning.autoscan.disable>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
