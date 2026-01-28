@@ -1,5 +1,7 @@
 package vegas.eth
 
+import java.io.File
+
 /**
  * Result of probing for an external tool.
  */
@@ -15,12 +17,18 @@ sealed class ToolStatus {
  *
  * Results are cached per JVM to avoid repeated process spawns.
  * Used by test specs in `enabledIf` conditions.
+ *
+ * `solc` is resolved from the project `.venv` (installed by `setup-eth-tools.py`).
+ * `anvil` is resolved from the system PATH (installed globally by `foundryup`).
  */
 class ToolCheck private constructor(
     val anvil: ToolStatus,
     val solc: ToolStatus,
 ) {
     val allAvailable: Boolean get() = anvil.isAvailable && solc.isAvailable
+
+    /** Resolved absolute path to solc binary, or null if not found. */
+    val solcPath: String? get() = (solc as? ToolStatus.Available)?.path
 
     companion object {
         @Volatile
@@ -38,6 +46,18 @@ class ToolCheck private constructor(
                 anvil = probeAnvil(),
                 solc = probeSolc(),
             )
+        }
+
+        /**
+         * Locate the project root by walking up from the working directory
+         * looking for `pom.xml`.
+         */
+        private fun findProjectRoot(): File? {
+            var dir = File(System.getProperty("user.dir"))
+            while (true) {
+                if (File(dir, "pom.xml").exists()) return dir
+                dir = dir.parentFile ?: return null
+            }
         }
 
         private fun probeAnvil(): ToolStatus {
@@ -59,8 +79,25 @@ class ToolCheck private constructor(
         }
 
         private fun probeSolc(): ToolStatus {
+            val root = findProjectRoot()
+                ?: return ToolStatus.Missing("project root not found (no pom.xml)")
+
+            val isWindows = System.getProperty("os.name").lowercase().contains("win")
+            val solcBin = if (isWindows) {
+                File(root, ".venv/Scripts/solc.exe")
+            } else {
+                File(root, ".venv/bin/solc")
+            }
+
+            if (!solcBin.exists()) {
+                return ToolStatus.Missing(
+                    "solc not found at ${solcBin.absolutePath} — run setup-eth-tools.py"
+                )
+            }
+
+            val solcPath = solcBin.absolutePath
             return try {
-                val process = ProcessBuilder("solc", "--version")
+                val process = ProcessBuilder(solcPath, "--version")
                     .redirectErrorStream(true)
                     .start()
                 val output = process.inputStream.bufferedReader().readText().trim()
@@ -84,9 +121,9 @@ class ToolCheck private constructor(
                     }
                 }
 
-                ToolStatus.Available("solc", version)
+                ToolStatus.Available(solcPath, version)
             } catch (_: Exception) {
-                ToolStatus.Missing("solc not found on PATH")
+                ToolStatus.Missing("solc at $solcPath failed to run")
             }
         }
     }

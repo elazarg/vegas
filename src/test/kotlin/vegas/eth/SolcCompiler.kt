@@ -37,8 +37,10 @@ object SolcCompiler {
         sourceFile.writeText(source)
 
         try {
+            val solcPath = ToolCheck.cached().solcPath
+                ?: error("solc not found in project .venv — run setup-eth-tools.py")
             val process = ProcessBuilder(
-                "solc",
+                solcPath,
                 "--combined-json", "abi,bin",
                 "--via-ir",
                 "--optimize",
