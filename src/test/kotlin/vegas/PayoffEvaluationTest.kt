@@ -79,6 +79,12 @@ class PayoffEvaluationTest : FreeSpec({
             val payoffs = playToTerminal(game)
             payoffs.values.sum() shouldBe 10
         }
+
+        "OddsEvensShort: payoffs sum to 200" {
+            val game = loadGame("OddsEvensShort")
+            val payoffs = playToTerminal(game)
+            payoffs.values.sum() shouldBe 200
+        }
     }
 
     "Payoffs are well-defined" - {
@@ -98,6 +104,16 @@ class PayoffEvaluationTest : FreeSpec({
 
         "Dominance: all roles have non-negative payoffs" {
             val game = loadGame("Dominance")
+            val payoffs = playToTerminal(game)
+
+            game.roles.forEach { role ->
+                val payoff = payoffs[role] ?: 0
+                payoff shouldBeGreaterThan -1
+            }
+        }
+
+        "OddsEvensShort: all roles have non-negative payoffs" {
+            val game = loadGame("OddsEvensShort")
             val payoffs = playToTerminal(game)
 
             game.roles.forEach { role ->
@@ -132,6 +148,12 @@ class PayoffEvaluationTest : FreeSpec({
 
         "Trivial1: reaches terminal state" {
             val game = loadGame("Trivial1")
+            val payoffs = playToTerminal(game)
+            payoffs.isEmpty() shouldBe false
+        }
+
+        "OddsEvensShort: reaches terminal state" {
+            val game = loadGame("OddsEvensShort")
             val payoffs = playToTerminal(game)
             payoffs.isEmpty() shouldBe false
         }

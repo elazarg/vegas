@@ -29,6 +29,7 @@ class LocalSession(private val game: GameIR) : GameSession {
 
     override fun legalMoves(): List<GameMove> =
         MoveTranslator.legalMoves(semantics, config)
+            .filter { it.actionId !in submittedZeroParam }
 
     override fun submitMove(move: GameMove) {
         if (move.assignments.isEmpty()) {
