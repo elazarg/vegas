@@ -7,11 +7,13 @@ import vegas.backend.smt.generateDQBF
 import vegas.backend.evm.compileToEvm
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
+import vegas.client.GameRepl
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
 import vegas.frontend.findRoleIds
 import vegas.frontend.compileToIR
 import vegas.frontend.inlineMacros
+import vegas.runtime.GameClient
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,7 +47,8 @@ private data class Outputs(
     val efg: Boolean,
     val scr: Boolean,
     val sol: Boolean,
-    val vyper: Boolean
+    val vyper: Boolean,
+    val play: Boolean = false,
 )
 
 private fun parseOutputs(flags: List<String>): Outputs {
@@ -59,6 +62,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
     var wantScr = false
     var wantSol = false
     var wantVyper = false
+    var wantPlay = false
 
     var i = 0
     while (i < flags.size) {
@@ -78,9 +82,14 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--scr" -> wantScr = true
             "--sol" -> wantSol = true
             "--vyper" -> wantVyper = true
+            "--play" -> wantPlay = true
             else -> throw IllegalArgumentException("Unknown flag: $f")
         }
         i++
+    }
+
+    if (wantPlay) {
+        return Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = false, vyper = false, play = true)
     }
 
     // If the user provided any known output flags, emit only those.
@@ -95,12 +104,6 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
 
     val baseName = inputPath.fileName.toString().removeSuffix(".vg")
     val outDir = inputPath.parent ?: Path.of(".")
-    val outZ3 = outDir.resolve("$baseName.z3")
-    val outDqbf = outDir.resolve("$baseName.dqbf.z3")
-    val outEfg = outDir.resolve("$baseName.efg")
-    val outScr = outDir.resolve("$baseName.scr")
-    val outSol = outDir.resolve("$baseName.sol")
-    val outVyper = outDir.resolve("$baseName.vy")
 
     println("Analyzing $inputPath ...")
     val program = parseFile(inputPath.toString()).copy(name = baseName, desc = baseName)
@@ -109,6 +112,20 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     doTypecheck(program)  // Type check the surface syntax (with macros)
     val inlined = inlineMacros(program)  // Inline macros (desugar)
     val ir = compileToIR(inlined)  // Compile inlined program to IR
+
+    if (outputs.play) {
+        val client = GameClient.localClient(ir)
+        val repl = GameRepl(client, ir)
+        repl.run()
+        return
+    }
+
+    val outZ3 = outDir.resolve("$baseName.z3")
+    val outDqbf = outDir.resolve("$baseName.dqbf.z3")
+    val outEfg = outDir.resolve("$baseName.efg")
+    val outScr = outDir.resolve("$baseName.scr")
+    val outSol = outDir.resolve("$baseName.sol")
+    val outVyper = outDir.resolve("$baseName.vy")
 
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
 
@@ -133,7 +150,7 @@ fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println(
             """
-            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper]
+            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--play]
 
             If no format flags are given, all standard outputs (excluding experimental DQBF) are generated alongside the input:
               - <file>.z3   (SMT)
@@ -141,6 +158,9 @@ fun main(args: Array<String>) {
               - <file>.scr  (Scribble)
               - <file>.sol  (Solidity)
               - <file>.vy   (Vyper)
+
+            Interactive mode:
+              --play        Play the game interactively in the terminal (local runtime)
             """.trimIndent()
         )
         exitProcess(2)

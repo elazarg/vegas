@@ -32,10 +32,17 @@ class EthModelTest : FunSpec({
     /**
      * For a given game, enumerate all non-quit traces, play them on both
      * the local semantic model and the Ethereum contract, and compare payoffs.
+     *
+     * @param sampled If true, use random sampling instead of exhaustive enumeration.
+     * @param sampleCount Number of traces to sample (only used if [sampled] is true).
      */
-    fun testGameTraces(gameName: String, maxTraces: Int = 50) {
+    fun testGameTraces(gameName: String, maxTraces: Int = 50, sampled: Boolean = false, sampleCount: Int = 20) {
         val game = loadGame(gameName)
-        val traces = TraceEnumerator.exhaustive(game, maxTraces)
+        val traces = if (sampled) {
+            TraceEnumerator.sample(game, sampleCount)
+        } else {
+            TraceEnumerator.exhaustive(game, maxTraces)
+        }
 
         require(traces.isNotEmpty()) { "No traces found for $gameName" }
 
@@ -71,22 +78,19 @@ class EthModelTest : FunSpec({
             // Execute withdrawals and compare
             val ethPayoffs = ethSession.executeWithdrawals()
 
-            // Compare payoffs
+            // Compare payoffs — Anvil uses gasPrice=0 so balance deltas should match exactly
             for (role in game.roles) {
-                val expected = localPayoffs[role] ?: 0
-                val actual = ethPayoffs[role] ?: 0
-                // Ethereum payoffs include gas costs, so we compare the contract's
-                // intended payout. For now, we check the local model's payoffs are
-                // consistent (positive payoffs result in balance increases).
-                if (expected > 0) {
-                    require(actual > 0) {
-                        "Trace #$traceIdx ($gameName): role $role expected payout $expected but got $actual on Ethereum\n" +
-                        "Trace: ${trace.description}"
-                    }
+                val expected = (localPayoffs[role] ?: 0).toLong()
+                val actual = ethPayoffs[role] ?: 0L
+                require(expected == actual) {
+                    "Trace #$traceIdx ($gameName): role $role expected payout $expected but got $actual on Ethereum\n" +
+                    "Trace: ${trace.description}"
                 }
             }
         }
     }
+
+    // ========== Tier 0: Existing games ==========
 
     test("Prisoners: all traces match") {
         testGameTraces("Prisoners")
@@ -94,5 +98,59 @@ class EthModelTest : FunSpec({
 
     test("OddsEvensShort: all traces match") {
         testGameTraces("OddsEvensShort")
+    }
+
+    // ========== Tier 1: Small, exhaustively enumerable ==========
+
+    test("Simple: all traces match") {
+        testGameTraces("Simple")
+    }
+
+    test("Trivial1: all traces match") {
+        testGameTraces("Trivial1")
+    }
+
+    test("Dominance: all traces match") {
+        testGameTraces("Dominance")
+    }
+
+    test("DoubleFlipLights: all traces match") {
+        testGameTraces("DoubleFlipLights")
+    }
+
+    // ========== Tier 2: Medium, commit-reveal & sequential ==========
+
+    test("MontyHall: all traces match") {
+        testGameTraces("MontyHall", maxTraces = 100)
+    }
+
+    test("Centipede: all traces match") {
+        testGameTraces("Centipede")
+    }
+
+    test("RPSLS: all traces match") {
+        testGameTraces("RPSLS", maxTraces = 50)
+    }
+
+    test("SpinTheDial: all traces match") {
+        testGameTraces("SpinTheDial", maxTraces = 50)
+    }
+
+    // ========== Tier 3: Large domain, sampled ==========
+
+    test("TicTacToe: sampled traces match") {
+        testGameTraces("TicTacToe", sampled = true, sampleCount = 20)
+    }
+
+    test("UltimatumGame: sampled traces match") {
+        testGameTraces("UltimatumGame", sampled = true, sampleCount = 20)
+    }
+
+    test("VickreyAuction: sampled traces match") {
+        testGameTraces("VickreyAuction", sampled = true, sampleCount = 20)
+    }
+
+    test("EscrowContract: sampled traces match") {
+        testGameTraces("EscrowContract", sampled = true, sampleCount = 20)
     }
 })

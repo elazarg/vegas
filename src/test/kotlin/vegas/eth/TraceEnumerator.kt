@@ -4,6 +4,7 @@ import vegas.ir.GameIR
 import vegas.runtime.GameMove
 import vegas.runtime.MoveTranslator
 import vegas.semantics.*
+import kotlin.random.Random
 
 /**
  * A complete game trace: the sequence of moves played to reach a terminal state.
@@ -83,6 +84,71 @@ object TraceEnumerator {
         }
 
         dfs(initial, emptyList(), 0)
+        return traces
+    }
+
+    /**
+     * Sample random complete game traces using a fixed seed for reproducibility.
+     * Useful for large-domain games where exhaustive enumeration is infeasible.
+     *
+     * At each decision point, picks a random enabled move. Repeats [count] times.
+     * Duplicate traces are included (they reflect the probability distribution).
+     *
+     * @param game The game IR
+     * @param count Number of traces to sample
+     * @param seed Random seed for reproducibility
+     * @return Sampled complete traces
+     */
+    fun sample(game: GameIR, count: Int, seed: Long = 42): List<GameTrace> {
+        val semantics = GameSemantics(game)
+        val rng = Random(seed)
+        val traces = mutableListOf<GameTrace>()
+
+        repeat(count) {
+            var config = Configuration.initial(game)
+            val moves = mutableListOf<GameMove>()
+
+            var maxDepth = 200
+            while (!config.isTerminal() && maxDepth-- > 0) {
+                val labels = semantics.enabledMoves(config)
+                val enabled = config.enabled()
+                val playLabels = labels.filterIsInstance<Label.Play>()
+
+                if (playLabels.isEmpty() && labels.any { it is Label.FinalizeFrontier }) {
+                    // Zero-parameter frontier: auto-finalize
+                    val zeroParamMoves = enabled.filter { game.dag.params(it).isEmpty() }.map { actionId ->
+                        GameMove(
+                            actionId = actionId,
+                            role = game.dag.owner(actionId),
+                            visibility = game.dag.meta(actionId).kind,
+                            assignments = emptyMap(),
+                        )
+                    }
+                    config = applyMove(config, Label.FinalizeFrontier)
+                    moves.addAll(zeroParamMoves)
+                } else if (playLabels.isNotEmpty()) {
+                    val chosen = playLabels[rng.nextInt(playLabels.size)]
+                    val gameMoves = MoveTranslator.labelToMoves(chosen, game.dag, enabled)
+                    config = applyMove(config, chosen)
+
+                    // Auto-finalize if possible
+                    if (semantics.canFinalizeFrontier(config)) {
+                        config = applyMove(config, Label.FinalizeFrontier)
+                    }
+                    moves.addAll(gameMoves)
+                } else {
+                    break // No moves available
+                }
+            }
+
+            if (config.isTerminal()) {
+                val desc = moves.joinToString(" -> ") {
+                    "${it.role}.${it.actionId.second}(${it.assignments.entries.joinToString { (k, v) -> "$k=$v" }})"
+                }
+                traces.add(GameTrace(moves, desc))
+            }
+        }
+
         return traces
     }
 

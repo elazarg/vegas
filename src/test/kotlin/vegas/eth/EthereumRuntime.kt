@@ -60,7 +60,7 @@ class EthereumRuntime(
  * A game session backed by a deployed Solidity contract.
  */
 class EthereumSession(
-    private val rpc: EthJsonRpc,
+    val rpc: EthJsonRpc,
     private val game: GameIR,
     private val evmContract: EvmContract,
     private val contractAddress: String,
