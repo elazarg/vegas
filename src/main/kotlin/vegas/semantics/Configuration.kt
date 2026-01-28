@@ -20,7 +20,7 @@ import vegas.ir.GameIR
  * @param history The committed global truth (stack of frontier slices)
  * @param partialFrontierAssignment Accumulated assignments for the current frontier (not yet committed)
  */
-internal data class Configuration(
+data class Configuration(
     val frontier: FrontierMachine<ActionId>,
     val history: History,
     val partialFrontierAssignment: FrontierAssignmentSlice = emptyMap()

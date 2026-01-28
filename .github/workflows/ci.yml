@@ -15,11 +15,42 @@ jobs:
           cache: 'maven'
 
       - name: Build and run tests
-        run: mvn -B clean test
+        run: mvn -B clean test -Dtest='!vegas.eth.**'
 
       - name: Upload test reports
-        if: always() # run even if tests fail
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports
+          path: target/surefire-reports
+
+  eth-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install solc
+        run: |
+          pip3 install -r requirements-test.txt
+          solc-select install 0.8.31
+          solc-select use 0.8.31
+          solc --version
+
+      - name: Build and run Ethereum tests
+        run: mvn -B clean test -Dtest='vegas.eth.**'
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-eth
           path: target/surefire-reports

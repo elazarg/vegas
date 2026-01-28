@@ -1,0 +1,1 @@
+solc-select==1.2.0

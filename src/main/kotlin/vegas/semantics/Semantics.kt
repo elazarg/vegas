@@ -26,7 +26,7 @@ import vegas.ir.asBool
  * This is the single source of truth for "what moves are legal?"
  * All move enumeration logic lives here; TreeUnroller just interprets labels.
  */
-internal class GameSemantics(val ir: GameIR) {
+class GameSemantics(val ir: GameIR) {
 
     /**
      * Compute all legal moves at a configuration.
@@ -140,7 +140,7 @@ internal class GameSemantics(val ir: GameIR) {
  * @param label The move to apply
  * @return The next configuration
  */
-internal fun applyMove(config: Configuration, label: Label): Configuration {
+fun applyMove(config: Configuration, label: Label): Configuration {
     return when (label) {
         is Label.Play -> {
             // next configuration is (frontier, history, partial ⊎ delta)
@@ -275,7 +275,7 @@ private fun combineAssignmentsIntoFrontier(
  *
  * For joint moves across multiple actions, uses the first ActionId as a marker.
  */
-internal fun enumerateRoleFrontierChoices(
+fun enumerateRoleFrontierChoices(
     dag: ActionDag,
     role: RoleId,
     actions: List<ActionId>,

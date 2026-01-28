@@ -181,8 +181,9 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
         is Revert -> appendLine("revert(\"${stmt.message}\");")
         is Pass -> {} // No-op in Solidity
         is SendEth -> {
-            // Only send if positive
-            appendLine("int256 payout = ${renderExpr(stmt.amount)};")
+            // Only send if positive.
+            // Use renderPayoffExpr to ensure int256 type for nested ternaries.
+            appendLine("int256 payout = ${renderPayoffExpr(stmt.amount)};")
             appendLine("if (payout > 0) {")
             appendLine("    (bool ok, ) = payable(${renderExpr(stmt.to)}).call{value: uint256(payout)}(\"\");")
             appendLine("    require(ok, \"ETH send failed\");")
@@ -195,6 +196,37 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             appendLine("_checkReveal(${renderExpr(stmt.commitment)}, $roleEnumName.${stmt.role.name}, msg.sender, abi.encode($payload));")
         }
     }
+}
+
+/**
+ * Render an expression in a payoff (int256) context.
+ * Integer literals are wrapped in int256() to avoid Solidity's
+ * implicit narrowing in ternary expressions (bool ? 0 : 100 → uint8).
+ */
+private fun renderPayoffExpr(e: EvmExpr): String = when (e) {
+    is IntLit -> "int256(${e.value})"
+    is Ternary -> "(${renderPayoffExpr(e.cond)} ? ${renderPayoffExpr(e.ifTrue)} : ${renderPayoffExpr(e.ifFalse)})"
+    is Binary -> "(${renderPayoffExpr(e.left)} ${when (e.op) {
+        BinaryOp.ADD -> "+"
+        BinaryOp.SUB -> "-"
+        BinaryOp.MUL -> "*"
+        BinaryOp.DIV -> "/"
+        BinaryOp.MOD -> "%"
+        BinaryOp.EQ -> "=="
+        BinaryOp.NE -> "!="
+        BinaryOp.LT -> "<"
+        BinaryOp.LE -> "<="
+        BinaryOp.GT -> ">"
+        BinaryOp.GE -> ">="
+        BinaryOp.AND -> "&&"
+        BinaryOp.OR -> "||"
+    }} ${renderPayoffExpr(e.right)})"
+    is Unary -> "(${when (e.op) {
+        UnaryOp.NOT -> "!"
+        UnaryOp.NEG -> "-"
+    }}${renderPayoffExpr(e.arg)})"
+    // For all other node types, delegate to renderExpr
+    else -> renderExpr(e)
 }
 
 private fun renderExpr(e: EvmExpr): String = when (e) {
