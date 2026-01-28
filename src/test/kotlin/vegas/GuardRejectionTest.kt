@@ -17,9 +17,8 @@ import vegas.runtime.GameSession
 /**
  * Tests that the semantic model correctly enforces guards.
  *
- * This addresses TESTING-GAPS.md §3.2.1:
- * The TraceEnumerator only generates guard-satisfying assignments, so
- * guard-violating values are never tested for rejection.
+ * This addresses a bug where the TraceEnumerator only generates guard-satisfying assignments,
+ * so guard-violating values are never tested for rejection.
  *
  * Rather than trying to submit illegal moves (which would require bypassing
  * the legalMoves() enumeration), we verify that the enumeration itself
