@@ -18,7 +18,8 @@ sealed class ToolStatus {
  * Results are cached per JVM to avoid repeated process spawns.
  * Used by test specs in `enabledIf` conditions.
  *
- * `solc` is resolved from the project `.venv` (installed by `setup-eth-tools.py`).
+ * `solc` is resolved from the project `.venv` first (installed by `setup-eth-tools.py`),
+ * falling back to the system PATH (for CI where solc-select is installed globally).
  * `anvil` is resolved from the system PATH (installed globally by `foundryup`).
  */
 class ToolCheck private constructor(
@@ -78,24 +79,37 @@ class ToolCheck private constructor(
             }
         }
 
-        private fun probeSolc(): ToolStatus {
+        /**
+         * Find solc: check project `.venv` first, then fall back to system PATH.
+         * Local dev uses the venv (via setup-eth-tools.py); CI may install globally.
+         */
+        private fun findSolc(): String? {
+            // 1. Project venv (preferred — setup-eth-tools.py installs here)
             val root = findProjectRoot()
-                ?: return ToolStatus.Missing("project root not found (no pom.xml)")
-
-            val isWindows = System.getProperty("os.name").lowercase().contains("win")
-            val solcBin = if (isWindows) {
-                File(root, ".venv/Scripts/solc.exe")
-            } else {
-                File(root, ".venv/bin/solc")
+            if (root != null) {
+                val isWindows = System.getProperty("os.name").lowercase().contains("win")
+                val venvSolc = if (isWindows) {
+                    File(root, ".venv/Scripts/solc.exe")
+                } else {
+                    File(root, ".venv/bin/solc")
+                }
+                if (venvSolc.exists()) return venvSolc.absolutePath
             }
 
-            if (!solcBin.exists()) {
-                return ToolStatus.Missing(
-                    "solc not found at ${solcBin.absolutePath} — run setup-eth-tools.py"
-                )
+            // 2. System PATH (CI installs solc-select globally)
+            return try {
+                val p = ProcessBuilder("solc", "--version").redirectErrorStream(true).start()
+                p.inputStream.bufferedReader().readText()
+                if (p.waitFor() == 0) "solc" else null
+            } catch (_: Exception) {
+                null
             }
+        }
 
-            val solcPath = solcBin.absolutePath
+        private fun probeSolc(): ToolStatus {
+            val solcPath = findSolc()
+                ?: return ToolStatus.Missing("solc not found in project .venv or on PATH — run setup-eth-tools.py")
+
             return try {
                 val process = ProcessBuilder(solcPath, "--version")
                     .redirectErrorStream(true)
