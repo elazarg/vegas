@@ -28,6 +28,7 @@ package vegas.backend.gambit
 
 import vegas.Rational
 import vegas.RoleId
+import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
 import vegas.ir.ActionId
@@ -133,15 +134,18 @@ fun interface ExpansionPolicy {
  * This layering is epistemic, not part of the IR itself: it is induced by the
  * frontier exploration of the ActionDag and respects its causal partial order.
  */
-fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): String {
-    // Use new semantic + unroller API (semantic refactoring complete)
+fun generateExtensiveFormGame(
+    ir: GameIR,
+    includeAbandonment: Boolean = true,
+    failOnDeadChoices: Boolean = true,
+): String {
     val semantics = GameSemantics(ir)
-    val unroller = TreeUnroller(semantics, ir)
+    val unroller = TreeUnroller(semantics, ir, failOnDeadChoices)
 
     val policy = if (includeAbandonment) {
         ExpansionPolicy.FULL_EXPANSION
     } else {
-        ExpansionPolicy .FAIR_PLAY
+        ExpansionPolicy.FAIR_PLAY
     }
 
     val initialConfig = Configuration(
@@ -161,6 +165,7 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
 }
 
 
+
 /**
  * Converts LTS semantics into a GameTree by unrolling configurations.
  *
@@ -174,7 +179,8 @@ fun generateExtensiveFormGame(ir: GameIR, includeAbandonment: Boolean = true): S
  */
 internal class TreeUnroller(
     private val semantics: GameSemantics,
-    private val ir: GameIR
+    private val ir: GameIR,
+    private val failOnDeadChoices: Boolean = true
 ) {
     private val infosetManager = InfosetManager(ir.roles)
 
@@ -189,15 +195,10 @@ internal class TreeUnroller(
      * @return Game subtree rooted at this configuration
      */
     fun unroll(config: Configuration, policy: ExpansionPolicy): GameTree {
-        // Terminal check
         if (config.isTerminal()) {
             return GameTree.Terminal(computePayoffs(config))
         }
-
-        // Get all moves via semantic layer
         val moves = semantics.enabledMoves(config)
-
-        // Group by role in canonical order and build tree
         return buildTreeFromMoves(config, moves, policy)
     }
 
@@ -230,7 +231,6 @@ internal class TreeUnroller(
         roleIndex: Int,
         policy: ExpansionPolicy
     ): GameTree {
-        // All roles done: apply FinalizeFrontier if enabled
         if (roleIndex == roles.size) {
             return if (semantics.canFinalizeFrontier(config)) {
                 val nextConfig = applyMove(config, Label.FinalizeFrontier)
@@ -244,28 +244,47 @@ internal class TreeUnroller(
         var roleMoves = movesByRole[role]
         val isChance = role in ir.chanceRoles
 
-        // Handle roles that need quit-only decision nodes when policy allows abandonment
-        // This happens in two cases:
-        // 1. Role has actions but no parameters (e.g., reveal with pre-assigned value)
-        // 2. Role has already quit in history (but has actions in current frontier)
-        if (roleMoves.isNullOrEmpty() && !isChance) {
-            val actionsForRole = config.actionsByRole(ir.dag)[role]
-            if (!actionsForRole.isNullOrEmpty()) {
-                val allParams = actionsForRole.flatMap { ir.dag.params(it) }
-                val hasQuit = config.history.quit(role)
+        val actionsForRole = config.actionsByRole(ir.dag)[role].orEmpty()
+        val allParams = actionsForRole.flatMap { ir.dag.params(it) }
+        val hasQuit = config.history.quit(role)
 
-                // Create quit-only node if:
-                // - Role has no parameters (empty params), OR
-                // - Role has already quit (persistence of abandonment)
+        // If the role has parameterized actions "in scope" but no enabled moves,
+        // we treat it as a static error (unsatisfiable where/guards), unless role already quit.
+        if (
+            failOnDeadChoices &&
+            !isChance &&
+            !hasQuit &&
+            actionsForRole.isNotEmpty() &&
+            allParams.isNotEmpty() &&
+            (roleMoves.isNullOrEmpty())
+        ) {
+            val actionIds = actionsForRole.joinToString(", ")
+            val paramIds = allParams.joinToString(", ")
+            throw StaticError(
+                buildString {
+                    appendLine("Dead choice set detected for role=${role.name}.")
+                    appendLine("Frontier has actions for this role, but enabledMoves produced no legal plays.")
+                    appendLine("This usually means a `where`/guard is unsatisfiable in some reachable state.")
+                    appendLine("Actions: $actionIds")
+                    appendLine("Params:  $paramIds")
+                    appendLine("History: ${config.history}")
+                    appendLine("Hint: add an explicit null/else branch or widen the domain/guards.")
+                }
+            )
+        }
+
+        // Existing quit-only synthesis (now uses precomputed values)
+        if (roleMoves.isNullOrEmpty() && !isChance) {
+            if (actionsForRole.isNotEmpty()) {
+                // allParams, hasQuit already computed above
+
                 if ((allParams.isEmpty() || hasQuit) && policy.shouldExpand(role, null)) {
-                    // Synthesize a quit move with empty delta
                     val quitMove = Label.Play(role, emptyMap(), PlayTag.Quit)
                     roleMoves = listOf(quitMove)
                 }
             }
         }
 
-        // If still no moves, skip to next role
         if (roleMoves.isNullOrEmpty()) {
             return buildRoleDecisions(config, roles, movesByRole, roleIndex + 1, policy)
         }

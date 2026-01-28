@@ -15,6 +15,7 @@ import vegas.backend.evm.EvmType.*
  */
 fun generateSolidity(contract: EvmContract): String {
     return buildString {
+        appendLine("// SPDX-License-Identifier: MIT")
         appendLine("pragma solidity ^0.8.31;")
         appendLine()
         append("contract ${contract.name}")
