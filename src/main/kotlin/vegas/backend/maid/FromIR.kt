@@ -170,6 +170,11 @@ private class MaidConverter(private val ir: GameIR) {
 
     /**
      * Create tabular CPDs for utility nodes by enumerating all strategy profiles.
+     *
+     * CPD format for utility nodes:
+     * - Rows correspond to domain values (possible payoffs)
+     * - Columns correspond to parent value combinations
+     * - Values are probabilities (1.0 for the actual payoff, 0.0 otherwise)
      */
     private fun createUtilityCPDs() {
         for ((role, expr) in ir.payoffs) {
@@ -177,6 +182,10 @@ private class MaidConverter(private val ir: GameIR) {
 
             val utilNodeId = utilityNodeIds[role] ?: continue
             val dependencies = extractFieldRefs(expr).distinct()
+
+            // Get the utility node to access its domain
+            val utilNode = nodes.find { it.id == utilNodeId } ?: continue
+            val utilDomain = utilNode.domain
 
             // Get parent node IDs (decision nodes that affect this utility)
             val parents = dependencies.mapNotNull { fieldToNodeId[it] }
@@ -189,14 +198,18 @@ private class MaidConverter(private val ir: GameIR) {
             if (parents.isEmpty() || parentDomains.isEmpty()) {
                 // No dependencies - constant payoff
                 val constantValue = try {
-                    eval({ Expr.Const.IntVal(0) }, expr).asInt().toDouble()
+                    eval({ Expr.Const.IntVal(0) }, expr).asInt()
                 } catch (_: Exception) {
-                    0.0
+                    0
+                }
+                // Create probability distribution over domain values
+                val cpdValues = utilDomain.map { domainVal ->
+                    listOf(if (toInt(domainVal) == constantValue) 1.0 else 0.0)
                 }
                 cpds.add(TabularCPD(
                     node = utilNodeId,
                     parents = emptyList(),
-                    values = listOf(listOf(constantValue))
+                    values = cpdValues
                 ))
                 continue
             }
@@ -215,18 +228,40 @@ private class MaidConverter(private val ir: GameIR) {
                             else -> Expr.Const.IntVal(0)
                         }
                     }
-                    eval(readField, expr).asInt().toDouble()
+                    eval(readField, expr).asInt()
                 } catch (_: Exception) {
-                    0.0
+                    0
                 }
             }
 
-            // Build CPD table: single row (the payoff) with one column per combination
+            // Build CPD table: rows = domain values, columns = parent combinations
+            // Each column is a probability distribution (1.0 for actual payoff, 0.0 otherwise)
+            val cpdValues = utilDomain.map { domainVal ->
+                val domainInt = toInt(domainVal)
+                payoffValues.map { payoff ->
+                    if (payoff == domainInt) 1.0 else 0.0
+                }
+            }
+
             cpds.add(TabularCPD(
                 node = utilNodeId,
                 parents = parents,
-                values = listOf(payoffValues)
+                values = cpdValues
             ))
+        }
+    }
+
+    /**
+     * Convert domain value to Int for comparison.
+     */
+    private fun toInt(value: Any): Int {
+        return when (value) {
+            is Int -> value
+            is Long -> value.toInt()
+            is Double -> value.toInt()
+            is Boolean -> if (value) 1 else 0
+            is String -> value.toIntOrNull() ?: 0
+            else -> 0
         }
     }
 
