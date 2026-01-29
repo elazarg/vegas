@@ -7,6 +7,8 @@ import vegas.backend.smt.generateDQBF
 import vegas.backend.evm.compileToEvm
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
+import vegas.backend.maid.generateMaid
+import vegas.backend.maid.maidToJson
 import vegas.client.GameRepl
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -48,6 +50,7 @@ private data class Outputs(
     val scr: Boolean,
     val sol: Boolean,
     val vyper: Boolean,
+    val maid: Boolean = false,
     val play: Boolean = false,
 )
 
@@ -62,6 +65,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
     var wantScr = false
     var wantSol = false
     var wantVyper = false
+    var wantMaid = false
     var wantPlay = false
 
     var i = 0
@@ -82,6 +86,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--scr" -> wantScr = true
             "--sol" -> wantSol = true
             "--vyper" -> wantVyper = true
+            "--maid" -> wantMaid = true
             "--play" -> wantPlay = true
             else -> throw IllegalArgumentException("Unknown flag: $f")
         }
@@ -89,12 +94,12 @@ private fun parseOutputs(flags: List<String>): Outputs {
     }
 
     if (wantPlay) {
-        return Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = false, vyper = false, play = true)
+        return Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = false, vyper = false, maid = false, play = true)
     }
 
     // If the user provided any known output flags, emit only those.
-    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper
-    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper)
+    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper || wantMaid
+    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantMaid)
     else Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true)
 }
 
@@ -126,6 +131,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val outScr = outDir.resolve("$baseName.scr")
     val outSol = outDir.resolve("$baseName.sol")
     val outVyper = outDir.resolve("$baseName.vy")
+    val outMaid = outDir.resolve("$baseName.maid.json")
 
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
 
@@ -142,6 +148,9 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     if (outputs.sol) writeFile(outSol.toString()) { generateSolidity(evmIr!!) }
     if (outputs.vyper) writeFile(outVyper.toString()) { generateVyper(evmIr!!) }
 
+    // MAID backend
+    if (outputs.maid) writeFile(outMaid.toString()) { maidToJson(generateMaid(ir)) }
+
     println("Done")
     println()
 }
@@ -150,14 +159,17 @@ fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println(
             """
-            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--play]
+            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--maid] [--play]
 
-            If no format flags are given, all standard outputs (excluding experimental DQBF) are generated alongside the input:
+            If no format flags are given, all standard outputs (excluding experimental DQBF and MAID) are generated alongside the input:
               - <file>.z3   (SMT)
               - <file>.efg  (Gambit EFG)
               - <file>.scr  (Scribble)
               - <file>.sol  (Solidity)
               - <file>.vy   (Vyper)
+
+            Additional formats:
+              --maid        Multi-Agent Influence Diagram JSON (for Thrones game theory workbench)
 
             Interactive mode:
               --play        Play the game interactively in the terminal (local runtime)
