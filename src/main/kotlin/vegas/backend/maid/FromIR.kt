@@ -300,7 +300,7 @@ private class MaidConverter(private val ir: GameIR) {
      */
     private fun typeToDomain(type: Type): List<Any> {
         return when (type) {
-            is Type.SetType -> type.values.sorted()
+            is Type.RangeType -> (type.min..type.max).toList()
             is Type.BoolType -> listOf(false, true)
             is Type.IntType -> listOf(0, 1) // Default for unbounded int
         }

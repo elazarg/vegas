@@ -47,9 +47,7 @@ def lift2 {A B C : Type} (f : A → B → C) : Option A → Option B → Option 
   | _, _ => none
 
 /- Domain Constraints -/
-def domain_Enum_2 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 2 ∨ z = 3 ∨ z = 4 ∨ z = 5 ∨ z = 6 ∨ z = 7 ∨ z = 8
-def domain_Enum_0 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 4
-def domain_Enum_1 (z : Int) : Prop := z = 1 ∨ z = 3 ∨ z = 4 ∨ z = 5 ∨ z = 9
+def domain_Enum_0 (z : Int) : Prop := 0 ≤ z ∧ z ≤ 8
 
 namespace GameProtocol
 
@@ -74,7 +72,7 @@ structure W3
     : Type where
   c1_O : Int
   W3_guard_have_w1 : w1.isHave
-  W3_guard_domain_c1_O : domain_Enum_1 c1_O
+  W3_guard_domain_c1_O : domain_Enum_0 c1_O
   W3_guard_logic : (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c1_O)) = some true
 
 structure W4
@@ -86,7 +84,7 @@ structure W4
   c2_X : Int
   W4_guard_have_w0 : w0.isHave
   W4_guard_have_w2 : w2.isHave
-  W4_guard_domain_c2_X : domain_Enum_2 c2_X
+  W4_guard_domain_c2_X : domain_Enum_0 c2_X
   W4_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c2_X))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c2_X))) = some true
 
 structure W5
@@ -99,7 +97,7 @@ structure W5
   c2_O : Int
   W5_guard_have_w1 : w1.isHave
   W5_guard_have_w3 : w3.isHave
-  W5_guard_domain_c2_O : domain_Enum_2 c2_O
+  W5_guard_domain_c2_O : domain_Enum_0 c2_O
   W5_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c2_O))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c2_O))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (some c2_O))) = some true
 
 structure W6
@@ -114,7 +112,7 @@ structure W6
   W6_guard_have_w0 : w0.isHave
   W6_guard_have_w2 : w2.isHave
   W6_guard_have_w4 : w4.isHave
-  W6_guard_domain_c3_X : domain_Enum_2 c3_X
+  W6_guard_domain_c3_X : domain_Enum_0 c3_X
   W6_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c3_X))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c3_X))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (some c3_X))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (some c3_X))) = some true
 
 structure W7
@@ -130,7 +128,7 @@ structure W7
   W7_guard_have_w1 : w1.isHave
   W7_guard_have_w3 : w3.isHave
   W7_guard_have_w5 : w5.isHave
-  W7_guard_domain_c3_O : domain_Enum_2 c3_O
+  W7_guard_domain_c3_O : domain_Enum_0 c3_O
   W7_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c3_O))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c3_O))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (some c3_O))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (some c3_O))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (some c3_O))) = some true
 
 structure W8
@@ -148,7 +146,7 @@ structure W8
   W8_guard_have_w2 : w2.isHave
   W8_guard_have_w4 : w4.isHave
   W8_guard_have_w6 : w6.isHave
-  W8_guard_domain_c4_X : domain_Enum_2 c4_X
+  W8_guard_domain_c4_X : domain_Enum_0 c4_X
   W8_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c4_X))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c4_X))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (some c4_X))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (some c4_X))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (some c4_X))) (lift2 (fun x y => decide (x ≠ y)) (w7.getVal (fun w => w.c3_O)) (some c4_X))) = some true
 
 structure W9
@@ -167,7 +165,7 @@ structure W9
   W9_guard_have_w3 : w3.isHave
   W9_guard_have_w5 : w5.isHave
   W9_guard_have_w7 : w7.isHave
-  W9_guard_domain_c4_O : domain_Enum_2 c4_O
+  W9_guard_domain_c4_O : domain_Enum_0 c4_O
   W9_guard_logic : (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (· && ·) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w3.getVal (fun w => w.c1_O))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w2.getVal (fun w => w.c1_X)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w4.getVal (fun w => w.c2_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w3.getVal (fun w => w.c1_O)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w5.getVal (fun w => w.c2_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w4.getVal (fun w => w.c2_X)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w6.getVal (fun w => w.c3_X)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w5.getVal (fun w => w.c2_O)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (w7.getVal (fun w => w.c3_O)))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w6.getVal (fun w => w.c3_X)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w7.getVal (fun w => w.c3_O)) (w8.getVal (fun w => w.c4_X)))) (lift2 (fun x y => decide (x ≠ y)) (w7.getVal (fun w => w.c3_O)) (some c4_O))) (lift2 (fun x y => decide (x ≠ y)) (w8.getVal (fun w => w.c4_X)) (some c4_O))) = some true
 
 structure ActionDag : Type where

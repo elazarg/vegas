@@ -116,13 +116,13 @@ contract MontyHall {
     }
     
     function move_Guest_3(int256 _d) public by(Role.Guest) action(Role.Guest, 3) depends(Role.Host, 2) {
-        require((((_d == 0) || (_d == 1)) || (_d == 2)), "domain");
+        require(((_d >= 0) && (_d <= 2)), "domain");
         Guest_d = _d;
         done_Guest_d = true;
     }
     
     function move_Host_4(int256 _goat) public by(Role.Host) action(Role.Host, 4) depends(Role.Guest, 3) {
-        require((((_goat == 0) || (_goat == 1)) || (_goat == 2)), "domain");
+        require(((_goat >= 0) && (_goat <= 2)), "domain");
         require((_goat != Guest_d), "domain");
         Host_goat = _goat;
         done_Host_goat = true;
@@ -134,7 +134,7 @@ contract MontyHall {
     }
     
     function move_Host_6(int256 _car, uint256 _salt) public by(Role.Host) action(Role.Host, 6) depends(Role.Host, 2) depends(Role.Host, 4) depends(Role.Guest, 5) {
-        require((((_car == 0) || (_car == 1)) || (_car == 2)), "domain");
+        require(((_car >= 0) && (_car <= 2)), "domain");
         require((Host_goat != _car), "domain");
         _checkReveal(Host_car_hidden, Role.Host, msg.sender, abi.encode(_car, _salt));
         Host_car = _car;

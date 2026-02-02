@@ -153,21 +153,21 @@ contract VickreyAuction {
     }
     
     function move_B1_5(int256 _b, uint256 _salt) public by(Role.B1) action(Role.B1, 3) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
-        require((((_b == 0) || (_b == 1)) || (_b == 2)), "domain");
+        require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B1_b_hidden, Role.B1, msg.sender, abi.encode(_b, _salt));
         B1_b = _b;
         done_B1_b = true;
     }
     
     function move_B2_7(int256 _b, uint256 _salt) public by(Role.B2) action(Role.B2, 5) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
-        require((((_b == 0) || (_b == 1)) || (_b == 2)), "domain");
+        require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B2_b_hidden, Role.B2, msg.sender, abi.encode(_b, _salt));
         B2_b = _b;
         done_B2_b = true;
     }
     
     function move_B3_9(int256 _b, uint256 _salt) public by(Role.B3) action(Role.B3, 7) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
-        require((((_b == 0) || (_b == 1)) || (_b == 2)), "domain");
+        require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B3_b_hidden, Role.B3, msg.sender, abi.encode(_b, _salt));
         B3_b = _b;
         done_B3_b = true;

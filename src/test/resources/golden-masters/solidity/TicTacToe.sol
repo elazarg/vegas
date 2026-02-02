@@ -120,55 +120,55 @@ contract TicTacToe {
     }
     
     function move_X_2(int256 _c1) public by(Role.X) action(Role.X, 2) depends(Role.O, 1) {
-        require((((_c1 == 0) || (_c1 == 1)) || (_c1 == 4)), "domain");
+        require(((_c1 >= 0) && (_c1 <= 8)), "domain");
         X_c1 = _c1;
         done_X_c1 = true;
     }
     
     function move_O_3(int256 _c1) public by(Role.O) action(Role.O, 3) depends(Role.X, 2) {
-        require((((((_c1 == 1) || (_c1 == 3)) || (_c1 == 4)) || (_c1 == 5)) || (_c1 == 9)), "domain");
+        require(((_c1 >= 0) && (_c1 <= 8)), "domain");
         require((X_c1 != _c1), "domain");
         O_c1 = _c1;
         done_O_c1 = true;
     }
     
     function move_X_4(int256 _c2) public by(Role.X) action(Role.X, 4) depends(Role.X, 2) depends(Role.O, 3) {
-        require((((((((((_c2 == 0) || (_c2 == 1)) || (_c2 == 2)) || (_c2 == 3)) || (_c2 == 4)) || (_c2 == 5)) || (_c2 == 6)) || (_c2 == 7)) || (_c2 == 8)), "domain");
+        require(((_c2 >= 0) && (_c2 <= 8)), "domain");
         require((((X_c1 != O_c1) && (X_c1 != _c2)) && (O_c1 != _c2)), "domain");
         X_c2 = _c2;
         done_X_c2 = true;
     }
     
     function move_O_5(int256 _c2) public by(Role.O) action(Role.O, 5) depends(Role.X, 2) depends(Role.O, 3) depends(Role.X, 4) {
-        require((((((((((_c2 == 0) || (_c2 == 1)) || (_c2 == 2)) || (_c2 == 3)) || (_c2 == 4)) || (_c2 == 5)) || (_c2 == 6)) || (_c2 == 7)) || (_c2 == 8)), "domain");
+        require(((_c2 >= 0) && (_c2 <= 8)), "domain");
         require(((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != _c2)) && (O_c1 != X_c2)) && (O_c1 != _c2)) && (X_c2 != _c2)), "domain");
         O_c2 = _c2;
         done_O_c2 = true;
     }
     
     function move_X_6(int256 _c3) public by(Role.X) action(Role.X, 6) depends(Role.X, 2) depends(Role.O, 3) depends(Role.X, 4) depends(Role.O, 5) {
-        require((((((((((_c3 == 0) || (_c3 == 1)) || (_c3 == 2)) || (_c3 == 3)) || (_c3 == 4)) || (_c3 == 5)) || (_c3 == 6)) || (_c3 == 7)) || (_c3 == 8)), "domain");
+        require(((_c3 >= 0) && (_c3 <= 8)), "domain");
         require(((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != _c3)) && (O_c2 != _c3)), "domain");
         X_c3 = _c3;
         done_X_c3 = true;
     }
     
     function move_O_7(int256 _c3) public by(Role.O) action(Role.O, 7) depends(Role.X, 2) depends(Role.O, 3) depends(Role.X, 4) depends(Role.O, 5) depends(Role.X, 6) {
-        require((((((((((_c3 == 0) || (_c3 == 1)) || (_c3 == 2)) || (_c3 == 3)) || (_c3 == 4)) || (_c3 == 5)) || (_c3 == 6)) || (_c3 == 7)) || (_c3 == 8)), "domain");
+        require(((_c3 >= 0) && (_c3 <= 8)), "domain");
         require((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != _c3)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != _c3)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != _c3)) && (O_c2 != X_c3)) && (O_c2 != _c3)) && (X_c3 != _c3)), "domain");
         O_c3 = _c3;
         done_O_c3 = true;
     }
     
     function move_X_8(int256 _c4) public by(Role.X) action(Role.X, 8) depends(Role.X, 2) depends(Role.O, 3) depends(Role.X, 4) depends(Role.O, 5) depends(Role.X, 6) depends(Role.O, 7) {
-        require((((((((((_c4 == 0) || (_c4 == 1)) || (_c4 == 2)) || (_c4 == 3)) || (_c4 == 4)) || (_c4 == 5)) || (_c4 == 6)) || (_c4 == 7)) || (_c4 == 8)), "domain");
+        require(((_c4 >= 0) && (_c4 <= 8)), "domain");
         require((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != _c4)) && (O_c3 != _c4)), "domain");
         X_c4 = _c4;
         done_X_c4 = true;
     }
     
     function move_O_9(int256 _c4) public by(Role.O) action(Role.O, 9) depends(Role.X, 2) depends(Role.O, 3) depends(Role.X, 4) depends(Role.O, 5) depends(Role.X, 6) depends(Role.O, 7) depends(Role.X, 8) {
-        require((((((((((_c4 == 0) || (_c4 == 1)) || (_c4 == 2)) || (_c4 == 3)) || (_c4 == 4)) || (_c4 == 5)) || (_c4 == 6)) || (_c4 == 7)) || (_c4 == 8)), "domain");
+        require(((_c4 >= 0) && (_c4 <= 8)), "domain");
         require(((((((((((((((((((((((((((((X_c1 != O_c1) && (X_c1 != X_c2)) && (X_c1 != O_c2)) && (X_c1 != X_c3)) && (X_c1 != O_c3)) && (X_c1 != X_c4)) && (X_c1 != _c4)) && (O_c1 != X_c2)) && (O_c1 != O_c2)) && (O_c1 != X_c3)) && (O_c1 != O_c3)) && (O_c1 != X_c4)) && (O_c1 != _c4)) && (X_c2 != O_c2)) && (X_c2 != X_c3)) && (X_c2 != O_c3)) && (X_c2 != X_c4)) && (X_c2 != _c4)) && (O_c2 != X_c3)) && (O_c2 != O_c3)) && (O_c2 != X_c4)) && (O_c2 != _c4)) && (X_c3 != O_c3)) && (X_c3 != X_c4)) && (X_c3 != _c4)) && (O_c3 != X_c4)) && (O_c3 != _c4)) && (X_c4 != _c4)), "domain");
         O_c4 = _c4;
         done_O_c4 = true;

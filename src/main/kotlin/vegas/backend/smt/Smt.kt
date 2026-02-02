@@ -7,7 +7,6 @@ import vegas.ir.ActionId
 import vegas.ir.Expr
 import vegas.ir.Type
 import vegas.ir.Visibility
-import vegas.ir.ActionDag
 
 enum class SmtMode {
     SATISFIABILITY, // QF-SMT: Flat constants, single trace existence
@@ -89,7 +88,7 @@ private class SmtGenerator(
             allFields.forEach { (field, type) ->
                 sb.appendLine("(declare-const ${fieldName(field)} ${smtType(type)})")
                 sb.appendLine("(declare-const ${doneFieldName(field)} Bool)")
-                val domain = getDomainConstraint(field, type, fieldName(field))
+                val domain = getDomainConstraint(type, fieldName(field))
                 if (domain != null) sb.appendLine("(assert $domain)")
                 sb.appendLine()
             }
@@ -156,7 +155,7 @@ private class SmtGenerator(
 
                 if (mode == SmtMode.STRATEGY && allFields.containsKey(field)) {
                      val type = allFields[field]!!
-                     val domain = getDomainConstraint(field, type, resolveField(field, contextId))
+                     val domain = getDomainConstraint(type, resolveField(field, contextId))
                      if (domain != null) {
                          if (isUniversal) assumptions.add(domain) else guarantees.add(domain)
                      }
@@ -241,14 +240,9 @@ private class SmtGenerator(
     }
 }
 
-private fun getDomainConstraint(field: FieldRef, type: Type, term: String): String? {
+private fun getDomainConstraint(type: Type, term: String): String? {
     return when (type) {
-        is Type.SetType -> {
-            if (type.values.isNotEmpty()) {
-                val clauses = type.values.sorted().joinToString(" ") { v -> "(= $term $v)" }
-                "(or $clauses)"
-            } else null
-        }
+        is Type.RangeType -> "(and (>= $term ${type.min}) (<= $term ${type.max}))"
         else -> null
     }
 }
@@ -286,7 +280,7 @@ private fun exprToSmt(
 private fun smtType(type: Type): String = when (type) {
     is Type.BoolType -> "Bool"
     is Type.IntType -> "Int"
-    is Type.SetType -> "Int"
+    is Type.RangeType -> "Int"
 }
 
 private fun collectFields(expr: Expr): Set<FieldRef> = when (expr) {

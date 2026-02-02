@@ -217,7 +217,7 @@ def move_B1_5(_b: int256, _salt: uint256):
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
-    assert (((_b == 0) or (_b == 1)) or (_b == 2)), "domain"
+    assert ((_b >= 0) and (_b <= 2)), "domain"
     self._checkReveal(self.B1_b_hidden, Role.B1, msg.sender, _abi_encode(_b, _salt))
     self.B1_b = _b
     self.done_B1_b = True
@@ -252,7 +252,7 @@ def move_B2_7(_b: int256, _salt: uint256):
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
-    assert (((_b == 0) or (_b == 1)) or (_b == 2)), "domain"
+    assert ((_b >= 0) and (_b <= 2)), "domain"
     self._checkReveal(self.B2_b_hidden, Role.B2, msg.sender, _abi_encode(_b, _salt))
     self.B2_b = _b
     self.done_B2_b = True
@@ -287,7 +287,7 @@ def move_B3_9(_b: int256, _salt: uint256):
     self._check_timestamp(Role.B3)
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][6], "dependency not satisfied"
-    assert (((_b == 0) or (_b == 1)) or (_b == 2)), "domain"
+    assert ((_b >= 0) and (_b <= 2)), "domain"
     self._checkReveal(self.B3_b_hidden, Role.B3, msg.sender, _abi_encode(_b, _salt))
     self.B3_b = _b
     self.done_B3_b = True

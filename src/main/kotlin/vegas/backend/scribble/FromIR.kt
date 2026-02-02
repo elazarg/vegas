@@ -81,5 +81,5 @@ private fun actionToScribble(meta: ActionMeta, allRoles: Set<RoleId>): List<Sast
 private fun scribbleTypeOf(t: Type): String = when (t) {
     Type.IntType -> "int"
     Type.BoolType -> "bool"
-    is Type.SetType -> "int" // Sets represented as int in Scribble
+    is Type.RangeType -> "int" // Ranges represented as int in Scribble
 }

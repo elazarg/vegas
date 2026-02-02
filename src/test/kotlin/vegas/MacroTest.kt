@@ -362,7 +362,7 @@ class MacroTest : FreeSpec({
 
         "macro with subset type parameter" {
             val code = """
-                type choice = {1, 3, 5, 7}
+                type choice = {1..7}
                 macro double(x: int): int = x * 2;
                 join A(c: choice) $ 100;
                 withdraw { A -> double(A.c) }

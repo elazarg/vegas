@@ -14,9 +14,7 @@ inductive Role : Type where
   | X : Role
 
 /- Domain Constraints -/
-def domain_Enum_2 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 2 ∨ z = 3 ∨ z = 4 ∨ z = 5 ∨ z = 6 ∨ z = 7 ∨ z = 8
-def domain_Enum_0 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 4
-def domain_Enum_1 (z : Int) : Prop := z = 1 ∨ z = 3 ∨ z = 4 ∨ z = 5 ∨ z = 9
+def domain_Enum_0 (z : Int) : Prop := 0 ≤ z ∧ z ≤ 8
 
 namespace GameProtocol
 
@@ -39,7 +37,7 @@ structure W3
     (w2 : W2 w0 w1)
     : Type where
   c1_O : Int
-  W3_guard_domain_c1_O : domain_Enum_1 c1_O
+  W3_guard_domain_c1_O : domain_Enum_0 c1_O
   W3_guard_logic : (decide (w2.c1_X ≠ c1_O)) = true
 
 structure W4
@@ -49,7 +47,7 @@ structure W4
     (w3 : W3 w0 w1 w2)
     : Type where
   c2_X : Int
-  W4_guard_domain_c2_X : domain_Enum_2 c2_X
+  W4_guard_domain_c2_X : domain_Enum_0 c2_X
   W4_guard_logic : (((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ c2_X))) && (decide (w3.c1_O ≠ c2_X))) = true
 
 structure W5
@@ -60,7 +58,7 @@ structure W5
     (w4 : W4 w0 w1 w2 w3)
     : Type where
   c2_O : Int
-  W5_guard_domain_c2_O : domain_Enum_2 c2_O
+  W5_guard_domain_c2_O : domain_Enum_0 c2_O
   W5_guard_logic : ((((((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ w4.c2_X))) && (decide (w2.c1_X ≠ c2_O))) && (decide (w3.c1_O ≠ w4.c2_X))) && (decide (w3.c1_O ≠ c2_O))) && (decide (w4.c2_X ≠ c2_O))) = true
 
 structure W6
@@ -72,7 +70,7 @@ structure W6
     (w5 : W5 w0 w1 w2 w3 w4)
     : Type where
   c3_X : Int
-  W6_guard_domain_c3_X : domain_Enum_2 c3_X
+  W6_guard_domain_c3_X : domain_Enum_0 c3_X
   W6_guard_logic : ((((((((((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ w4.c2_X))) && (decide (w2.c1_X ≠ w5.c2_O))) && (decide (w2.c1_X ≠ c3_X))) && (decide (w3.c1_O ≠ w4.c2_X))) && (decide (w3.c1_O ≠ w5.c2_O))) && (decide (w3.c1_O ≠ c3_X))) && (decide (w4.c2_X ≠ w5.c2_O))) && (decide (w4.c2_X ≠ c3_X))) && (decide (w5.c2_O ≠ c3_X))) = true
 
 structure W7
@@ -85,7 +83,7 @@ structure W7
     (w6 : W6 w0 w1 w2 w3 w4 w5)
     : Type where
   c3_O : Int
-  W7_guard_domain_c3_O : domain_Enum_2 c3_O
+  W7_guard_domain_c3_O : domain_Enum_0 c3_O
   W7_guard_logic : (((((((((((((((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ w4.c2_X))) && (decide (w2.c1_X ≠ w5.c2_O))) && (decide (w2.c1_X ≠ w6.c3_X))) && (decide (w2.c1_X ≠ c3_O))) && (decide (w3.c1_O ≠ w4.c2_X))) && (decide (w3.c1_O ≠ w5.c2_O))) && (decide (w3.c1_O ≠ w6.c3_X))) && (decide (w3.c1_O ≠ c3_O))) && (decide (w4.c2_X ≠ w5.c2_O))) && (decide (w4.c2_X ≠ w6.c3_X))) && (decide (w4.c2_X ≠ c3_O))) && (decide (w5.c2_O ≠ w6.c3_X))) && (decide (w5.c2_O ≠ c3_O))) && (decide (w6.c3_X ≠ c3_O))) = true
 
 structure W8
@@ -99,7 +97,7 @@ structure W8
     (w7 : W7 w0 w1 w2 w3 w4 w5 w6)
     : Type where
   c4_X : Int
-  W8_guard_domain_c4_X : domain_Enum_2 c4_X
+  W8_guard_domain_c4_X : domain_Enum_0 c4_X
   W8_guard_logic : (((((((((((((((((((((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ w4.c2_X))) && (decide (w2.c1_X ≠ w5.c2_O))) && (decide (w2.c1_X ≠ w6.c3_X))) && (decide (w2.c1_X ≠ w7.c3_O))) && (decide (w2.c1_X ≠ c4_X))) && (decide (w3.c1_O ≠ w4.c2_X))) && (decide (w3.c1_O ≠ w5.c2_O))) && (decide (w3.c1_O ≠ w6.c3_X))) && (decide (w3.c1_O ≠ w7.c3_O))) && (decide (w3.c1_O ≠ c4_X))) && (decide (w4.c2_X ≠ w5.c2_O))) && (decide (w4.c2_X ≠ w6.c3_X))) && (decide (w4.c2_X ≠ w7.c3_O))) && (decide (w4.c2_X ≠ c4_X))) && (decide (w5.c2_O ≠ w6.c3_X))) && (decide (w5.c2_O ≠ w7.c3_O))) && (decide (w5.c2_O ≠ c4_X))) && (decide (w6.c3_X ≠ w7.c3_O))) && (decide (w6.c3_X ≠ c4_X))) && (decide (w7.c3_O ≠ c4_X))) = true
 
 structure W9
@@ -114,7 +112,7 @@ structure W9
     (w8 : W8 w0 w1 w2 w3 w4 w5 w6 w7)
     : Type where
   c4_O : Int
-  W9_guard_domain_c4_O : domain_Enum_2 c4_O
+  W9_guard_domain_c4_O : domain_Enum_0 c4_O
   W9_guard_logic : ((((((((((((((((((((((((((((decide (w2.c1_X ≠ w3.c1_O)) && (decide (w2.c1_X ≠ w4.c2_X))) && (decide (w2.c1_X ≠ w5.c2_O))) && (decide (w2.c1_X ≠ w6.c3_X))) && (decide (w2.c1_X ≠ w7.c3_O))) && (decide (w2.c1_X ≠ w8.c4_X))) && (decide (w2.c1_X ≠ c4_O))) && (decide (w3.c1_O ≠ w4.c2_X))) && (decide (w3.c1_O ≠ w5.c2_O))) && (decide (w3.c1_O ≠ w6.c3_X))) && (decide (w3.c1_O ≠ w7.c3_O))) && (decide (w3.c1_O ≠ w8.c4_X))) && (decide (w3.c1_O ≠ c4_O))) && (decide (w4.c2_X ≠ w5.c2_O))) && (decide (w4.c2_X ≠ w6.c3_X))) && (decide (w4.c2_X ≠ w7.c3_O))) && (decide (w4.c2_X ≠ w8.c4_X))) && (decide (w4.c2_X ≠ c4_O))) && (decide (w5.c2_O ≠ w6.c3_X))) && (decide (w5.c2_O ≠ w7.c3_O))) && (decide (w5.c2_O ≠ w8.c4_X))) && (decide (w5.c2_O ≠ c4_O))) && (decide (w6.c3_X ≠ w7.c3_O))) && (decide (w6.c3_X ≠ w8.c4_X))) && (decide (w6.c3_X ≠ c4_O))) && (decide (w7.c3_O ≠ w8.c4_X))) && (decide (w7.c3_O ≠ c4_O))) && (decide (w8.c4_X ≠ c4_O))) = true
 
 structure ActionDag : Type where

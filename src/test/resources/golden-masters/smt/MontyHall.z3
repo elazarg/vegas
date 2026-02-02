@@ -1,14 +1,14 @@
 (declare-const Host_goat Int)
 (declare-const Host_goat_done Bool)
-(assert (or (= Host_goat 0) (= Host_goat 1) (= Host_goat 2)))
+(assert (and (>= Host_goat 0) (<= Host_goat 2)))
 
 (declare-const Guest_d Int)
 (declare-const Guest_d_done Bool)
-(assert (or (= Guest_d 0) (= Guest_d 1) (= Guest_d 2)))
+(assert (and (>= Guest_d 0) (<= Guest_d 2)))
 
 (declare-const Host_car Int)
 (declare-const Host_car_done Bool)
-(assert (or (= Host_car 0) (= Host_car 1) (= Host_car 2)))
+(assert (and (>= Host_car 0) (<= Host_car 2)))
 
 (declare-const Guest_switch Bool)
 (declare-const Guest_switch_done Bool)

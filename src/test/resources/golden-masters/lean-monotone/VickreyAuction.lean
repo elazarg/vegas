@@ -49,7 +49,7 @@ def lift2 {A B C : Type} (f : A → B → C) : Option A → Option B → Option 
   | _, _ => none
 
 /- Domain Constraints -/
-def domain_Enum_0 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 2
+def domain_Enum_0 (z : Int) : Prop := 0 ≤ z ∧ z ≤ 2
 
 namespace GameProtocol
 

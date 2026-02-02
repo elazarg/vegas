@@ -204,11 +204,11 @@ private fun enumerateAssignmentsForAction(
                     is Type.BoolType ->
                         listOf(Expr.Const.BoolVal(true), Expr.Const.BoolVal(false))
 
-                    is Type.SetType ->
-                        param.type.values.sorted().map { v -> Expr.Const.IntVal(v) }
+                    is Type.RangeType ->
+                        (param.type.min..param.type.max).map { v -> Expr.Const.IntVal(v) }
 
                     is Type.IntType ->
-                        throw StaticError("Cannot enumerate IntType; use SetType or BoolType")
+                        throw StaticError("Cannot enumerate IntType; use RangeType or BoolType")
                 }
         }
 

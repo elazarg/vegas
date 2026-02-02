@@ -94,7 +94,7 @@ def move_X_2(_c1: int256):
     self._check_timestamp(Role.O)
     if not self.bailed[Role.O]:
         assert self.actionDone[Role.O][1], "dependency not satisfied"
-    assert (((_c1 == 0) or (_c1 == 1)) or (_c1 == 4)), "domain"
+    assert ((_c1 >= 0) and (_c1 <= 8)), "domain"
     self.X_c1 = _c1
     self.done_X_c1 = True
     self.actionDone[Role.X][2] = True
@@ -110,7 +110,7 @@ def move_O_3(_c1: int256):
     self._check_timestamp(Role.X)
     if not self.bailed[Role.X]:
         assert self.actionDone[Role.X][2], "dependency not satisfied"
-    assert (((((_c1 == 1) or (_c1 == 3)) or (_c1 == 4)) or (_c1 == 5)) or (_c1 == 9)), "domain"
+    assert ((_c1 >= 0) and (_c1 <= 8)), "domain"
     assert (self.X_c1 != _c1), "domain"
     self.O_c1 = _c1
     self.done_O_c1 = True
@@ -130,7 +130,7 @@ def move_X_4(_c2: int256):
     self._check_timestamp(Role.O)
     if not self.bailed[Role.O]:
         assert self.actionDone[Role.O][3], "dependency not satisfied"
-    assert (((((((((_c2 == 0) or (_c2 == 1)) or (_c2 == 2)) or (_c2 == 3)) or (_c2 == 4)) or (_c2 == 5)) or (_c2 == 6)) or (_c2 == 7)) or (_c2 == 8)), "domain"
+    assert ((_c2 >= 0) and (_c2 <= 8)), "domain"
     assert (((self.X_c1 != self.O_c1) and (self.X_c1 != _c2)) and (self.O_c1 != _c2)), "domain"
     self.X_c2 = _c2
     self.done_X_c2 = True
@@ -153,7 +153,7 @@ def move_O_5(_c2: int256):
     self._check_timestamp(Role.X)
     if not self.bailed[Role.X]:
         assert self.actionDone[Role.X][4], "dependency not satisfied"
-    assert (((((((((_c2 == 0) or (_c2 == 1)) or (_c2 == 2)) or (_c2 == 3)) or (_c2 == 4)) or (_c2 == 5)) or (_c2 == 6)) or (_c2 == 7)) or (_c2 == 8)), "domain"
+    assert ((_c2 >= 0) and (_c2 <= 8)), "domain"
     assert ((((((self.X_c1 != self.O_c1) and (self.X_c1 != self.X_c2)) and (self.X_c1 != _c2)) and (self.O_c1 != self.X_c2)) and (self.O_c1 != _c2)) and (self.X_c2 != _c2)), "domain"
     self.O_c2 = _c2
     self.done_O_c2 = True
@@ -179,7 +179,7 @@ def move_X_6(_c3: int256):
     self._check_timestamp(Role.O)
     if not self.bailed[Role.O]:
         assert self.actionDone[Role.O][5], "dependency not satisfied"
-    assert (((((((((_c3 == 0) or (_c3 == 1)) or (_c3 == 2)) or (_c3 == 3)) or (_c3 == 4)) or (_c3 == 5)) or (_c3 == 6)) or (_c3 == 7)) or (_c3 == 8)), "domain"
+    assert ((_c3 >= 0) and (_c3 <= 8)), "domain"
     assert ((((((((((self.X_c1 != self.O_c1) and (self.X_c1 != self.X_c2)) and (self.X_c1 != self.O_c2)) and (self.X_c1 != _c3)) and (self.O_c1 != self.X_c2)) and (self.O_c1 != self.O_c2)) and (self.O_c1 != _c3)) and (self.X_c2 != self.O_c2)) and (self.X_c2 != _c3)) and (self.O_c2 != _c3)), "domain"
     self.X_c3 = _c3
     self.done_X_c3 = True
@@ -208,7 +208,7 @@ def move_O_7(_c3: int256):
     self._check_timestamp(Role.X)
     if not self.bailed[Role.X]:
         assert self.actionDone[Role.X][6], "dependency not satisfied"
-    assert (((((((((_c3 == 0) or (_c3 == 1)) or (_c3 == 2)) or (_c3 == 3)) or (_c3 == 4)) or (_c3 == 5)) or (_c3 == 6)) or (_c3 == 7)) or (_c3 == 8)), "domain"
+    assert ((_c3 >= 0) and (_c3 <= 8)), "domain"
     assert (((((((((((((((self.X_c1 != self.O_c1) and (self.X_c1 != self.X_c2)) and (self.X_c1 != self.O_c2)) and (self.X_c1 != self.X_c3)) and (self.X_c1 != _c3)) and (self.O_c1 != self.X_c2)) and (self.O_c1 != self.O_c2)) and (self.O_c1 != self.X_c3)) and (self.O_c1 != _c3)) and (self.X_c2 != self.O_c2)) and (self.X_c2 != self.X_c3)) and (self.X_c2 != _c3)) and (self.O_c2 != self.X_c3)) and (self.O_c2 != _c3)) and (self.X_c3 != _c3)), "domain"
     self.O_c3 = _c3
     self.done_O_c3 = True
@@ -240,7 +240,7 @@ def move_X_8(_c4: int256):
     self._check_timestamp(Role.O)
     if not self.bailed[Role.O]:
         assert self.actionDone[Role.O][7], "dependency not satisfied"
-    assert (((((((((_c4 == 0) or (_c4 == 1)) or (_c4 == 2)) or (_c4 == 3)) or (_c4 == 4)) or (_c4 == 5)) or (_c4 == 6)) or (_c4 == 7)) or (_c4 == 8)), "domain"
+    assert ((_c4 >= 0) and (_c4 <= 8)), "domain"
     assert (((((((((((((((((((((self.X_c1 != self.O_c1) and (self.X_c1 != self.X_c2)) and (self.X_c1 != self.O_c2)) and (self.X_c1 != self.X_c3)) and (self.X_c1 != self.O_c3)) and (self.X_c1 != _c4)) and (self.O_c1 != self.X_c2)) and (self.O_c1 != self.O_c2)) and (self.O_c1 != self.X_c3)) and (self.O_c1 != self.O_c3)) and (self.O_c1 != _c4)) and (self.X_c2 != self.O_c2)) and (self.X_c2 != self.X_c3)) and (self.X_c2 != self.O_c3)) and (self.X_c2 != _c4)) and (self.O_c2 != self.X_c3)) and (self.O_c2 != self.O_c3)) and (self.O_c2 != _c4)) and (self.X_c3 != self.O_c3)) and (self.X_c3 != _c4)) and (self.O_c3 != _c4)), "domain"
     self.X_c4 = _c4
     self.done_X_c4 = True
@@ -275,7 +275,7 @@ def move_O_9(_c4: int256):
     self._check_timestamp(Role.X)
     if not self.bailed[Role.X]:
         assert self.actionDone[Role.X][8], "dependency not satisfied"
-    assert (((((((((_c4 == 0) or (_c4 == 1)) or (_c4 == 2)) or (_c4 == 3)) or (_c4 == 4)) or (_c4 == 5)) or (_c4 == 6)) or (_c4 == 7)) or (_c4 == 8)), "domain"
+    assert ((_c4 >= 0) and (_c4 <= 8)), "domain"
     assert ((((((((((((((((((((((((((((self.X_c1 != self.O_c1) and (self.X_c1 != self.X_c2)) and (self.X_c1 != self.O_c2)) and (self.X_c1 != self.X_c3)) and (self.X_c1 != self.O_c3)) and (self.X_c1 != self.X_c4)) and (self.X_c1 != _c4)) and (self.O_c1 != self.X_c2)) and (self.O_c1 != self.O_c2)) and (self.O_c1 != self.X_c3)) and (self.O_c1 != self.O_c3)) and (self.O_c1 != self.X_c4)) and (self.O_c1 != _c4)) and (self.X_c2 != self.O_c2)) and (self.X_c2 != self.X_c3)) and (self.X_c2 != self.O_c3)) and (self.X_c2 != self.X_c4)) and (self.X_c2 != _c4)) and (self.O_c2 != self.X_c3)) and (self.O_c2 != self.O_c3)) and (self.O_c2 != self.X_c4)) and (self.O_c2 != _c4)) and (self.X_c3 != self.O_c3)) and (self.X_c3 != self.X_c4)) and (self.X_c3 != _c4)) and (self.O_c3 != self.X_c4)) and (self.O_c3 != _c4)) and (self.X_c4 != _c4)), "domain"
     self.O_c4 = _c4
     self.done_O_c4 = True

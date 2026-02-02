@@ -315,18 +315,15 @@ private fun buildWithdrawActions(
         )
     }
 }
-/** Generates 'require' statements for domain validation (e.g., `x in {1, 2, 3}`) */
+/** Generates 'require' statements for domain validation (e.g., `x in {0..2}`) */
 private fun translateDomainGuards(params: List<ActionParam>): List<EvmExpr> =
     params.mapNotNull { p ->
         when (val t = p.type) {
-            is Type.SetType -> {
-                if (t.values.isEmpty()) null
-                else {
-                    val x = Var(VarId(inputParam(p.name, false)))
-                    t.values.map { Binary(BinaryOp.EQ, x, IntLit(it)) }.reduce<EvmExpr, EvmExpr> {
-                        a, b -> Binary(BinaryOp.OR, a, b)
-                    }
-                }
+            is Type.RangeType -> {
+                val x = Var(VarId(inputParam(p.name, false)))
+                Binary(BinaryOp.AND,
+                    Binary(BinaryOp.GE, x, IntLit(t.min)),
+                    Binary(BinaryOp.LE, x, IntLit(t.max)))
             }
             else -> null
         }
@@ -451,5 +448,5 @@ private fun translateExpr(
 private fun translateType(t: Type): EvmType = when (t) {
     is Type.IntType -> Int256 // Or Uint256 depending on preference
     is Type.BoolType -> Bool
-    is Type.SetType -> Int256
+    is Type.RangeType -> Int256
 }

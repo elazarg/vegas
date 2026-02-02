@@ -2,9 +2,6 @@ package vegas.runtime
 
 import vegas.RoleId
 import vegas.VarId
-import vegas.frontend.compileToIR
-import vegas.frontend.inlineMacros
-import vegas.frontend.parseFile
 import vegas.ir.*
 
 /**
@@ -124,14 +121,6 @@ class GameClient(
     }
 
     companion object {
-        /** Parse and compile a .vg file into a [GameIR]. */
-        fun loadGame(path: String): GameIR {
-            val ast = parseFile(path)
-            val baseName = path.substringAfterLast('/').substringAfterLast('\\').removeSuffix(".vg")
-            val named = ast.copy(name = baseName, desc = baseName)
-            return compileToIR(inlineMacros(named))
-        }
-
         /** Create a local (in-memory) game client. */
         fun localClient(game: GameIR): GameClient =
             GameClient(game, LocalRuntime().deploy(game))
@@ -182,12 +171,12 @@ data class ParamDomain(
 private fun typeLabel(type: Type): String = when (type) {
     is Type.BoolType -> "bool"
     is Type.IntType -> "int"
-    is Type.SetType -> "{${type.values.sorted().joinToString(", ")}}"
+    is Type.RangeType -> "{${type.min}..${type.max}}"
 }
 
 private fun enumerateDomain(type: Type): List<Any>? = when (type) {
     is Type.BoolType -> listOf(true, false)
-    is Type.SetType -> type.values.sorted()
+    is Type.RangeType -> (type.min..type.max).toList()
     is Type.IntType -> null // unbounded
 }
 

@@ -1,14 +1,14 @@
 (declare-const B1_b Int)
 (declare-const B1_b_done Bool)
-(assert (or (= B1_b 0) (= B1_b 1) (= B1_b 2)))
+(assert (and (>= B1_b 0) (<= B1_b 2)))
 
 (declare-const B2_b Int)
 (declare-const B2_b_done Bool)
-(assert (or (= B2_b 0) (= B2_b 1) (= B2_b 2)))
+(assert (and (>= B2_b 0) (<= B2_b 2)))
 
 (declare-const B3_b Int)
 (declare-const B3_b_done Bool)
-(assert (or (= B3_b 0) (= B3_b 1) (= B3_b 2)))
+(assert (and (>= B3_b 0) (<= B3_b 2)))
 
 (declare-const action_Seller_0_done Bool)
 (declare-const action_B1_0_done Bool)

@@ -100,7 +100,7 @@ def move_Guest_3(_d: int256):
     self._check_timestamp(Role.Host)
     if not self.bailed[Role.Host]:
         assert self.actionDone[Role.Host][2], "dependency not satisfied"
-    assert (((_d == 0) or (_d == 1)) or (_d == 2)), "domain"
+    assert ((_d >= 0) and (_d <= 2)), "domain"
     self.Guest_d = _d
     self.done_Guest_d = True
     self.actionDone[Role.Guest][3] = True
@@ -116,7 +116,7 @@ def move_Host_4(_goat: int256):
     self._check_timestamp(Role.Guest)
     if not self.bailed[Role.Guest]:
         assert self.actionDone[Role.Guest][3], "dependency not satisfied"
-    assert (((_goat == 0) or (_goat == 1)) or (_goat == 2)), "domain"
+    assert ((_goat >= 0) and (_goat <= 2)), "domain"
     assert (_goat != self.Guest_d), "domain"
     self.Host_goat = _goat
     self.done_Host_goat = True
@@ -154,7 +154,7 @@ def move_Host_6(_car: int256, _salt: uint256):
     self._check_timestamp(Role.Guest)
     if not self.bailed[Role.Guest]:
         assert self.actionDone[Role.Guest][5], "dependency not satisfied"
-    assert (((_car == 0) or (_car == 1)) or (_car == 2)), "domain"
+    assert ((_car >= 0) and (_car <= 2)), "domain"
     assert (self.Host_goat != _car), "domain"
     self._checkReveal(self.Host_car_hidden, Role.Host, msg.sender, _abi_encode(_car, _salt))
     self.Host_car = _car

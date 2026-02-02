@@ -358,12 +358,17 @@ private fun lowerType(type: AstType, typeEnv: Map<AstType.TypeId, AstType>): Typ
             lowerType(resolved, typeEnv)
         }
 
-        is AstType.Subset -> Type.SetType(type.values.map { it.n }.toSet())
-
-        is AstType.Range -> {
-            val values = (type.min.n..type.max.n).toSet()
-            Type.SetType(values)
+        is AstType.Subset -> {
+            val sorted = type.values.map { it.n }.sorted()
+            val min = sorted.first()
+            val max = sorted.last()
+            if (max - min + 1 != sorted.size) {
+                error("Non-contiguous subset not supported: ${type.values.map { it.n }}")
+            }
+            Type.RangeType(min, max)
         }
+
+        is AstType.Range -> Type.RangeType(type.min.n, type.max.n)
 
         is AstType.Opt -> lowerType(type.type, typeEnv) // Strip opt wrapper
     }

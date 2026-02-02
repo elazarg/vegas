@@ -36,12 +36,8 @@ Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : optio
   match x, y with Some vx, Some vy => Some (f vx vy) | _, _ => None end.
 
 (* --- Domain Constraints --- *)
-Definition domain_Enum_2 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 2%Z \/ z = 3%Z \/ z = 4%Z \/ z = 5%Z \/ z = 6%Z \/ z = 7%Z \/ z = 8%Z.
 Definition domain_Enum_0 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 4%Z.
-Definition domain_Enum_1 (z : Z) : Prop :=
-  z = 1%Z \/ z = 3%Z \/ z = 4%Z \/ z = 5%Z \/ z = 9%Z.
+  (0%Z <= z)%Z /\ (z <= 8%Z)%Z.
 
 Module GameProtocol.
 
@@ -71,7 +67,7 @@ Record W3
   c1_O : Z;
 
   W3_guard_have_w1 : IsHave w1;
-  W3_guard_domain : domain_Enum_1 c1_O;
+  W3_guard_domain : domain_Enum_0 c1_O;
   W3_guard_logic : lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c1_O) = Some true;
 }.
 
@@ -85,7 +81,7 @@ Record W4
 
   W4_guard_have_w0 : IsHave w0;
   W4_guard_have_w2 : IsHave w2;
-  W4_guard_domain : domain_Enum_2 c2_X;
+  W4_guard_domain : domain_Enum_0 c2_X;
   W4_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c2_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c2_X)) = Some true;
 }.
 
@@ -100,7 +96,7 @@ Record W5
 
   W5_guard_have_w1 : IsHave w1;
   W5_guard_have_w3 : IsHave w3;
-  W5_guard_domain : domain_Enum_2 c2_O;
+  W5_guard_domain : domain_Enum_0 c2_O;
   W5_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c2_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c2_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (Some c2_O)) = Some true;
 }.
 
@@ -117,7 +113,7 @@ Record W6
   W6_guard_have_w0 : IsHave w0;
   W6_guard_have_w2 : IsHave w2;
   W6_guard_have_w4 : IsHave w4;
-  W6_guard_domain : domain_Enum_2 c3_X;
+  W6_guard_domain : domain_Enum_0 c3_X;
   W6_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c3_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c3_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (Some c3_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (Some c3_X)) = Some true;
 }.
 
@@ -135,7 +131,7 @@ Record W7
   W7_guard_have_w1 : IsHave w1;
   W7_guard_have_w3 : IsHave w3;
   W7_guard_have_w5 : IsHave w5;
-  W7_guard_domain : domain_Enum_2 c3_O;
+  W7_guard_domain : domain_Enum_0 c3_O;
   W7_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c3_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c3_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (Some c3_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (Some c3_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (Some c3_O)) = Some true;
 }.
 
@@ -155,7 +151,7 @@ Record W8
   W8_guard_have_w2 : IsHave w2;
   W8_guard_have_w4 : IsHave w4;
   W8_guard_have_w6 : IsHave w6;
-  W8_guard_domain : domain_Enum_2 c4_X;
+  W8_guard_domain : domain_Enum_0 c4_X;
   W8_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c4_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c4_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (Some c4_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (Some c4_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (Some c4_X))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w7 (fun w => w.(c3_O))) (Some c4_X)) = Some true;
 }.
 
@@ -176,7 +172,7 @@ Record W9
   W9_guard_have_w3 : IsHave w3;
   W9_guard_have_w5 : IsHave w5;
   W9_guard_have_w7 : IsHave w7;
-  W9_guard_domain : domain_Enum_2 c4_O;
+  W9_guard_domain : domain_Enum_0 c4_O;
   W9_guard_logic : lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun a b => andb a b) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w3 (fun w => w.(c1_O)))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w2 (fun w => w.(c1_X))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w4 (fun w => w.(c2_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w3 (fun w => w.(c1_O))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w5 (fun w => w.(c2_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w4 (fun w => w.(c2_X))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w6 (fun w => w.(c3_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w5 (fun w => w.(c2_O))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (get_val w7 (fun w => w.(c3_O))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w6 (fun w => w.(c3_X))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w7 (fun w => w.(c3_O))) (get_val w8 (fun w => w.(c4_X))))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w7 (fun w => w.(c3_O))) (Some c4_O))) (lift2 (fun x y => negb (Z.eqb x y)) (get_val w8 (fun w => w.(c4_X))) (Some c4_O)) = Some true;
 }.
 

@@ -239,7 +239,7 @@ class TypeCheckerTest : FreeSpec({
                 B.program(
                     types = mapOf(
                         TypeId("small") to Subset(setOf(B.n(1), B.n(2), B.n(3))),
-                        TypeId("big") to Subset(setOf(B.n(10), B.n(20), B.n(30)))
+                        TypeId("big") to Subset(setOf(B.n(10), B.n(11), B.n(12)))
                     ),
                     B.join(P, params = listOf(B.dec("s", TypeId("small")), B.dec("b", TypeId("big"))))
                 )
@@ -652,7 +652,7 @@ class TypeCheckerTest : FreeSpec({
 
             "reject non-numerical outcome" {
                 val types = mapOf(
-                    TypeId("big") to Subset(setOf(B.n(10), B.n(20), B.n(30)))
+                    TypeId("big") to Subset(setOf(B.n(10), B.n(11), B.n(12)))
                 )
                 val bad = B.program(
                     types,

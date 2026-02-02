@@ -45,12 +45,12 @@ class LeanDagEncoder(private val dag: ActionDag, private val policy: LivenessPol
         map
     }
 
-    private val setTypeMap: Map<Type.SetType, Int> by lazy {
+    private val rangeTypeMap: Map<Type.RangeType, Int> by lazy {
         var counter = 0
-        val map = mutableMapOf<Type.SetType, Int>()
+        val map = mutableMapOf<Type.RangeType, Int>()
         for (meta in dag.metas) {
             for (p in meta.spec.params) {
-                if (p.type is Type.SetType && !map.containsKey(p.type)) {
+                if (p.type is Type.RangeType && !map.containsKey(p.type)) {
                     map[p.type] = counter++
                 }
             }
@@ -164,16 +164,11 @@ class LeanDagEncoder(private val dag: ActionDag, private val policy: LivenessPol
     }
 
     private fun StringBuilder.appendDomainDefinitions() {
-        if (setTypeMap.isEmpty()) return
+        if (rangeTypeMap.isEmpty()) return
         appendLine("/- Domain Constraints -/")
-        setTypeMap.toSortedMap(compareBy { it.values.toString() }).forEach { (type, id) ->
+        rangeTypeMap.toSortedMap(compareBy { "${it.min}_${it.max}" }).forEach { (type, id) ->
             val domainName = "domain_Enum_$id"
-            if (type.values.isEmpty()) {
-                appendLine("def $domainName (z : Int) : Prop := False")
-            } else {
-                val disjunction = type.values.sorted().joinToString(" ∨ ") { v -> "z = $v" }
-                appendLine("def $domainName (z : Int) : Prop := $disjunction")
-            }
+            appendLine("def $domainName (z : Int) : Prop := ${type.min} ≤ z ∧ z ≤ ${type.max}")
         }
         appendLine()
     }
@@ -242,9 +237,9 @@ class LeanDagEncoder(private val dag: ActionDag, private val policy: LivenessPol
         }
 
         // B. Domain Constraints
-        val domainChecks = meta.spec.params.filter { it.type is Type.SetType }
+        val domainChecks = meta.spec.params.filter { it.type is Type.RangeType }
         for (param in domainChecks) {
-            val typeId = setTypeMap[param.type]!!
+            val typeId = rangeTypeMap[param.type]!!
             val domainName = "domain_Enum_$typeId"
             val fieldRef = FieldRef(myRole, param.name)
             val isCommit = (meta.struct.visibility[fieldRef] == Visibility.COMMIT)
@@ -436,6 +431,6 @@ class LeanDagEncoder(private val dag: ActionDag, private val policy: LivenessPol
     private fun toLeanType(t: Type): String = when (t) {
         is Type.IntType -> "Int"
         is Type.BoolType -> "Bool"
-        is Type.SetType -> "Int"
+        is Type.RangeType -> "Int"
     }
 }

@@ -10,12 +10,8 @@ Definition reveal {A} (h : Hidden A) : A := projT1 h.
 Inductive Role : Type := | O | X.
 
 (* --- Domain Constraints --- *)
-Definition domain_Enum_2 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 2%Z \/ z = 3%Z \/ z = 4%Z \/ z = 5%Z \/ z = 6%Z \/ z = 7%Z \/ z = 8%Z.
 Definition domain_Enum_0 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 4%Z.
-Definition domain_Enum_1 (z : Z) : Prop :=
-  z = 1%Z \/ z = 3%Z \/ z = 4%Z \/ z = 5%Z \/ z = 9%Z.
+  (0%Z <= z)%Z /\ (z <= 8%Z)%Z.
 
 Module GameProtocol.
 
@@ -43,7 +39,7 @@ Record W3
  : Type := {
   c1_O : Z;
 
-  W3_guard_domain : domain_Enum_1 c1_O;
+  W3_guard_domain : domain_Enum_0 c1_O;
   W3_guard_logic : negb (Z.eqb w2.(c1_X) c1_O) = true;
 }.
 
@@ -55,7 +51,7 @@ Record W4
  : Type := {
   c2_X : Z;
 
-  W4_guard_domain : domain_Enum_2 c2_X;
+  W4_guard_domain : domain_Enum_0 c2_X;
   W4_guard_logic : andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) c2_X))) (negb (Z.eqb w3.(c1_O) c2_X)) = true;
 }.
 
@@ -68,7 +64,7 @@ Record W5
  : Type := {
   c2_O : Z;
 
-  W5_guard_domain : domain_Enum_2 c2_O;
+  W5_guard_domain : domain_Enum_0 c2_O;
   W5_guard_logic : andb (andb (andb (andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) w4.(c2_X)))) (negb (Z.eqb w2.(c1_X) c2_O))) (negb (Z.eqb w3.(c1_O) w4.(c2_X)))) (negb (Z.eqb w3.(c1_O) c2_O))) (negb (Z.eqb w4.(c2_X) c2_O)) = true;
 }.
 
@@ -82,7 +78,7 @@ Record W6
  : Type := {
   c3_X : Z;
 
-  W6_guard_domain : domain_Enum_2 c3_X;
+  W6_guard_domain : domain_Enum_0 c3_X;
   W6_guard_logic : andb (andb (andb (andb (andb (andb (andb (andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) w4.(c2_X)))) (negb (Z.eqb w2.(c1_X) w5.(c2_O)))) (negb (Z.eqb w2.(c1_X) c3_X))) (negb (Z.eqb w3.(c1_O) w4.(c2_X)))) (negb (Z.eqb w3.(c1_O) w5.(c2_O)))) (negb (Z.eqb w3.(c1_O) c3_X))) (negb (Z.eqb w4.(c2_X) w5.(c2_O)))) (negb (Z.eqb w4.(c2_X) c3_X))) (negb (Z.eqb w5.(c2_O) c3_X)) = true;
 }.
 
@@ -97,7 +93,7 @@ Record W7
  : Type := {
   c3_O : Z;
 
-  W7_guard_domain : domain_Enum_2 c3_O;
+  W7_guard_domain : domain_Enum_0 c3_O;
   W7_guard_logic : andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) w4.(c2_X)))) (negb (Z.eqb w2.(c1_X) w5.(c2_O)))) (negb (Z.eqb w2.(c1_X) w6.(c3_X)))) (negb (Z.eqb w2.(c1_X) c3_O))) (negb (Z.eqb w3.(c1_O) w4.(c2_X)))) (negb (Z.eqb w3.(c1_O) w5.(c2_O)))) (negb (Z.eqb w3.(c1_O) w6.(c3_X)))) (negb (Z.eqb w3.(c1_O) c3_O))) (negb (Z.eqb w4.(c2_X) w5.(c2_O)))) (negb (Z.eqb w4.(c2_X) w6.(c3_X)))) (negb (Z.eqb w4.(c2_X) c3_O))) (negb (Z.eqb w5.(c2_O) w6.(c3_X)))) (negb (Z.eqb w5.(c2_O) c3_O))) (negb (Z.eqb w6.(c3_X) c3_O)) = true;
 }.
 
@@ -113,7 +109,7 @@ Record W8
  : Type := {
   c4_X : Z;
 
-  W8_guard_domain : domain_Enum_2 c4_X;
+  W8_guard_domain : domain_Enum_0 c4_X;
   W8_guard_logic : andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) w4.(c2_X)))) (negb (Z.eqb w2.(c1_X) w5.(c2_O)))) (negb (Z.eqb w2.(c1_X) w6.(c3_X)))) (negb (Z.eqb w2.(c1_X) w7.(c3_O)))) (negb (Z.eqb w2.(c1_X) c4_X))) (negb (Z.eqb w3.(c1_O) w4.(c2_X)))) (negb (Z.eqb w3.(c1_O) w5.(c2_O)))) (negb (Z.eqb w3.(c1_O) w6.(c3_X)))) (negb (Z.eqb w3.(c1_O) w7.(c3_O)))) (negb (Z.eqb w3.(c1_O) c4_X))) (negb (Z.eqb w4.(c2_X) w5.(c2_O)))) (negb (Z.eqb w4.(c2_X) w6.(c3_X)))) (negb (Z.eqb w4.(c2_X) w7.(c3_O)))) (negb (Z.eqb w4.(c2_X) c4_X))) (negb (Z.eqb w5.(c2_O) w6.(c3_X)))) (negb (Z.eqb w5.(c2_O) w7.(c3_O)))) (negb (Z.eqb w5.(c2_O) c4_X))) (negb (Z.eqb w6.(c3_X) w7.(c3_O)))) (negb (Z.eqb w6.(c3_X) c4_X))) (negb (Z.eqb w7.(c3_O) c4_X)) = true;
 }.
 
@@ -130,7 +126,7 @@ Record W9
  : Type := {
   c4_O : Z;
 
-  W9_guard_domain : domain_Enum_2 c4_O;
+  W9_guard_domain : domain_Enum_0 c4_O;
   W9_guard_logic : andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (andb (negb (Z.eqb w2.(c1_X) w3.(c1_O))) (negb (Z.eqb w2.(c1_X) w4.(c2_X)))) (negb (Z.eqb w2.(c1_X) w5.(c2_O)))) (negb (Z.eqb w2.(c1_X) w6.(c3_X)))) (negb (Z.eqb w2.(c1_X) w7.(c3_O)))) (negb (Z.eqb w2.(c1_X) w8.(c4_X)))) (negb (Z.eqb w2.(c1_X) c4_O))) (negb (Z.eqb w3.(c1_O) w4.(c2_X)))) (negb (Z.eqb w3.(c1_O) w5.(c2_O)))) (negb (Z.eqb w3.(c1_O) w6.(c3_X)))) (negb (Z.eqb w3.(c1_O) w7.(c3_O)))) (negb (Z.eqb w3.(c1_O) w8.(c4_X)))) (negb (Z.eqb w3.(c1_O) c4_O))) (negb (Z.eqb w4.(c2_X) w5.(c2_O)))) (negb (Z.eqb w4.(c2_X) w6.(c3_X)))) (negb (Z.eqb w4.(c2_X) w7.(c3_O)))) (negb (Z.eqb w4.(c2_X) w8.(c4_X)))) (negb (Z.eqb w4.(c2_X) c4_O))) (negb (Z.eqb w5.(c2_O) w6.(c3_X)))) (negb (Z.eqb w5.(c2_O) w7.(c3_O)))) (negb (Z.eqb w5.(c2_O) w8.(c4_X)))) (negb (Z.eqb w5.(c2_O) c4_O))) (negb (Z.eqb w6.(c3_X) w7.(c3_O)))) (negb (Z.eqb w6.(c3_X) w8.(c4_X)))) (negb (Z.eqb w6.(c3_X) c4_O))) (negb (Z.eqb w7.(c3_O) w8.(c4_X)))) (negb (Z.eqb w7.(c3_O) c4_O))) (negb (Z.eqb w8.(c4_X) c4_O)) = true;
 }.
 

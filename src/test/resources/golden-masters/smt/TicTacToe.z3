@@ -1,34 +1,34 @@
 (declare-const X_c1 Int)
 (declare-const X_c1_done Bool)
-(assert (or (= X_c1 0) (= X_c1 1) (= X_c1 4)))
+(assert (and (>= X_c1 0) (<= X_c1 8)))
 
 (declare-const O_c1 Int)
 (declare-const O_c1_done Bool)
-(assert (or (= O_c1 1) (= O_c1 3) (= O_c1 4) (= O_c1 5) (= O_c1 9)))
+(assert (and (>= O_c1 0) (<= O_c1 8)))
 
 (declare-const X_c2 Int)
 (declare-const X_c2_done Bool)
-(assert (or (= X_c2 0) (= X_c2 1) (= X_c2 2) (= X_c2 3) (= X_c2 4) (= X_c2 5) (= X_c2 6) (= X_c2 7) (= X_c2 8)))
+(assert (and (>= X_c2 0) (<= X_c2 8)))
 
 (declare-const O_c2 Int)
 (declare-const O_c2_done Bool)
-(assert (or (= O_c2 0) (= O_c2 1) (= O_c2 2) (= O_c2 3) (= O_c2 4) (= O_c2 5) (= O_c2 6) (= O_c2 7) (= O_c2 8)))
+(assert (and (>= O_c2 0) (<= O_c2 8)))
 
 (declare-const X_c3 Int)
 (declare-const X_c3_done Bool)
-(assert (or (= X_c3 0) (= X_c3 1) (= X_c3 2) (= X_c3 3) (= X_c3 4) (= X_c3 5) (= X_c3 6) (= X_c3 7) (= X_c3 8)))
+(assert (and (>= X_c3 0) (<= X_c3 8)))
 
 (declare-const O_c3 Int)
 (declare-const O_c3_done Bool)
-(assert (or (= O_c3 0) (= O_c3 1) (= O_c3 2) (= O_c3 3) (= O_c3 4) (= O_c3 5) (= O_c3 6) (= O_c3 7) (= O_c3 8)))
+(assert (and (>= O_c3 0) (<= O_c3 8)))
 
 (declare-const X_c4 Int)
 (declare-const X_c4_done Bool)
-(assert (or (= X_c4 0) (= X_c4 1) (= X_c4 2) (= X_c4 3) (= X_c4 4) (= X_c4 5) (= X_c4 6) (= X_c4 7) (= X_c4 8)))
+(assert (and (>= X_c4 0) (<= X_c4 8)))
 
 (declare-const O_c4 Int)
 (declare-const O_c4_done Bool)
-(assert (or (= O_c4 0) (= O_c4 1) (= O_c4 2) (= O_c4 3) (= O_c4 4) (= O_c4 5) (= O_c4 6) (= O_c4 7) (= O_c4 8)))
+(assert (and (>= O_c4 0) (<= O_c4 8)))
 
 (declare-const action_X_0_done Bool)
 (declare-const action_O_1_done Bool)

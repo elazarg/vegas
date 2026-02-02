@@ -11,7 +11,7 @@ Inductive Role : Type := | Guest | Host.
 
 (* --- Domain Constraints --- *)
 Definition domain_Enum_0 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 2%Z.
+  (0%Z <= z)%Z /\ (z <= 2%Z)%Z.
 
 Module GameProtocol.
 

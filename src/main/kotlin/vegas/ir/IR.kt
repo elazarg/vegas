@@ -85,7 +85,7 @@ data class Join(
 sealed class Type {
     object IntType : Type()
     object BoolType : Type()
-    data class SetType(val values: Set<Int>) : Type()
+    data class RangeType(val min: Int, val max: Int) : Type()
 }
 
 /**

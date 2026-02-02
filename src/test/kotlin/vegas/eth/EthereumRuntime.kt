@@ -304,7 +304,7 @@ class EthereumSession(
             .find { it.name == varId }
         return when (dagParam?.type) {
             is Type.BoolType -> EvmType.Bool
-            is Type.IntType, is Type.SetType -> EvmType.Int256
+            is Type.IntType, is Type.RangeType -> EvmType.Int256
             null -> EvmType.Int256
         }
     }
