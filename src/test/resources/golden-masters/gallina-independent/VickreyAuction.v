@@ -40,7 +40,7 @@ Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : optio
 
 (* --- Domain Constraints --- *)
 Definition domain_Enum_0 (z : Z) : Prop :=
-  z = 0%Z \/ z = 1%Z \/ z = 2%Z \/ z = 3%Z \/ z = 4%Z \/ z = 5%Z \/ z = 6%Z \/ z = 7%Z \/ z = 8%Z \/ z = 9%Z \/ z = 10%Z \/ z = 11%Z \/ z = 12%Z \/ z = 13%Z \/ z = 14%Z \/ z = 15%Z \/ z = 16%Z \/ z = 17%Z \/ z = 18%Z \/ z = 19%Z \/ z = 20%Z \/ z = 21%Z \/ z = 22%Z \/ z = 23%Z \/ z = 24%Z \/ z = 25%Z \/ z = 26%Z \/ z = 27%Z \/ z = 28%Z \/ z = 29%Z \/ z = 30%Z \/ z = 31%Z \/ z = 32%Z \/ z = 33%Z \/ z = 34%Z \/ z = 35%Z \/ z = 36%Z \/ z = 37%Z \/ z = 38%Z \/ z = 39%Z \/ z = 40%Z \/ z = 41%Z \/ z = 42%Z \/ z = 43%Z \/ z = 44%Z \/ z = 45%Z \/ z = 46%Z \/ z = 47%Z \/ z = 48%Z \/ z = 49%Z \/ z = 50%Z \/ z = 51%Z \/ z = 52%Z \/ z = 53%Z \/ z = 54%Z \/ z = 55%Z \/ z = 56%Z \/ z = 57%Z \/ z = 58%Z \/ z = 59%Z \/ z = 60%Z \/ z = 61%Z \/ z = 62%Z \/ z = 63%Z \/ z = 64%Z \/ z = 65%Z \/ z = 66%Z \/ z = 67%Z \/ z = 68%Z \/ z = 69%Z \/ z = 70%Z \/ z = 71%Z \/ z = 72%Z \/ z = 73%Z \/ z = 74%Z \/ z = 75%Z \/ z = 76%Z \/ z = 77%Z \/ z = 78%Z \/ z = 79%Z \/ z = 80%Z \/ z = 81%Z \/ z = 82%Z \/ z = 83%Z \/ z = 84%Z \/ z = 85%Z \/ z = 86%Z \/ z = 87%Z \/ z = 88%Z \/ z = 89%Z \/ z = 90%Z \/ z = 91%Z \/ z = 92%Z \/ z = 93%Z \/ z = 94%Z \/ z = 95%Z \/ z = 96%Z \/ z = 97%Z \/ z = 98%Z \/ z = 99%Z \/ z = 100%Z.
+  z = 0%Z \/ z = 1%Z \/ z = 2%Z.
 
 Module GameProtocol.
 

@@ -49,7 +49,7 @@ def lift2 {A B C : Type} (f : A → B → C) : Option A → Option B → Option 
   | _, _ => none
 
 /- Domain Constraints -/
-def domain_Enum_0 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 2 ∨ z = 3 ∨ z = 4 ∨ z = 5 ∨ z = 6 ∨ z = 7 ∨ z = 8 ∨ z = 9 ∨ z = 10 ∨ z = 11 ∨ z = 12 ∨ z = 13 ∨ z = 14 ∨ z = 15 ∨ z = 16 ∨ z = 17 ∨ z = 18 ∨ z = 19 ∨ z = 20 ∨ z = 21 ∨ z = 22 ∨ z = 23 ∨ z = 24 ∨ z = 25 ∨ z = 26 ∨ z = 27 ∨ z = 28 ∨ z = 29 ∨ z = 30 ∨ z = 31 ∨ z = 32 ∨ z = 33 ∨ z = 34 ∨ z = 35 ∨ z = 36 ∨ z = 37 ∨ z = 38 ∨ z = 39 ∨ z = 40 ∨ z = 41 ∨ z = 42 ∨ z = 43 ∨ z = 44 ∨ z = 45 ∨ z = 46 ∨ z = 47 ∨ z = 48 ∨ z = 49 ∨ z = 50 ∨ z = 51 ∨ z = 52 ∨ z = 53 ∨ z = 54 ∨ z = 55 ∨ z = 56 ∨ z = 57 ∨ z = 58 ∨ z = 59 ∨ z = 60 ∨ z = 61 ∨ z = 62 ∨ z = 63 ∨ z = 64 ∨ z = 65 ∨ z = 66 ∨ z = 67 ∨ z = 68 ∨ z = 69 ∨ z = 70 ∨ z = 71 ∨ z = 72 ∨ z = 73 ∨ z = 74 ∨ z = 75 ∨ z = 76 ∨ z = 77 ∨ z = 78 ∨ z = 79 ∨ z = 80 ∨ z = 81 ∨ z = 82 ∨ z = 83 ∨ z = 84 ∨ z = 85 ∨ z = 86 ∨ z = 87 ∨ z = 88 ∨ z = 89 ∨ z = 90 ∨ z = 91 ∨ z = 92 ∨ z = 93 ∨ z = 94 ∨ z = 95 ∨ z = 96 ∨ z = 97 ∨ z = 98 ∨ z = 99 ∨ z = 100
+def domain_Enum_0 (z : Int) : Prop := z = 0 ∨ z = 1 ∨ z = 2
 
 namespace GameProtocol
 
