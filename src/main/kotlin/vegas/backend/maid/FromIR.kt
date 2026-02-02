@@ -18,6 +18,7 @@ import vegas.ir.Expr
 import vegas.ir.GameIR
 import vegas.ir.Type
 import vegas.ir.asInt
+import vegas.ir.observableFieldsAt
 import vegas.semantics.eval
 import java.util.UUID
 
@@ -43,6 +44,12 @@ private class MaidConverter(private val ir: GameIR) {
     // Track field -> node ID mapping for edge creation
     private val fieldToNodeId = mutableMapOf<FieldRef, String>()
 
+    // Track field -> decision action (the action where the value is chosen, not revealed)
+    // For commit/reveal fields, this is the COMMIT action; for public fields, the public action.
+    // Note: REVEAL actions make values visible but don't choose new values.
+    // If griefing is encoded in the future, REVEAL would become a separate binary decision.
+    private val fieldToDecisionAction = mutableMapOf<FieldRef, vegas.ir.ActionId>()
+
     // Track all utility node IDs for later edge creation
     private val utilityNodeIds = mutableMapOf<RoleId, String>()
 
@@ -55,10 +62,16 @@ private class MaidConverter(private val ir: GameIR) {
         // 2. Create utility nodes from payoffs
         createUtilityNodes()
 
-        // 3. Create edges from guardReads and payoff dependencies
+        // 3. Create edges based on observability (perfect recall + visible info)
         createEdges()
 
-        // 4. Create CPDs for utility nodes
+        // 4. Validate perfect recall constraints
+        val recallErrors = validatePerfectRecall()
+        if (recallErrors.isNotEmpty()) {
+            throw IllegalStateException("Perfect recall violation:\n${recallErrors.joinToString("\n")}")
+        }
+
+        // 5. Create CPDs for utility nodes
         createUtilityCPDs()
 
         // Deduplicate edges
@@ -79,6 +92,10 @@ private class MaidConverter(private val ir: GameIR) {
     /**
      * Create decision/chance nodes from ActionDag action parameters.
      * Deduplicates nodes by (owner, param) to handle multiple actions per player.
+     *
+     * Also tracks the "decision action" for each field - the action where the value
+     * is actually chosen. For commit/reveal fields, this is the COMMIT action (where
+     * the choice is made), not the REVEAL action (which just makes it visible).
      */
     private fun createDecisionNodes() {
         val createdNodeIds = mutableSetOf<String>()
@@ -94,6 +111,12 @@ private class MaidConverter(private val ir: GameIR) {
                 // Track field -> node mapping for edge creation
                 val fieldRef = FieldRef(owner, param.name)
                 fieldToNodeId[fieldRef] = nodeId
+
+                // Track the decision action for this field (first non-REVEAL action wins)
+                // REVEAL actions don't choose values - they just make previously committed values visible
+                if (fieldRef !in fieldToDecisionAction && meta.kind != vegas.ir.Visibility.REVEAL) {
+                    fieldToDecisionAction[fieldRef] = meta.id
+                }
 
                 // Skip if we already created this node
                 if (nodeId in createdNodeIds) continue
@@ -136,31 +159,38 @@ private class MaidConverter(private val ir: GameIR) {
     }
 
     /**
-     * Create edges from guardReads (information edges) and payoff dependencies.
+     * Create edges based on observability (perfect recall and visible information).
+     *
+     * For each MAID node (field), we find what's observable at its decision action:
+     * - Same agent's earlier decisions (perfect recall), OR
+     * - Visible (PUBLIC/REVEAL) earlier actions from other agents
+     *
+     * Note on COMMIT vs REVEAL:
+     * - COMMIT actions ARE visible as events (you know someone made a choice)
+     * - The VALUE is not visible until REVEAL (you don't know what they chose)
+     * - For edge creation, we use observability at the decision action (COMMIT/PUBLIC),
+     *   not at REVEAL time
+     * - If griefing is encoded in the future, REVEAL would become a separate decision
      */
     private fun createEdges() {
-        // Information edges from guardReads
-        for (meta in ir.dag.metas) {
-            for (guardRead in meta.struct.guardReads) {
-                val srcNodeId = fieldToNodeId[guardRead] ?: continue
+        // Decision-to-decision edges based on observability at decision time
+        for ((field, decisionAction) in fieldToDecisionAction) {
+            val tgtNodeId = fieldToNodeId[field] ?: continue
+            val observableFields = ir.dag.observableFieldsAt(decisionAction)
 
-                // Create edge to each parameter in this action
-                for (param in meta.spec.params) {
-                    val tgtNodeId = "${meta.struct.owner.name}_${param.name.name}"
-                    if (srcNodeId != tgtNodeId) {
-                        edges.add(MaidEdge(source = srcNodeId, target = tgtNodeId))
-                    }
+            for (obsField in observableFields) {
+                val srcNodeId = fieldToNodeId[obsField] ?: continue
+                if (srcNodeId != tgtNodeId) {
+                    edges.add(MaidEdge(source = srcNodeId, target = tgtNodeId))
                 }
             }
         }
 
-        // Edges from decisions to utility nodes (based on payoff dependencies)
+        // Edges to utility nodes (based on payoff dependencies)
         for ((role, expr) in ir.payoffs) {
             if (role in ir.chanceRoles) continue
-
             val utilNodeId = utilityNodeIds[role] ?: continue
             val dependencies = extractFieldRefs(expr)
-
             for (dep in dependencies) {
                 val srcNodeId = fieldToNodeId[dep] ?: continue
                 edges.add(MaidEdge(source = srcNodeId, target = utilNodeId))
@@ -385,5 +415,37 @@ private class MaidConverter(private val ir: GameIR) {
         return first.flatMap { item ->
             rest.map { restList -> listOf(item) + restList }
         }
+    }
+
+    /**
+     * Validate that perfect recall edges are present for all agents.
+     * For each agent, every later decision must have edges from all earlier decisions.
+     */
+    private fun validatePerfectRecall(): List<String> {
+        val errors = mutableListOf<String>()
+        val edgeSet = edges.map { it.source to it.target }.toSet()
+
+        // Group fields by agent (owner), only for non-chance roles
+        val agentFields = fieldToDecisionAction.entries
+            .filter { (field, _) -> field.owner !in ir.chanceRoles }
+            .groupBy { (field, _) -> field.owner.name }
+
+        for ((_, fieldEntries) in agentFields) {
+            // Check all pairs where one decision precedes the other
+            for ((earlierField, earlierAction) in fieldEntries) {
+                for ((laterField, laterAction) in fieldEntries) {
+                    if (earlierField == laterField) continue
+                    if (!ir.dag.reach.reaches(earlierAction, laterAction)) continue
+
+                    // Earlier field should have edge to later field
+                    val src = fieldToNodeId[earlierField] ?: continue
+                    val tgt = fieldToNodeId[laterField] ?: continue
+                    if ((src to tgt) !in edgeSet) {
+                        errors.add("Missing perfect recall edge: $src → $tgt")
+                    }
+                }
+            }
+        }
+        return errors
     }
 }

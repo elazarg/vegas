@@ -393,6 +393,25 @@ private fun validateCommitRevealOrdering(
 }
 
 /**
+ * Returns fields observable to the owner of [targetAction] at that action.
+ * A field is observable if:
+ * - It was written by the same owner (perfect recall), OR
+ * - It was written with PUBLIC or REVEAL visibility before [targetAction]
+ */
+fun ActionDag.observableFieldsAt(targetAction: ActionId): Set<FieldRef> {
+    val targetOwner = owner(targetAction)
+    return actions
+        .filter { src -> src != targetAction && reaches(src, targetAction) }
+        .flatMap { src ->
+            writes(src).filter { field ->
+                owner(src) == targetOwner ||
+                visibilityOf(src)[field] in setOf(Visibility.PUBLIC, Visibility.REVEAL)
+            }
+        }
+        .toSet()
+}
+
+/**
  * Ensure that whenever a guard reads a field, that field is already visible
  * (PUBLIC or REVEAL) at or before that action.
  */
