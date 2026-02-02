@@ -1,7 +1,7 @@
 // Vickrey Auction: Winner pays the second-highest bid, losers get deposits back.
 // Distribution semantics: pot (400 wei) - winner pays second price to Seller, all get deposits back
 
-type bid = {0 .. 100}
+type bid = {0 .. 2}
 
 macro max2(a: bid, b: bid): bid = (a >= b ? a : b);
 macro max3(a: bid, b: bid, c: bid): bid = max2(max2(a, b), c);
