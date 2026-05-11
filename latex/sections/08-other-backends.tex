@@ -1,0 +1,206 @@
+\section{Other Backends}
+\label{sec:other-backends}
+
+Past the EVM and Gambit backends, the rest of the family share the
+EventGraph but address different consumers: a constraint solver
+(SMT-LIB), a session-typed protocol checker (Scribble), a Bitcoin
+Lightning channel (for the two-party fragment), a MAID exporter
+(for the Thrones game-theory workbench), a GraphViz visualisation,
+and a Coq/Lean deep embedding of the protocol as a dependent
+typing problem.  Each is short enough that we describe them
+together here.
+
+\subsection{SMT-LIB}
+
+The SMT backend (\file{backend/smt/Smt.kt}) encodes the EventGraph
+as a set of quantifier-free constraints over per-node ``done''
+flags and per-field value variables.  A bounded-type field is a
+finite-sort variable; a guard is its boolean lowering;
+dependencies become implications
+\(\mathit{done}_B \Rightarrow \bigwedge_{A \in \mathrm{pred}(B)} \mathit{done}_A\).
+Reachability queries are written as additional constraints
+asserting that a chosen role gets a payoff at least $x$.
+
+The result is given to Z3 (or any SMT-LIB-2 solver) for
+satisfiability.  Two principal uses:
+
+\begin{itemize}\itemsep1pt
+\item \emph{Witness searches.}  ``Is there a play that gives role
+  $R$ a payoff $\geq c$?''  A satisfying assignment is a concrete
+  history.
+\item \emph{Coalition queries.}  A DQBF encoding is also generated,
+  in which a chosen coalition's variables are existentially
+  quantified and the complement's are universally quantified.  The
+  resulting formula is true iff the coalition has a strategy that
+  achieves a property against any response.  This is a coarse
+  analogue of best-response analysis useful for sanity checks on
+  small examples.
+\end{itemize}
+
+Z3 is fast on the example library; the encoding is plain enough
+that it is also useful as a sanity-check on the IR (a guard that
+nobody can ever satisfy will show up as a falsifying constraint).
+
+\subsection{Scribble}
+
+Scribble~\citep{HondaYoshidaCarbone2008MPST} is a session-types
+implementation that records the legal sequencing of messages in a
+multi-party protocol.  The Scribble backend
+(\file{backend/scribble/}) projects the EventGraph onto the
+public-message subset --- skipping commits, retaining reveals and
+public yields, dropping internal randomness --- and emits a global
+type whose sequencing is the topological order of the public
+frontier.  Recursion in the produced Scribble protocol is empty
+(the protocol is acyclic by construction).
+
+The output is useful to anyone who wants a static check that
+their off-chain client library is sending messages in the right
+order; Scribble's projection toolchain can derive per-role local
+types from the global protocol.
+
+\subsection{Bitcoin / Lightning}
+
+A separate backend (\file{backend/bitcoin/}) targets the two-party
+Lightning channel for the subset of Vegas games with exactly two
+strategic roles.  Each EventGraph node is implemented as a state
+in a Bitcoin script state machine; commitments use OP\_HASH160 and
+OP\_EQUAL, with state transitions encoded as signed updates of
+the channel's commitment transaction.  The output of the backend
+is a textual transcript of the Lightning protocol moves needed to
+realise the game; deploying it on a real Lightning node is
+out-of-band work.
+
+This backend is the most specialised of the bunch: it does not
+generalise to more than two roles or to non-balanced deposit
+structures.  Its value is that it demonstrates that the EventGraph
+abstraction lifts to a non-EVM execution layer with completely
+different cryptographic primitives, with no change to the IR.
+
+\subsection{MAID}
+
+MAID~\citep{koller2003multi} (Multi-Agent Influence Diagrams)
+factor a multi-agent decision problem into decision nodes,
+chance nodes, utility nodes, and the conditional probability
+distributions that wire them together.  Vegas can emit a MAID
+suitable for the Thrones game-theory workbench.
+
+A genuine limitation lives here.  In plain MAIDs, a decision
+node's action set is a single static domain; there is no place to
+express ``the legal action set depends on the parents' values''.
+A Vegas guard like \TT{where Host.goat != Guest.d} therefore has
+nowhere to go in a MAID: the encoding would silently drop the
+constraint and present the Host as being able to pick any door.
+The current MAID emitter refuses to emit for any game whose
+guards reference fields written by other nodes; it accepts
+self-only guards (a guard that only constrains the value being
+written) but does not yet narrow the resulting MAID node's domain.
+Both narrowing self-only guards and supporting context-dependent
+domains in some MAID extension are listed in the project's
+\file{TODO.txt}.
+
+The honest reading is that MAID is a less expressive target than
+Gambit's EFG for Vegas's class of protocols.  Where it
+\emph{does} apply, the MAID view is more compact than the
+unfolded tree; for protocols that fit, the output is useful.
+
+\subsection{Coq / Lean: Diamond DAG witness records}
+\label{sec:other:diamond}
+
+The Gallina (Coq) and Lean~4 backends emit a deep embedding of the
+EventGraph as a dependently-typed family of records.  The shape of
+the encoding deserves a paragraph of its own, because it is
+slightly unusual and corresponds to an original Vegas-specific
+proof-game idea.
+
+For an EventGraph with $n$ nodes, the backend emits a chain of
+records $W_0, W_1, \dots, W_n$, where $W_i$ is the (typed) state
+after the first $i$ nodes have fired.  Each $W_i$ is parameterised
+on the entire history $W_0, \dots, W_{i-1}$, with fields:
+
+\begin{itemize}\itemsep1pt
+\item one named field per parameter written by node $i$, of the
+  parameter's bounded type, with the field name embedding the
+  parameter and owning role (e.g.\ \TT{hidden\_car\_Host} for a
+  committed value, \TT{d\_Guest} for a public yield);
+\item one proof field per guard ---
+  \TT{$W_i$\_guard\_domain\_\textit{f}} for the domain restriction
+  and \TT{$W_i$\_guard\_logic} for the user-supplied \TT{where}
+  clause;
+\item for reveals, a proof
+  \TT{$W_i$\_guard\_reveal\_\textit{f}} that the revealed value
+  equals the value committed in an ancestor witness;
+\item nothing else.
+\end{itemize}
+
+The backend emits one of two top-level records, named for the
+side of the protocol they encode.  \TT{ActionDag} is the
+\emph{fair-play structure}: an inhabitant is a complete play of
+the protocol together with proofs of every guard, every domain
+restriction, and every reveal-matches-commit equation.  Inhabiting
+\TT{ActionDag} is therefore the same as exhibiting that a fair
+play exists.  \TT{EventDag} is the \emph{trace structure}: an
+inhabitant is a realised history, with hidden fields wrapped in a
+\TT{Maybe}-style carrier so that traces can be partially observed.
+Actor strategies are functions from the prior witnesses
+$W_0, \dots, W_{i-1}$ (projected to the actor's view) into the
+appropriate field of $W_i$, with proofs --- so the encoding
+captures \emph{at the type level} that every move is legal and
+every reveal matches its commit.
+
+The Coq and Lean backends each take a policy flag selecting which
+records to emit:
+
+\begin{itemize}\itemsep1pt
+\item \TT{FAIR\_PLAY} (\TT{lean-fair} / \TT{gallina-fair}) emits
+  \TT{ActionDag} only.  Every guard becomes a runtime
+  \TT{decide}/\TT{rfl} obligation in the appropriate $W_i$.
+\item \TT{INDEPENDENT} (\TT{lean-independent} /
+  \TT{gallina-independent}) emits \TT{EventDag} only, with
+  hidden fields wrapped in a \TT{Maybe} carrier and an
+  \TT{isPresent} discipline on reveals.
+\item \TT{MONOTONIC} (\TT{lean-monotone} / \TT{gallina-monotone})
+  emits both records, with monotonicity guards
+  (\TT{$W_i$\_guard\_have\_$w_j$}) certifying that prior commits
+  remain valid for later reveals.
+\end{itemize}
+
+Each policy is exercised against the same example set in the
+golden-master harness.
+
+The Diamond DAG encoding is independent of the companion
+VegasCore Lean library described in \S\ref{sec:vegascore}.  The
+two coexist as different approaches to ``the same protocol viewed
+through a proof assistant'': Diamond DAG ships a standalone
+per-program object whose inhabitation is a witness; VegasCore is
+a reusable library of definitions and theorems.  A third Lean
+backend, emitting a Vegas program as an instance of VegasCore's
+\TT{WFProgram} type, is planned (and listed in
+\file{TODO.txt}) to bridge the two.
+
+The point of this encoding is two-fold.  First, it gives a
+self-contained Lean object that one can pass to a theorem prover
+without depending on any large semantics library; the encoding
+\emph{is} the semantics.  Second, since it is a function on the
+prior witnesses, it encodes the player's choice schedule as a
+strategy in the strict, type-theoretic sense: an inhabitant of
+the function space.  Players' move spaces are subtypes pinned by
+domain and where-clause proofs.  This view is somewhat closer to
+the IF-logic/CGT~\citep{HintikkaSandu1989,GhaniHedgesWinschel2018CGT}
+style of compositional game semantics than to the
+state-machine view that Gambit's tree presents.
+
+The Diamond DAG encoding is independent of the companion
+VegasCore Lean library described in \S\ref{sec:vegascore}.  The
+two coexist as different approaches to ``the same protocol viewed
+through Lean'': Diamond DAG ships a per-program standalone object,
+VegasCore is a reusable library.  A planned third backend (also in
+\file{TODO.txt}) emits a Vegas program as an instance of
+VegasCore's \TT{WFProgram} type, completing the picture.
+
+\subsection{GraphViz}
+
+The simplest backend: a textual DOT description of the EventGraph
+for debugging and presentation, with node shapes encoding
+visibility (rounded boxes for \PUBLIC, squares for \COMMIT,
+hexagons for \REVEAL, diamonds for sinks).  Useful for inspecting
+the result of the commit-reveal expansion pass.

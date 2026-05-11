@@ -1,0 +1,267 @@
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{The two-faces problem}
+
+A smart contract that hosts a sealed-bid auction is one program with
+two readings.  Read as an Ethereum contract, it is a state machine
+exposing transactions: \texttt{commit(\textit{hash})},
+\texttt{reveal(\textit{bid})}, \texttt{settle()}.  Read as a game, it
+is an extensive form with players, information sets, and a payoff
+function.  These two readings are seldom kept in sync.  The contract
+is written, audited, deployed, and run as a state machine; the game
+is sketched, sometimes proved correct on paper, almost never
+mechanically connected to the bytecode the validators actually
+execute.  The gap is where strategic surprises live: a sealed-bid
+auction whose ``commit'' phase happens to publish enough information
+to be front-run; an escrow whose ``timeout'' branch creates a
+griefing incentive that no equilibrium analysis predicted because
+the model omitted the timeout; a voting scheme whose Solidity
+implementation reveals the tally one block earlier than the analysis
+assumed.
+
+Vegas is a small programming language and compiler aimed at this
+specific gap.  A Vegas program is a finite multi-party protocol
+written in the natural style of a referee: who joins, who plays
+what, what is hidden and revealed when, and how the pool is split
+at the end.  Programs are short --- the running examples in this
+report are a dozen lines each --- and look more like the textbook
+description of a game than like a smart-contract framework.  The
+compiler reads the program, infers a dependency relation among its
+actions, and emits a family of artifacts that all denote the same
+protocol from different viewpoints: a Solidity contract for
+deployment, an extensive-form game for equilibrium analysis, an
+SMT-LIB encoding for reachability queries, and several others.  Each
+artifact is mechanically derived from the same source.
+
+This report describes how that compilation is organized, what the
+language can and cannot express, how the central intermediate
+representation --- the \emph{event graph} --- captures the strategic
+structure of a protocol, and how the per-backend lowerings are
+constrained so that the artifacts agree.
+
+\subsection{What Vegas is and is not}
+
+Vegas is deliberately narrow.  The aim is to make the round trip from
+specification to deployed contract to game-theoretic analysis short
+and reliable for a useful class of protocols, not to be a general
+purpose smart-contract language.  Concretely, in scope are:
+
+\begin{itemize}\itemsep1pt
+\item finite, terminating multi-party protocols with a single
+  pool of locked funds;
+\item bounded types (booleans, finite ranges, enumerations);
+\item deterministic guards (\TT{where} clauses) over prior public
+  values and over the value being written;
+\item public randomness via an explicit \texttt{random} construct;
+\item commit-reveal patterns, with automatic insertion when the
+  compiler detects simultaneous public moves that would otherwise be
+  front-runnable;
+\item explicit operational handling of non-responsive participants
+  (timeouts and bail-outs, with handler clauses chosen by the
+  programmer);
+\item terminal allocation of the pool by a \TT{withdraw} clause.
+\end{itemize}
+
+Out of scope, on purpose:
+
+\begin{itemize}\itemsep1pt
+\item unbounded data and loops --- the event graph must be finite;
+\item ERC-20/ERC-777 token flows and multi-token games (planned, not
+  in the current language);
+\item interactions with arbitrary other contracts (the protocol is a
+  closed system; cross-contract MEV is parameter, not modelled);
+\item private randomness from outside oracles;
+\item dynamic player counts (the role set is fixed at compile time).
+\end{itemize}
+
+These restrictions are real costs.  They are also what make the
+multi-backend story feasible: every artifact is computed by
+exhaustive enumeration or simple recursion over a finite graph, with
+no need to approximate or to choose a sound-but-incomplete encoding.
+A Gambit extensive-form game can be built directly from the
+EventGraph because the graph is finite; an SMT-LIB encoding of
+``can role $R$ reach a configuration where they get $\geq x$ wei?''
+is quantifier-free over a finite set of action witnesses; a Lean or
+Coq witness-record encoding terminates by construction.  We expect
+the language to grow --- variable deposits, tokens, bounded
+iteration --- and we have tried to make the IR robust enough to
+accommodate those extensions.  The current paper documents the
+foundations.
+
+\subsection{A first example}
+\label{sec:intro:first-example}
+
+The following Vegas program is the complete specification of a
+distribution-semantics Monty Hall game.  Two roles, Host and Guest,
+each lock 20 wei of deposit into a 40 wei pool.  The Host hides the
+car behind one of three doors; the Guest picks a door; the Host
+reveals a goat door; the Guest decides whether to switch; the Host
+reveals the car; payouts are computed from the public transcript.
+If a role fails to act in time, the \texttt{or split} handler
+forfeits their deposit to the surviving party.
+
+\begin{lstlisting}[style=vg]
+type door = {0, 1, 2}
+
+game main() {
+  join Host()  $ 20;
+  join Guest() $ 20;
+  commit or split Host(car: door);
+  yield  or split Guest(d: door);
+  yield  or split Host(goat: door) where Host.goat != Guest.d;
+  yield  or split Guest(switch: bool);
+  reveal Host(car: door) where Host.goat != Host.car;
+  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 40 : 0;
+             Host  -> ((Guest.d != Host.car) <-> Guest.switch) ? 0  : 40 }
+}
+\end{lstlisting}
+
+From this twelve-line source Vegas produces, with no further input:
+
+\begin{itemize}\itemsep1pt
+\item a Solidity contract of roughly 200 lines that enforces the
+  protocol step by step, uses cryptographic commitments for the
+  Host's hidden door, and falls back to the \TT{or split} clauses
+  if any role times out;
+\item an extensive-form game (\TT{.efg}) in Gambit's format,
+  containing the move tree and the information sets generated by
+  the dependency relation;
+\item an SMT-LIB witness-existence encoding for reachability
+  queries;
+\item a Coq (Gallina) and a Lean~4 witness-record encoding of the
+  protocol's per-step constraints --- the \emph{Diamond DAG} encoding
+  of Section~\ref{sec:other-backends}.
+\end{itemize}
+
+All four artifacts are produced by the current compiler and
+exercised by the golden-master test suite.  The Solidity output
+is deployable to a local Anvil node; the Gambit output, fed to
+Gambit, returns the mixed-strategy equilibrium for Monty Hall.
+Nothing in the twelve-line source mentions Ethereum,
+cryptographic commitments, timeouts, gas, or game trees.
+
+The example is small enough to verify by inspection that the two
+artifacts agree on what they say is hidden, what is public, when
+each player observes what, and which deviations are punished.  At
+larger scale the agreement has to be argued, not inspected --- which
+is what motivates the companion Lean formalization VegasCore
+discussed in \S\ref{sec:vegascore}.
+
+\subsection{Why an event graph}
+\label{sec:intro:why-graph}
+
+A natural alternative would be to compile the surface syntax
+directly to a state machine for Solidity and directly to a tree for
+Gambit, twice, with the two backends owning their own semantics.
+That is also more or less what an experienced human writes by hand
+when they want both views of the same protocol.  Vegas does not do
+this for three reasons.
+
+First, the textual order of the Vegas source does \emph{not} encode
+the strategic structure.  In the Monty Hall example above, the line
+\TT{yield Guest(d: door)} appears below the Host's hidden
+\TT{commit}.  But the Guest cannot read the Host's hidden value, and
+the Host's commit has no data dependency on the Guest; the two
+actions are concurrent in the strategic sense, regardless of the
+order they happen to be typed in.  Compiling to a tree directly
+would force an arbitrary ordering choice, which then has to be
+``undone'' with information-set equivalences.  Inferring
+concurrency from data dependencies once, in the IR, and letting
+every backend read it off the same graph, is simpler.
+
+Second, the operational behaviour of a Solidity contract is more
+naturally described by a dependency relation than by a global step
+counter.  The Solidity backend emits a \TT{depends} modifier per
+action, the modifier gating execution on the completion flags of
+the action's predecessors in the event graph; concurrent actions
+can arrive in any order.  This matches the on-chain reality (the
+transaction ordering is chosen by builders, not by the contract)
+without the contract having to encode a totalisation.
+
+Third, the rewriting passes the compiler performs --- in particular,
+automatic commit-reveal insertion --- are dependency-graph rewrites.
+They are easier to state and easier to test on a graph than on the
+syntax tree.
+
+So Vegas uses a single intermediate representation, the
+\emph{EventGraph}, between the surface language and every backend.
+Each backend reads the graph; no backend reaches behind the graph
+to the surface syntax.  Section~\ref{sec:eventgraph} defines the
+EventGraph in detail; the rest of the report uses it pervasively.
+
+\subsection{Contributions and outline}
+\label{sec:intro:contributions}
+
+The contributions of this report are pragmatic rather than
+foundational.  We claim:
+
+\begin{enumerate}\itemsep2pt
+\item \emph{A language design} (\S\ref{sec:language}) that makes it
+  feasible to describe a finite on-chain protocol in fewer than
+  twenty lines and that compiles, without further specification,
+  to both deployable code and a game-theoretic model.
+
+\item \emph{The EventGraph IR} (\S\ref{sec:eventgraph}) and its
+  associated invariants (acyclicity, commit-reveal ordering,
+  visibility on guard reads), capturing concurrency, observability,
+  and the protocol's information-set structure in one finite
+  object.
+
+\item \emph{Automatic commit-reveal insertion}
+  (\S\ref{sec:commit-reveal}): a graph-rewriting pass that detects
+  concurrent public writes and replaces each one with a
+  commit-then-reveal pair, with predecessors set up so that no
+  player can observe another player's reveal before committing
+  themselves.  Within the protocol, this turns an
+  observation-before-action vulnerability into a structural
+  property of the IR rather than an implementation discipline.
+
+\item \emph{A family of backends} (\S\S\ref{sec:solidity}--\ref{sec:other-backends})
+  that each consume the same EventGraph: Solidity and Vyper for
+  EVM deployment with \TT{depends}-modifier scheduling and
+  bail-out subgames; Gambit for extensive-form game generation via
+  frontier exploration; SMT-LIB for reachability queries; Scribble
+  for the session-typed protocol description; a Bitcoin/Lightning
+  backend for the two-player fragment; a Coq/Lean ``Diamond DAG''
+  witness-record encoding that captures the per-step constraint
+  bundle as a dependent type.
+
+\item \emph{An operational subgame layer}
+  (\S\ref{sec:liveness}) for liveness and griefing: every action
+  can be guarded by a handler that fires if the actor does not
+  respond within a deadline.  The handler is a strategic choice
+  available to the actor (``quit''), realised by the Solidity
+  backend through a timeout-and-bail mechanism, and exposed to the
+  game-theoretic backends as an explicit move.
+
+\item \emph{A bridge to a Lean~4 formalization}
+  (\S\ref{sec:vegascore}) named VegasCore, which formalizes a core
+  calculus over the same EventGraph carrier.  Vegas and VegasCore
+  are independent artifacts: Vegas is a compiler tool, VegasCore is
+  a self-contained semantic construction.  Where they describe the
+  same object they use the same name; where they diverge, the
+  divergence is recorded.
+
+\item \emph{An example library} (\S\ref{sec:evaluation}):
+  thirty-nine Vegas specifications covering classical mechanisms
+  (Vickrey auction, Prisoners' Dilemma, Centipede), Ethereum
+  patterns (escrow, micropayment channel, governance voting), and
+  adversarial constructions (front-running setups, hidden-reserve
+  auctions).  Each example is compiled to every applicable
+  backend.
+\end{enumerate}
+
+The report proceeds in roughly the order of the compiler.
+\S\ref{sec:language} introduces the surface language and walks
+through one example end-to-end.  \S\ref{sec:pipeline} fixes the
+overall pipeline.  \S\ref{sec:eventgraph} defines the EventGraph
+and its invariants.  \S\ref{sec:commit-reveal} describes the
+automatic commit-reveal pass.  \S\S\ref{sec:solidity}--\ref{sec:other-backends}
+cover the backends.  \S\ref{sec:liveness} describes the
+liveness/quit-handler layer.  \S\ref{sec:vegascore} maps the
+construction onto the companion Lean formalization.
+\S\ref{sec:evaluation} reports on the example suite.
+\S\S\ref{sec:related}--\ref{sec:discussion} close with related work
+and a frank discussion of current limitations and natural
+extensions.

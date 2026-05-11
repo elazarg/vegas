@@ -1,0 +1,130 @@
+\section{Related Work}
+\label{sec:related}
+
+Vegas sits at the intersection of three lines of work --- domain
+specific languages for smart contracts, automated game-theoretic
+analysis, and event-structure semantics for concurrent processes.
+None of these alone covers Vegas's design, and the value of the
+language design is in their combination.
+
+\subsection{Smart-contract domain-specific languages}
+
+Several existing DSLs target contract correctness.
+Marlowe~\citep{Lamela2020Marlowe} offers a small financial
+contract calculus for Cardano with formal semantics in
+Isabelle/HOL; its scope is multi-party financial agreements and
+its proofs are about safety and conservation, not about strategic
+properties of the players.
+Scilla~\citep{Sergey2019Scilla} provides a typed intermediate
+language for Zilliqa with Coq-verified semantics and a strict
+separation of communication and computation; like Marlowe, its
+guarantees concern functional behavior of the contract rather
+than the game it implements.
+Move~\citep{blackshear2019move} introduces linear resource types
+to make ``how much can leave the contract'' a property of the
+type system.
+
+Vegas differs in two structural ways.  First, the source
+language describes a \emph{game played by the contract},
+not just a contract, and the compiler emits a game-theoretic
+artifact (a Gambit \TT{.efg}) alongside the executable code.
+Second, the language is consciously narrower than these
+alternatives: no recursion, no token transfers, no arbitrary
+external calls.  This narrowness is what gives the multi-backend
+story its consistency.
+
+Verification tools that check smart contracts against temporal
+or safety specifications --- VerX~\citep{Permenev2020Verx},
+KEVM~\citep{park2018formal}, Certora~\citep{CertoraWhitepaper2022}
+--- are complementary.  Their question is ``does this bytecode
+satisfy this specification''; Vegas's question is ``which
+specification?''  Strategically-aware specifications are exactly
+what Vegas's Gambit/MAID/SMT artifacts are.
+
+\subsection{Game-theoretic analysis of smart contracts}
+
+The MEV literature~\citep{Daian2020Flash,qin2022quantifying}
+documents extensive strategic activity on existing chains:
+front-running, sandwich attacks, transaction reordering for
+profit.  These analyses are case studies of deployed contracts,
+performed after the fact and largely by hand.  Mitigation work
+has typically taken two routes: implementation-level cryptographic
+defenses for commit-reveal patterns~\citep{breidenbach2018enter}
+and runtime alternatives such as private transaction
+pools~\citep{Weintraub2022FlashbotsAuction}.  Vegas's
+contribution is to build a specific subclass --- observation-before
+action on concurrent public moves --- into the language: the
+mitigation is a structural property of the generated contract,
+not a discipline applied by humans.
+
+\subsection{Multi-agent influence diagrams and game representations}
+
+MAID~\citep{koller2003multi} provides a factored representation
+of multi-agent decisions as a Bayesian network with decision and
+utility nodes.  We discussed the MAID backend in
+\S\ref{sec:other-backends}; the relevant limit is that plain
+MAIDs cannot encode context-dependent action sets, which makes
+them an awkward target for Vegas games whose guards are
+non-trivial.  Constrained-MAID extensions exist in the literature
+but are not standardized.
+
+The Gambit project~\citep{McKelveyMcLennanTurocy2006Gambit} and
+OpenSpiel~\citep{LanctotEtAl2019OpenSpiel} provide tools for
+analyzing extensive-form games once one is given.  Vegas adds
+the path from a programmer's specification to such a game.
+
+\subsection{Event structures and dependency graphs}
+
+The EventGraph is a particular flavour of event
+structure~\citep{NielsenPlotkinWinskel1981,Winskel1986EventStructures}
+specialized to the protocol setting --- typed, finite,
+visibility-aware, with explicit commit/reveal node kinds.  The
+program-dependence graph~\citep{ferrante1987program} and
+static-single-assignment form~\citep{cytron1991efficiently} are
+the immediate technical antecedents on the program-analysis side:
+EventGraph edges are computed by the same dependency analysis
+those works pioneered, only specialized to the
+\TT{commit}/\TT{reveal} discipline.
+
+\subsection{Compositional game theory and IF logic}
+
+Compositional Game Theory~\citep{GhaniHedgesWinschel2018CGT} and
+the work it builds on develop a categorical view of open games
+that compose like programs.  IF logic~\citep{HintikkaSandu1989,
+MannSanduSevenster2011IFL} provides a logical apparatus for
+imperfect-information games in which informational independence
+is a first-class construct.  Vegas's per-program Diamond DAG
+encoding (\S\ref{sec:other:diamond}) has a sympathetic flavour
+--- a player's choice schedule is a function on prior witnesses,
+which is the IF-logic notion of a Skolem function for an
+existential under independence --- but the connection is at the
+level of stylistic resonance, not a formal correspondence we
+have spelled out.  The companion VegasCore
+(\S\ref{sec:vegascore}) does this work on the side of native
+kernel-game semantics rather than open-game composition.
+
+\subsection{Multiparty session types}
+
+Multiparty session types~\citep{HondaYoshidaCarbone2008MPST}
+specify the legal sequencing of messages in a multi-party
+protocol; Castellan and Yoshida's recent work
+\citep{CastellanYoshidaSessionGame} relates session types to
+game semantics directly.  Vegas's Scribble backend uses session
+types as a target, projecting the EventGraph's public-message
+subset onto a global type.  The relationship is more
+``information set $\subseteq$ session type than the reverse'':
+session types record which messages are legal in a given
+prefix, but they do not directly record information sets.  A
+fuller comparison is future work.
+
+\subsection{Refinement and operational correctness}
+
+The bail-out subgame and the Solidity scheduling layer share
+the shape of an implementation refining a more abstract
+specification, in the sense of Lynch and
+Vaandrager~\citep{LynchVaandrager1995}.  Vegas's companion
+formalization VegasCore states a stochastic-step refinement
+theorem on the abstract event-graph machine.  A formal proof
+that Vegas's Solidity backend refines its EventGraph is on the
+project's TODO list; this is precisely the gap the fellowship
+proposal addresses.

@@ -1,0 +1,106 @@
+% macros.tex — Vegas paper notation
+
+% ── Packages ──────────────────────────────────────────────────────────
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{stmaryrd}
+\usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+
+% ── Theorem environments ──────────────────────────────────────────────
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% ── Players / roles / fields ──────────────────────────────────────────
+\newcommand{\Role}{\mathsf{Role}}
+\newcommand{\Var}{\mathsf{Var}}
+\newcommand{\Field}[2]{#1.#2}
+
+% ── Constructs (lowercased for surface, capitalized for IR) ───────────
+\newcommand{\kw}[1]{\mathbf{#1}}
+\newcommand{\kjoin}{\kw{join}}
+\newcommand{\kyield}{\kw{yield}}
+\newcommand{\kcommit}{\kw{commit}}
+\newcommand{\kreveal}{\kw{reveal}}
+\newcommand{\krandom}{\kw{random}}
+\newcommand{\kwithdraw}{\kw{withdraw}}
+\newcommand{\kwhere}{\kw{where}}
+
+\newcommand{\Commit}{\mathsf{Commit}}
+\newcommand{\Reveal}{\mathsf{Reveal}}
+\newcommand{\Public}{\mathsf{Public}}
+\newcommand{\Sample}{\mathsf{Sample}}
+\newcommand{\Ret}{\mathsf{Ret}}
+
+% ── Visibility tags ───────────────────────────────────────────────────
+\newcommand{\COMMIT}{\textsc{commit}}
+\newcommand{\REVEAL}{\textsc{reveal}}
+\newcommand{\PUBLIC}{\textsc{public}}
+
+% ── Probability ───────────────────────────────────────────────────────
+\newcommand{\PMF}[1]{\mathrm{PMF}(#1)}
+\newcommand{\NN}{\mathbb{N}}
+\newcommand{\RR}{\mathbb{R}}
+
+% ── Code in prose ─────────────────────────────────────────────────────
+\newcommand{\TT}[1]{\texttt{#1}}
+\newcommand{\file}[1]{\texttt{#1}}
+
+% ── Vegas listing language ────────────────────────────────────────────
+\definecolor{VegasKW}{RGB}{0,80,150}
+\definecolor{VegasComment}{RGB}{96,96,96}
+\definecolor{VegasString}{RGB}{160,32,32}
+\lstdefinelanguage{Vegas}{
+  morekeywords={game,join,yield,commit,reveal,random,withdraw,macro,
+                type,where,or,split,burn,null,hidden,opt,let,in,true,false,
+                bool,int,address},
+  sensitive=true,
+  morecomment=[l]{//},
+  morestring=[b]",
+  keywordstyle=\color{VegasKW}\bfseries,
+  commentstyle=\color{VegasComment}\itshape,
+  stringstyle=\color{VegasString},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=2,
+  columns=flexible,
+}
+
+\lstdefinestyle{vg}{
+  language=Vegas,
+  frame=single,
+  framerule=0.4pt,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=0.5em,
+  belowskip=0.5em,
+}
+
+\lstdefinestyle{sol}{
+  language=Java, % approximate
+  basicstyle=\ttfamily\small,
+  frame=single,
+  framerule=0.4pt,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=0.5em,
+  belowskip=0.5em,
+  morekeywords={contract,function,modifier,address,uint256,bytes32,
+                bool,mapping,public,external,internal,private,view,pure,
+                require,enum,return,returns,if,else,constant,immutable},
+  keywordstyle=\color{VegasKW}\bfseries,
+  commentstyle=\color{VegasComment}\itshape,
+  stringstyle=\color{VegasString},
+}

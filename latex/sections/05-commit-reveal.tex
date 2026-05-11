@@ -1,0 +1,191 @@
+\section{Automatic Commit-Reveal Insertion}
+\label{sec:commit-reveal}
+
+This section describes the EventGraph rewrite that protects
+simultaneous public moves from transaction-ordering adversaries.
+The pass is small but the property it secures is one of the most
+visible payoffs of using Vegas: a programmer who writes
+``two players \TT{yield} simultaneously'' gets, deployed to chain,
+the commit-reveal protocol that the textbook would have insisted
+on.
+
+\subsection{The problem}
+\label{sec:cr:problem}
+
+Consider the two-line specification
+\begin{lstlisting}[style=vg]
+yield A(x: bool);
+yield B(y: bool);
+\end{lstlisting}
+At the EventGraph level these are two PUBLIC writes on concurrent
+nodes.  Read as a game, the analysis is unambiguous: A and B move
+simultaneously without observing each other.  Read as a Solidity
+contract, the implementation has to be cautious.  If A's
+transaction is in the public mempool, B can read \TT{x} before
+deciding \TT{y}.  An ordering adversary (a builder, or a competing
+searcher) can promote the read-then-write transaction.  The
+specification's notion of simultaneity is broken by the deployment
+target's notion of transaction ordering.
+
+This is a specific subclass of MEV --- \emph{observation-before-action}
+on simultaneous moves --- and the canonical mitigation is well
+known~\citep{Blum1983CoinFlipping,Pedersen1991Commitment,breidenbach2018enter}:
+each role first commits to a hash of their move, and only after
+all roles have committed does anybody reveal.  Vegas applies the
+mitigation automatically, by rewriting the EventGraph.
+
+\subsection{Risk partners}
+
+Two nodes are \emph{risk partners} when both are pure-public
+writes, neither reaches the other in the dependency DAG, and they
+are distinct.  This is precisely the configuration in which the
+ordering adversary problem arises.  The pass identifies the set
+of nodes that have at least one risk partner --- call this set
+$\mathrm{Split}$ --- and rewrites every node in $\mathrm{Split}$.
+
+Pure-public writes (every visibility tag is \PUBLIC) are the only
+candidates for rewriting.  Nodes that already commit (visibility
+\COMMIT) need no rewriting; their reveal partner is already
+present.  Nodes that themselves have a guard reading another
+actor's private value cannot arise (the typechecker rejects such
+reads).  And nodes that are in a strict dependency relation with
+their potential partner are not concurrent, so the ordering
+adversary has no informational asymmetry to exploit.
+
+\subsection{The rewrite}
+\label{sec:cr:rewrite}
+
+For each $a \in \mathrm{Split}$ the pass introduces two fresh
+nodes:
+
+\begin{itemize}\itemsep1pt
+\item a \emph{commit node} $a^{c}$, replacing $a$ as the new owner
+  of the deposit (if $a$ was a \TT{join} step) and of the
+  original predecessors of $a$, but with all of $a$'s \PUBLIC
+  writes retagged as \COMMIT and with a trivial guard
+  (anything is allowed to commit);
+\item a \emph{reveal node} $a^{r}$, carrying $a$'s original guard,
+  with all the same writes retagged as \REVEAL.
+\end{itemize}
+
+Edges are wired so that
+
+\begin{itemize}\itemsep1pt
+\item $a^{c}$ has the same predecessors $a$ originally had;
+\item $a^{r}$ has predecessors $\{a^{c}\} \cup \{b^{c} : b \in
+  \mathrm{partners}(a)\} \cup \mathrm{pred}(a)$;
+\item every node that previously depended on $a$ now depends on
+  $a^{r}$ instead.
+\end{itemize}
+
+The second clause is the informational barrier: $a^{r}$ cannot
+fire until \emph{all} of $a$'s risk partners have also committed.
+After the rewrite, no \REVEAL node is on the frontier of any
+configuration in which a sibling \COMMIT is still unresolved.
+\Cref{sec:eventgraph:frontier} called this the structural
+information barrier; the rewrite is what guarantees it for any
+group of originally-simultaneous public moves.
+
+\subsection{Illustration}
+
+The bidder fragment of the Vickrey auction
+(\S\ref{sec:lang:vickrey}) is the cleanest case.  The source
+
+\begin{lstlisting}[style=vg]
+yield or split B1(b: bid) B2(b: bid) B3(b: bid);
+\end{lstlisting}
+
+produces, before the rewrite, three concurrent \PUBLIC nodes
+(left) and after the rewrite, three commit nodes followed by three
+reveal nodes that all wait for the full commit phase (right).
+
+\begin{center}
+\begin{tikzpicture}[
+  every node/.style={font=\small},
+  pu/.style={draw, rounded corners, inner sep=2pt, minimum width=1.5cm, minimum height=4mm, fill=blue!8},
+  cnode/.style={draw, inner sep=2pt, minimum width=1.5cm, minimum height=4mm, fill=red!10},
+  rv/.style={draw, regular polygon, regular polygon sides=6, inner sep=0pt,
+             minimum width=1.6cm, minimum height=5mm, fill=green!10},
+  arr/.style={-{Stealth[length=2mm]}, thick}
+]
+\node[pu] (b1) at (-0.8, 0)   {B1.b};
+\node[pu] (b2) at ( 0.6, 0)   {B2.b};
+\node[pu] (b3) at ( 2.0, 0)   {B3.b};
+\node     at ( 0.6,-0.9) {\textit{before rewrite}};
+
+\node[cnode] (c1) at ( 6.0, 0.5) {B1.b};
+\node[cnode] (c2) at ( 7.4, 0.5) {B2.b};
+\node[cnode] (c3) at ( 8.8, 0.5) {B3.b};
+\node[rv] (r1) at ( 6.0,-1.2) {B1.b};
+\node[rv] (r2) at ( 7.4,-1.2) {B2.b};
+\node[rv] (r3) at ( 8.8,-1.2) {B3.b};
+\node     at ( 7.4,-2.1) {\textit{after rewrite}};
+\foreach \c in {c1, c2, c3}
+  \foreach \r in {r1, r2, r3}
+    \draw[arr, gray] (\c) -- (\r);
+\end{tikzpicture}
+\end{center}
+
+After the rewrite, each bidder's reveal depends on every bidder's
+commit.  Reading off the new graph: no reveal is enabled on a
+frontier where any commit is missing, so no bidder learns another
+bidder's value before they themselves have committed.
+
+\subsection{What changes for the backends}
+
+Every backend sees the rewritten graph, not the original.  The
+operational backends (Solidity/Vyper) therefore emit a
+commit-then-reveal pair of contract functions per rewritten
+action; the Solidity backend uses the hidden write's payload as
+the input to a hash and stores the hash, then on reveal verifies
+the hash and assigns the public field.  The Gambit backend reads
+the rewritten graph as a sequence of two simultaneous-move rounds
+(commits, then reveals); information sets are computed from the
+new graph in the usual way, and they correctly reflect the
+informational barrier.  No backend-specific commit-reveal logic
+exists: the property is paid for once, in the IR, and consumed
+everywhere.
+
+\subsection{What the rewrite does \emph{not} do}
+
+A few honest caveats.
+
+\paragraph{Cryptographic strength is not the IR's concern.}  The
+rewrite stipulates \emph{that} a hidden value is committed before
+the public reveal; it does not specify the cryptographic primitive.
+The Solidity backend chooses a domain-separated keccak with a
+random salt and a per-game tag; a different backend (Bitcoin) uses
+its native opcodes.  The choice is the backend's; the IR-level
+property holds for any binding, hiding commitment.
+
+\paragraph{The rewrite does not address adaptive adversaries
+elsewhere.}  An adversary can still censor a player's transaction
+to force a timeout; the bail-out subgame (\S\ref{sec:liveness})
+makes this a strategic choice with explicit payoff, so the game
+model sees it, but censorship-resistance per se is not what the
+commit-reveal pass provides.
+
+\paragraph{The rewrite does not enlarge the set of safe
+patterns.}  Only \emph{originally-concurrent} public writes are
+rewritten.  A public write that is in strict order with all other
+public writes is not at risk and stays a single node.  This is
+intentional: there is no point in adding round-trips for moves
+that the dependency relation already serialises.
+
+\subsection{Implementation}
+
+The rewrite lives at \file{ir/EventGraph.kt} as a static
+method \TT{expandCommitReveal} on the \TT{EventGraph} class.  It
+runs once, immediately after the initial IR construction, before
+any backend gets to read the graph.  The implementation is about
+sixty lines of Kotlin and is reachability-driven: it iterates over
+the existing nodes, builds the risk-partner relation by checking
+$\neg(\mathrm{reach}(a,b) \vee \mathrm{reach}(b,a))$ for each pair
+of pure-public nodes, and then performs the local rewrite for each
+risk-partner-bearing node, allocating fresh node ids above the
+current maximum.  The resulting graph is re-validated by the
+EventGraph constructor (it must still be acyclic, the new
+\COMMIT-\REVEAL pairs must be in order, and the read-visibility
+discipline must be preserved); the rewrite is constructed so that
+all three properties are preserved by inspection, and the
+post-rewrite validation is mostly defensive.

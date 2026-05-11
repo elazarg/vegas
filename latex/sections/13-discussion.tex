@@ -1,0 +1,146 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What Vegas is good at today}
+
+Vegas is, in its current form, a productive tool for the narrow
+class of protocols it covers.  A specification of a sealed-bid
+auction, an escrow, a voting scheme, or a small game becomes a
+file an order of magnitude smaller than the equivalent
+hand-written Solidity contract, with the strategic structure
+explicit and the front-running mitigation automatic.  The
+Gambit, SMT, and witness-record backends provide views that
+would otherwise be done by hand and seldom done at all.  The
+test harness keeps the views consistent.
+
+The single thing the tool is designed to be good at is making
+the back and forth between ``the protocol I want to play'' and
+``the contract that will play it'' short, mechanical, and
+auditable.  The example library exercises this with forty
+specifications spanning textbook game theory, mechanism design,
+and adversarial-pattern smart-contract scenarios.  The pipeline
+runs in fractions of a second per example.
+
+\subsection{What Vegas is not yet good at}
+
+Several limitations are honest enough to acknowledge in detail.
+
+\paragraph{Expressive power.}  The language is, by design,
+limited to finite types and acyclic protocols.  Loops, dynamic
+player counts, ERC-20/ERC-777 token flows, and external contract
+calls are all out of scope.  Most real-world protocols use at
+least some of these.  We expect to grow the language; the IR is
+intended to be robust to those extensions, but the current
+language is the bounded fragment that lets every backend stay
+exhaustive.
+
+\paragraph{No mechanical equivalence between backends.}  The
+backends each read the EventGraph and emit their own artifact.
+Equivalence is by construction and by code review, not by proof.
+A regression that ships an inconsistent pair of artifacts would
+not be caught by anything stronger than the golden-master test
+suite, and that suite checks output text rather than semantic
+agreement.  The companion VegasCore (\S\ref{sec:vegascore}) is
+the route to a mechanical guarantee here, and the
+Solidity-to-EventGraph refinement proof is the central
+fellowship-funded continuation of this work.
+
+\paragraph{Fair-play liveness is not statically guaranteed.}  A
+contextual guard can become unsatisfiable for fair-playing
+participants depending on prior moves.  The language treats this
+the same as a strategic quit, which is sometimes the right thing
+(if the guard's domain genuinely shrunk) and sometimes too
+permissive (if a fair-playing actor was forced out).  A static
+satisfiability check over bounded types would address the
+common case; it is on the TODO list under the working name
+\emph{fair-play liveness}.
+
+\paragraph{Gas costs are not in the model.}  Vegas's Gambit
+output ignores gas; equilibrium analyses do not see action
+costs.  For some protocols (sealed-bid auctions with small bid
+domains) this is the right idealization; for others (high-frequency
+games where gas is a strategic variable) it is a real omission.
+Bounded per-action upper bounds derivable by tools like
+GASTAP~\citep{Albert2020Gastap} could be folded in as
+action-cost annotations; this is a planned extension.
+
+\paragraph{MAID is gated, not fixed.}  As detailed in
+\S\ref{sec:other-backends}, the MAID encoding silently dropped
+context-dependent guards.  The current emitter refuses such
+inputs.  A self-only-guard narrowing pass, or a switch to a
+constrained-MAID extension, would broaden the MAID backend's
+applicability.
+
+\paragraph{The Diamond DAG idea is interesting but
+underexplored.}  The Coq/Lean witness-record encoding
+(\S\ref{sec:other:diamond}) captures a player's strategy as a
+function on prior witnesses.  We have not pushed this far enough
+to know what it can prove that ordinary tree-shaped semantics
+cannot.  It is, today, an evocative idea: every play is an
+inhabitant of a dependent record, and every strategy is a typed
+function on histories.
+
+\subsection{Foundations first}
+
+The unifying theme of the limitations is intent rather than
+oversight.  Vegas was built with the explicit goal of staying
+small enough to be honest about: a finite-graph IR, finite-type
+moves, a fixed pool, deterministic guards, no external calls.
+This is a smaller language than its closest neighbours in the
+DSL space (Marlowe, Scilla, Move), and far smaller than
+general-purpose Solidity.  The smallness is what makes the
+multi-backend story coherent.  An EventGraph is exhaustively
+explorable; an unbounded loop is not.  A finite move alphabet
+yields a finite tree; an unbounded \TT{int} does not.
+
+That smallness is a starting point, not a ceiling.  We expect to
+relax pieces of it as we understand which extensions preserve
+the analytical properties --- bounded iteration (where the
+bound is statically derivable), token flows (with proven
+conservation laws), per-round subgames composed from a fixed
+library.  The right way to do these extensions is to add them
+to the IR carefully and re-derive each backend in turn; the
+discipline of the current architecture is what makes this
+plausible.
+
+\subsection{Future work}
+
+The most immediate work items are recorded in the project's
+\file{TODO.txt}.  Here we mention the larger themes.
+
+\begin{itemize}\itemsep2pt
+\item \emph{Verified compilation and verified compiled artifacts.}
+  Two complementary routes to mechanical guarantees: a once-and
+  for-all proof that the compiler refines the EventGraph
+  semantics for any input (the VegasCore-side proof), and a
+  per-program certificate emitted alongside each artifact (the
+  Diamond DAG route plus a VegasCore-importing backend that
+  emits \TT{WFProgram} values with their well-formedness
+  obligations discharged by elaboration).  These cover
+  different audiences: tool authors care about the first, end
+  users about the second.
+\item \emph{Bounded extensions.}  Variable deposits, ERC-20
+  token flows, and gas-aware liveness (the gas-escrow stage
+  policy sketched in the fellowship proposal) are the natural
+  next steps.  Each requires care to keep the analytical
+  backends honest.
+\item \emph{Operational refinement to the EVM.}  The bail-out
+  subgame is the place where the Solidity contract and the
+  game model can most plausibly disagree.  A Lean proof that
+  the contract refines its EventGraph under the explicit
+  execution model (ordering adversary, public mempool, fixed
+  timeouts) is the central theorem of the fellowship-funded
+  workstream.
+\item \emph{Workbench integration.}  The Thrones workbench (an
+  external companion project) explores equilibrium analyses
+  interactively on the emitted MAIDs and EFGs.  A tighter
+  integration --- e.g.\ replaying the analysis as a
+  back-annotation on the Vegas source, surfacing dominance and
+  best-response findings inline --- is plausible.
+\end{itemize}
+
+The goal is not a finished tool today.  The goal is a
+foundation that grows in a disciplined way, where every
+extension has to keep the multi-backend story honest.  We hope
+the present description is a useful starting point for that
+conversation.

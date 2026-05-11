@@ -1,0 +1,78 @@
+\documentclass[11pt]{article}
+
+\input{macros}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric,
+                decorations.pathreplacing}
+\usepackage[numbers,sort&compress]{natbib}
+
+\sloppy
+\emergencystretch=3em
+
+\title{Vegas: A Domain-Specific Language for\\
+       On-Chain Strategic Protocols}
+\author{Elazar Gershuni\\\texttt{elazarg@gmail.com}}
+\date{May 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A smart contract that implements an auction, a voting procedure, or
+any other multi-party economic mechanism is two things at once: a
+program that runs on a public, adversarially ordered execution layer,
+and a strategic game played by rational participants.  The contract
+is usually written, audited, and deployed as the former; reasoning
+about its incentive properties is left to a parallel pen-and-paper
+exercise on the latter.  Vegas is a domain-specific language and
+compiler that treats both views as outputs of a single specification.
+
+A Vegas program describes a finite protocol in the natural sequential
+style of a referee: who joins, who plays what, who reveals, and who
+gets paid.  The compiler analyses the data flow of the specification
+to build a finite \emph{event graph} --- a directed acyclic graph of
+guarded writes --- and uses it as a single intermediate representation
+that each backend reads in turn: (i) a Solidity (and Vyper) contract
+whose execution scheduler is the dependency relation itself, with
+built-in commit-reveal protection against transaction-ordering
+adversaries and a timeout-driven bail-out for non-responsive
+participants; (ii) a Gambit extensive-form game suitable for
+equilibrium analysis; (iii) several auxiliary artifacts --- an
+SMT-LIB encoding for reachability queries, a Coq/Lean witness-record
+encoding of the protocol's per-step constraint structure, a
+session-typed (Scribble) protocol description, and a Bitcoin/Lightning
+output for the two-party fragment.  The expressive power of the
+language is restricted by design: only finite types, no loops, no
+inter-contract calls.  These restrictions are what make the whole
+array of artifacts feasible to produce automatically from one source.
+
+The report describes the language, the event-graph intermediate
+representation, the automatic commit-reveal rewriting pass, the
+backends, and the relationship to a companion Lean~4 library called
+VegasCore.  We are explicit about the parts that are stable, the
+parts that are scoped down on purpose, and the parts that we expect
+to relax as the language evolves.
+\end{abstract}
+
+\tableofcontents
+
+\input{sections/01-introduction}
+\input{sections/02-language}
+\input{sections/03-pipeline}
+\input{sections/04-event-graph}
+\input{sections/05-commit-reveal}
+\input{sections/06-solidity}
+\input{sections/07-gambit}
+\input{sections/08-other-backends}
+\input{sections/09-liveness}
+\input{sections/10-vegascore}
+\input{sections/11-evaluation}
+\input{sections/12-related-work}
+\input{sections/13-discussion}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

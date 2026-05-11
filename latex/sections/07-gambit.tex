@@ -1,0 +1,112 @@
+\section{The Gambit Backend}
+\label{sec:gambit}
+
+The Gambit backend turns the EventGraph into an extensive-form game
+in Gambit's \TT{.efg} format~\citep{McKelveyMcLennanTurocy2006Gambit}.
+Once written, the file can be loaded directly into Gambit (or
+OpenSpiel~\citep{LanctotEtAl2019OpenSpiel}, via standard adapters)
+to compute Nash equilibria, dominant strategies, or any other
+property Gambit knows how to check.  This section describes how the
+backend constructs the tree from the graph.
+
+\subsection{Frontier exploration}
+
+The backend is a depth-first frontier expander.  At a configuration
+$C$, it enumerates the frontier, groups its nodes by owning role,
+and for each role that has at least one node on the frontier it
+generates a Gambit decision node.  Multiple roles may have nodes on
+the same frontier; they are the simultaneous-move case
+(\S\ref{sec:eventgraph:frontier}).  Gambit's \TT{.efg} format does
+not have a primitive ``simultaneous block'': simultaneity is
+expressed by nesting the per-role decision nodes in a canonical
+role order and arranging the information sets so that each role's
+information set hides the other roles' choices at the same
+frontier.  The strategic content is in the information sets, not
+the textual nesting order.
+
+For each role, the actions are the products of values its nodes may
+take.  Bounded-type fields have an explicit finite alphabet
+(e.g.\ \TT{door = \{0,1,2\}} has three values); the \TT{Quit} move
+is added as an extra alphabet symbol when the role's node has a
+quit handler.  A node performing a hidden commit has its commit
+parameter listed as ``Hidden(\textit{value})'' rather than the
+cleartext value: from the perspective of the game, the value
+matters but the observer does not see it.  When the corresponding
+reveal node fires, the resolved value collapses ``Hidden(\dots)''
+to a concrete number.
+
+For each combination of role moves at the current frontier, the
+backend computes the resulting configuration, recurses, and emits
+the subtree.  When the frontier is empty --- the configuration has
+finished every node --- the \TT{withdraw} clause is evaluated to
+produce a terminal node carrying the payoff vector.
+
+\subsection{Information sets}
+
+A player's information set at a decision node is the set of
+histories they cannot distinguish, given what they have observed.
+The backend computes this directly from
+$\mathrm{obs}_R(B)$ (\S\ref{sec:eventgraph:visibility-recall}): two
+nodes are in the same information set for role $R$ iff the
+projections of their pre-state to $R$-observable fields are equal.
+
+In practice, hidden commits create the information sets that
+matter.  In the Vickrey example, each bidder's reveal node is at a
+depth where the other bidders' commitments have fired but their
+values have not been revealed; the reveal node therefore sits in
+an information set whose members differ only in the other
+bidders' hidden values.  This is the correct strategic
+representation of a sealed-bid auction.
+
+\subsection{Pruning}
+
+Two simple simplifications are run on the produced tree before
+emission.
+
+\emph{Unreachable subtrees are dropped.}  When a guard rules out a
+move (the guard evaluates to false for the would-be combination of
+values), no edge is emitted; this is straightforward as long as
+the guard's free variables are all evaluated at the decision
+node's information set.
+
+\emph{Trivial continuations are collapsed.}  When a player has
+exactly one legal move at a decision node (often because
+\TT{Quit} is the only choice on a degenerate branch), the
+backend emits a single edge and proceeds.  This keeps the tree
+size manageable on examples with many forced timeouts.
+
+\subsection{Limits}
+
+A few characteristics of the backend should be acknowledged.
+
+\paragraph{Tree size blows up with the type universe.}  The
+backend enumerates the cross-product of move alphabets at each
+frontier.  Three bidders with 11-value bids and a quit option
+yield $12^3 = 1728$ branches at the reveal frontier.  This is
+fine for the example library; it is not what one would deploy
+against a competitive-bidding mechanism with millions of bid
+levels.  Vegas's contract-side bid types are typically small
+because Gambit needs them small; the deployed contract can carry
+larger ranges, but then Gambit-side analysis becomes infeasible.
+This is the explicit tradeoff implied by ``the same source for
+both views''.
+
+\paragraph{Move alphabets must be bounded.}  An action whose
+parameter has type \TT{int} is rejected by the Gambit backend at
+compile time.  The Solidity backend has no such restriction (it
+stores an \TT{int256} directly); the Gambit constraint is
+enforced via a per-backend disable list in the test harness.
+
+\paragraph{Quit appears as a real move.}  Because the bail-out
+subgame is a strategic option in Vegas's semantics, the
+\TT{.efg} contains a \TT{Quit} branch wherever the source action
+has an or-handler.  This is the right thing
+game-theoretically (it captures the strategic option of timing
+out), but it does inflate the tree.
+
+\paragraph{Chance nodes.}  Public randomness (\TT{random}) is
+emitted as Gambit chance moves with the relevant probabilities
+read off the source.  Each chance event is a node of its own,
+with the same simultaneity treatment as a player move (chance
+events on the same frontier appear as a single composite chance
+move).

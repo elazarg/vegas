@@ -1,0 +1,272 @@
+\section{The EventGraph}
+\label{sec:eventgraph}
+
+This section introduces the EventGraph: the finite, visibility-aware
+directed acyclic graph that all Vegas backends read.  The graph is
+the structural core of the language --- everything from front-running
+mitigation to information-set construction to bail-out subgames is
+expressed as a property of, or a rewrite on, this graph.
+
+\subsection{Nodes}
+
+A node of the EventGraph represents one statement in the protocol:
+a \TT{join}, a \TT{yield}, a \TT{commit}, a \TT{reveal}, or a
+\TT{random}.  Each node is identified by a pair
+$\mathit{NodeId} = (\Role, n)$ where $\Role$ is the actor and $n$
+is an integer giving the node's source position.  The pair is
+stable: it is fixed at IR construction time and used throughout
+backends as a deterministic identifier.
+
+To each node the IR attaches a payload of three pieces:
+
+\begin{itemize}\itemsep1pt
+\item the \emph{specification} (\TT{NodeSpec}): the parameter list,
+  any deposit (for \TT{join} nodes), and the guard expression;
+\item the \emph{structural metadata} (\TT{NodeStruct}): the owner,
+  the set of written fields, the visibility of each written field
+  (one of \COMMIT, \REVEAL, \PUBLIC), and the set of fields the
+  guard reads from prior nodes;
+\item a derived \emph{kind} (\TT{Visibility}), which is the
+  ``dominant'' visibility of the node's writes ---
+  \COMMIT for hidden writes, \REVEAL for matching reveals,
+  \PUBLIC for plain writes.
+\end{itemize}
+
+The split between \TT{NodeSpec} and \TT{NodeStruct} is mainly an
+engineering choice: backends that need only structural information
+(the Gambit and Scribble backends, primarily) can ignore the spec.
+
+\subsection{Edges and dependency inference}
+\label{sec:eventgraph:edges}
+
+Edges in the EventGraph represent control or data dependencies.
+The IR builds them by analysing the typechecked AST.  An edge
+$A \to B$ means $B$ cannot fire until $A$ has fired.  The
+compiler installs an edge $A \to B$ when any of the following
+holds:
+
+\begin{itemize}\itemsep1pt
+\item \emph{Phase order.}  If $A$ and $B$ are in adjacent source
+  phases (consecutive top-level statements), $A \to B$.  This
+  preserves the textual ordering at the granularity of phases,
+  which is what the programmer can rely on.
+\item \emph{Guard read.}  If $B$'s guard reads a field $f$, and
+  the latest writer of $f$ before $B$ is $A$, then $A \to B$.
+  The guard cannot evaluate until the value is available.
+\item \emph{Commit before reveal.}  If $B$ is a \REVEAL of field
+  $f$ and $A$ is the \COMMIT of $f$, then $A \to B$.  The reveal
+  must come after its commit.
+\end{itemize}
+
+Within a single phase, multiple roles can act simultaneously (they
+appear in the same \TT{yield}/\TT{commit} statement).  Their nodes
+share predecessors and are not connected to each other: they are
+concurrent in the dependency graph, which is what justifies
+treating them as simultaneous moves in the strategic analysis.
+
+\subsection{Visibility}
+\label{sec:eventgraph:visibility}
+
+Each written field has a visibility tag that records what an
+observer learns from the corresponding write.  The three tags are:
+
+\begin{description}\itemsep1pt
+\item[\PUBLIC.]  The value is public from the moment of the write.
+  Any later node may read it.
+\item[\COMMIT.]  The value is hidden.  Operationally, only its
+  cryptographic commitment is public; the actor knows the value;
+  no other actor learns it from this node.
+\item[\REVEAL.]  A previously committed value is now public.  The
+  reveal is paired with the unique prior commit of the same field.
+\end{description}
+
+The IR ensures that visibility is consistent with the dependency
+relation.  In particular:
+
+\begin{itemize}\itemsep1pt
+\item every \REVEAL is reachable from its matching \COMMIT;
+\item every field referenced by a guard at node $B$ has either
+  been written \PUBLIC by some predecessor of $B$, or has been
+  revealed by some predecessor of $B$ (so its value is known
+  publicly at $B$);
+\item the owner of a node always sees their own writes (an actor
+  may guard their action on a field they have just decided ---
+  this is how self-only guards like \TT{where x != 2} are
+  modelled).
+\end{itemize}
+
+If any of these conditions fails, the EventGraph constructor
+refuses to build the graph; the compiler surfaces this as a
+static error.  Backends therefore work in a setting where the
+information flow is fully consistent.
+
+\subsection{Configurations and frontier}
+\label{sec:eventgraph:frontier}
+
+A \emph{configuration} of the EventGraph is a partial assignment
+from nodes to outcomes (one outcome per node: a tuple of values
+for the node's written fields, or \texttt{Quit}).  A node is
+\emph{enabled} in a configuration when all its predecessors have
+been assigned and its guard, evaluated on the configuration's
+public writes plus the actor's local view, is true.  The set of
+enabled, unassigned nodes is the configuration's \emph{frontier}.
+
+Two properties of the frontier matter for the backends:
+
+\begin{itemize}\itemsep1pt
+\item \emph{Concurrency.}  If two distinct nodes $A, B$ are on the
+  same frontier --- neither reaches the other in the DAG ---
+  scheduling $A$ before $B$ versus $B$ before $A$ produces the
+  same configuration after both have fired.  This is what allows
+  Solidity to accept the actions in any order and Gambit to model
+  them as simultaneous.
+\item \emph{Information barrier.}  If a node $B$ is a \REVEAL,
+  every node on which it depends has already fired by the time
+  $B$ is enabled.  In particular, in any configuration where
+  $B$'s match \COMMIT is unfinished, $B$ is not on the frontier.
+  This is the structural counterpart to the commit-reveal
+  insertion pass: once a player can reveal, every other player
+  has already committed; no player can condition a commit on
+  another's revealed value.
+\end{itemize}
+
+The compiler computes the frontier on demand with a small
+\TT{FrontierMachine} that maintains the set of unresolved nodes
+along with the current frontier; resolving the frontier advances
+both sets in one step.  The Gambit backend explores the resulting
+state space depth-first (\S\ref{sec:gambit}), treating each
+frontier resolution as one strategic round.
+
+\subsection{A worked graph}
+\label{sec:eventgraph:example}
+
+The Monty Hall example from \S\ref{sec:intro:first-example}
+produces the EventGraph below.  The two \TT{join} statements share
+one source phase (the source has \TT{join Host()\ldots Guest()}
+combined in a single top-level statement) and are therefore
+concurrent; the remaining statements are separate phases and pick
+up phase-order edges between them, so the rest of the graph is a
+chain.  Squares are \COMMIT writes, hexagons are \REVEAL writes,
+ovals are \PUBLIC writes, and the diamond is the terminal
+\TT{withdraw} sink.  The commit-reveal expansion pass
+(\S\ref{sec:commit-reveal}) does nothing here, because none of the
+public yields are concurrent with each other.
+
+\begin{center}
+\begin{tikzpicture}[
+  every node/.style={font=\small},
+  ev/.style={draw, rounded corners, inner sep=2pt, minimum width=2.3cm,
+             minimum height=4mm, fill=blue!6},
+  cnode/.style={draw, inner sep=2pt, minimum width=2.3cm, minimum height=4mm,
+             fill=red!10},
+  rv/.style={draw, regular polygon, regular polygon sides=6,
+             inner sep=0pt, minimum width=2.4cm, minimum height=5mm,
+             fill=green!10},
+  sink/.style={draw, diamond, inner sep=2pt, minimum width=2.0cm, fill=gray!8},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+]
+\node[ev]  (jH) at (-3,2.5) {join Host};
+\node[ev]  (jG) at ( 3,2.5) {join Guest};
+\node[cnode]  (cm) at (-3,1)   {commit Host.car};
+\node[ev]  (yd) at ( 3,1)   {yield Guest.d};
+\node[ev]  (yg) at ( 0,-0.5) {yield Host.goat};
+\node[ev]  (ys) at ( 0,-2)   {yield Guest.switch};
+\node[rv]  (rv) at ( 0,-3.5) {reveal Host.car};
+\node[sink] (wd) at ( 0,-5)   {withdraw};
+
+\draw[arr] (jH) -- (cm);
+\draw[arr] (jG) -- (yd);
+\draw[arr] (cm) -- (yg);
+\draw[arr] (yd) -- (yg);
+\draw[arr] (cm) -- (rv);
+\draw[arr] (yg) -- (ys);
+\draw[arr] (ys) -- (rv);
+\draw[arr] (rv) -- (wd);
+\end{tikzpicture}
+\end{center}
+
+A few facts to read off this picture:
+
+\begin{itemize}\itemsep1pt
+\item \TT{join Host} and \TT{join Guest} are the only concurrent
+  pair: they share a phase, neither reaches the other, and the
+  Solidity contract accepts the corresponding two transactions in
+  either order.
+\item \TT{reveal Host.car} is enabled only after Guest has
+  switched.  In any configuration where the reveal is on the
+  frontier, every prior decision has been made.  Guest cannot
+  switch \emph{after} seeing the car location, and Host cannot
+  revise the car location.
+\item \TT{yield Host.goat} reads \TT{Guest.d} (the guard
+  \TT{Host.goat != Guest.d}), which would force the order
+  \TT{yield Guest.d} $\to$ \TT{yield Host.goat} even if the two
+  statements were in the same phase.  Here, phase order
+  contributes the same edge.
+\end{itemize}
+
+Sequential graphs like this are the typical shape of textbook
+turn-taking games; concurrency-driven rewriting becomes interesting
+when multiple roles \emph{share} a yield statement, as in the
+Vickrey example treated in the next section.
+
+\subsection{Visibility-aware perfect recall}
+\label{sec:eventgraph:visibility-recall}
+
+For game-theoretic analysis, two players are in the same
+information set at a node $B$ iff they have observed the same
+sequence of public events leading to $B$.  In the EventGraph this
+becomes a structural notion: the set of fields observable by role
+$R$ at node $B$ is
+
+\begin{equation*}
+  \mathrm{obs}_R(B) \;=\; \bigl\{\, f \;\big|\; f \text{ is written by some predecessor } A \text{ of } B,
+            \text{ and either } \mathrm{owner}(A) = R \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\}.
+\end{equation*}
+
+This is the projection used by the Gambit backend to compute
+information sets and, in a closely related form, by the MAID and
+Scribble backends.  An IR helper \TT{observableFieldsAt(B)}
+computes it; the formula is the only place where ``observability''
+is defined.
+
+\subsection{Implementation notes}
+
+The EventGraph class wraps a generic \TT{Dag<NodeId>} with the
+per-node payload map and a precomputed reachability relation.
+Reachability is computed once when the graph is built and reused
+for all queries; building it eagerly is the right tradeoff in
+this setting because the graph is small (forty-some nodes for
+the largest example) and the queries are many
+(\TT{reaches}, \TT{ancestorsOf}, \TT{canExecuteConcurrently}).
+
+The constructor takes a node set, a per-node predecessor map, and
+a per-node payload map, and returns either an EventGraph or
+\TT{null}; the latter happens when an invariant is violated.
+Three internal validators run inside the constructor:
+
+\begin{itemize}\itemsep1pt
+\item acyclicity, via topological sort;
+\item commit-reveal ordering, by checking that every \REVEAL has
+  a matching \COMMIT among its ancestors;
+\item read-visibility, by checking that every field appearing in a
+  guard at node $B$ is either written \PUBLIC before $B$, or has
+  been revealed before $B$, or is being written by $B$ itself.
+\end{itemize}
+
+The corresponding error in the frontend is a static error, with a
+source span pointing back to the offending \TT{where} clause or
+\TT{commit/reveal} pair.  This is the same set of checks a
+human reviewer would perform when reading a hand-written
+commit-reveal contract --- the IR just performs them
+systematically.
+
+A note on the read-visibility check: in addition to fields written
+\PUBLIC or revealed by a predecessor, the validator also accepts a
+guard read of a field that the actor itself committed earlier on
+the same DAG path.  An owner ``sees their own writes'' is therefore
+a slightly stronger statement than the bullet above admits: it
+includes their own \emph{committed} fields as well as the
+public/revealed ones.  In practice the typechecker's pre-IR
+desugaring strips fields written by the current node from the
+guard's scope, so this branch matters mostly for guards that
+reference an actor's earlier private writes.

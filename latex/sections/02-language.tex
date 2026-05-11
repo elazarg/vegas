@@ -1,0 +1,249 @@
+\section{The Vegas Language}
+\label{sec:language}
+
+This section introduces the surface language by example, fixes
+intuitive semantics for each construct, and gives the small grammar
+in BNF.  The next section traces what happens to a program once the
+compiler takes it apart.
+
+\subsection{Programs and roles}
+
+A Vegas program declares optional type aliases and macros, then a
+single top-level \TT{game} block.  The block names the roles, opens a
+\TT{join} phase that locks each role's deposit into a common pool,
+and proceeds with a sequence of action statements until a
+\TT{withdraw} clause splits the pool.
+
+\begin{lstlisting}[style=vg]
+type bid = {0 .. 10}
+
+game main() {
+  join Seller() $ 0
+       Bidder() $ 100;
+  // ... statements ...
+  withdraw { Seller -> ...; Bidder -> ... }
+}
+\end{lstlisting}
+
+Role identifiers start with an uppercase letter; field names with
+lowercase.  A field is always identified relative to its owning
+role: \TT{Bidder.b} denotes the field \TT{b} of role \TT{Bidder}.
+Each field has at most one writing action; the language has no
+explicit reassignment.
+
+\subsection{Action statements}
+
+There are four action kinds.  Each writes one or more fields owned
+by its actor.
+
+\paragraph{\TT{join}.}  Initial deposit and admission.  The
+\TT{join} phase appears once, at the top of the game.  A role
+listed in the join phase is committed to the game and has its
+deposit locked into the pool.
+
+\paragraph{\TT{yield}.}  A public move.  The actor declares a value
+of a given type:
+\begin{lstlisting}[style=vg]
+yield Guest(d: door);
+\end{lstlisting}
+After this action fires, \TT{Guest.d} is visible to every role.  A
+\TT{yield} can carry a \TT{where} guard, e.g.
+\TT{yield Host(goat: door) where Host.goat != Guest.d}; this guard
+is enforced when the move is played.
+
+\paragraph{\TT{commit}.}  A private move.  The actor declares a
+value that is held cryptographically (in the deployed contract:
+under a hash with salt) until a later \TT{reveal}:
+\begin{lstlisting}[style=vg]
+commit Host(car: door);
+// ...
+reveal Host(car: door) where Host.goat != Host.car;
+\end{lstlisting}
+A \TT{where} clause on a \TT{commit} is \emph{deferred}: it is
+checked at the matching \TT{reveal}, not at the commit, because the
+committed value is not yet observable.
+
+\paragraph{\TT{reveal}.}  Make a previously committed field public.
+Every \TT{commit} is paired with at most one \TT{reveal} for the
+same field; before reveal, only the committing actor knows the
+value (operationally: the contract has only the hash).
+
+\paragraph{Simultaneous moves.}  Multiple roles can appear in a
+single statement; they are then deemed simultaneous:
+\begin{lstlisting}[style=vg]
+yield or split A(c: bool) B(c: bool);
+\end{lstlisting}
+This is exactly the situation that would invite front-running if
+written naively, and is the canonical input to the automatic
+commit-reveal pass described in \S\ref{sec:commit-reveal}.
+
+\subsection{Guards and views}
+\label{sec:lang:guards}
+
+A guard is a \TT{where} clause attached to an action.  Its scope is
+the snapshot of fields visible \emph{just before} the action fires,
+plus the field being written.  Two distinctions matter.
+
+\emph{Self-only versus contextual guards.}  A guard that references
+only the field being written (\TT{where x != 2}) constrains the
+domain of that field; a guard that references prior fields
+(\TT{where Host.goat != Guest.d}) constrains the legality of a move
+based on the public history.  Both are allowed.  Both are
+statically required to reference only fields the actor can observe
+at this point.
+
+\emph{Public versus private fields.}  An actor cannot observe
+another actor's hidden field; therefore a guard cannot read it.
+The compiler rejects programs that try (it cannot enforce a
+constraint nobody can check).  When the guard is on a
+\TT{commit}, however, the actor's own freshly written field is
+private to them: the constraint is recorded and re-checked when
+the value is revealed, so that any later observer can verify the
+constraint at reveal time.
+
+\subsection{Quit handlers}
+
+Real protocols have to cope with a player who stops responding.
+Vegas treats this as a strategic move named \TT{Quit}: at any point
+where a role is expected to act, the role can choose to abandon the
+game.  What happens next is specified by an \emph{or-handler} on
+the action:
+\begin{lstlisting}[style=vg]
+yield or split Guest(d: door);
+yield or burn  A(c: bool);
+yield or null  Odd(c: bool) Even(c: bool);
+\end{lstlisting}
+The handlers do the following:
+\begin{itemize}\itemsep1pt
+\item \TT{split} --- the quitter's deposit is split among the
+  surviving roles.  In a two-player game, this is forfeit.
+\item \TT{burn} --- the quitter's deposit is destroyed (or sent to
+  a designated burn address).
+\item \TT{null} --- the missing value becomes \TT{null} (typed
+  \TT{opt T}); downstream actions and the \TT{withdraw} clause are
+  required to handle the optional case.
+\end{itemize}
+Operationally the handler fires when a timeout elapses without the
+expected action.  At the game-theoretic level, \TT{Quit} is just
+another move available to the actor; equilibrium analyses see it
+explicitly.  \S\ref{sec:liveness} treats the subgame structure in
+detail.
+
+\subsection{Withdraw and conservation}
+
+A game terminates by reaching a \TT{withdraw} clause, which
+allocates the entire locked pool to roles.  The total must match
+the pool exactly: there is no implicit dust and no implicit burn.
+\TT{withdraw} can be conditional:
+\begin{lstlisting}[style=vg]
+withdraw (A.c && B.c) ? { A -> 100; B -> 100 }
+       : (A.c)        ? { A -> 200; B -> 0   }
+       : (B.c)        ? { A -> 0;   B -> 200 }
+       :                { A -> 90;  B -> 110 }
+\end{lstlisting}
+The compiler statically checks conservation against the constant
+total deposit; payoff expressions may reference any public field.
+
+\subsection{Types}
+
+Vegas types are deliberately small.  The base types are:
+
+\begin{itemize}\itemsep1pt
+\item \TT{bool};
+\item finite enumerations (\TT{type door = \{0, 1, 2\}}) and
+  finite ranges (\TT{type bid = \{0..10\}});
+\item \TT{address} (used only in joins and metadata; not first-class
+  in payoff expressions);
+\item \TT{int} (mapped to a 256-bit integer in the EVM backends; the
+  Gambit backend rejects unbounded \TT{int} in moves because it
+  needs a finite move alphabet).
+\end{itemize}
+
+A field declared with the \TT{hidden} prefix
+(\TT{yield Host(car: hidden door)}) is private to its owner until
+revealed.  An \TT{opt T} type marks a value that may be missing
+(typically because the actor took the \TT{Quit} branch); the
+language requires \TT{withdraw} expressions to handle the
+\TT{null} case explicitly.
+
+\subsection{Macros}
+
+Macros are hygienic expression-level abbreviations, inlined before
+the IR is built.  They simplify reasoning about non-trivial
+mechanisms; Vickrey auctions, for instance, are easier to read
+with a \TT{secondMax} macro.
+
+\begin{lstlisting}[style=vg]
+macro max2(a: bid, b: bid): bid = (a >= b ? a : b);
+macro secondMax(a: bid, b: bid, c: bid): bid =
+    (a == max3(a,b,c)) ? max2(b, c)
+  : (b == max3(a,b,c)) ? max2(a, c)
+  :                      max2(a, b);
+\end{lstlisting}
+
+Macros expand syntactically; recursion is disallowed.  Macro
+expansion is purely textual at the expression level: macros do
+not introduce new actions or rewrite the action sequence.
+
+\subsection{A walked example: Vickrey auction}
+\label{sec:lang:vickrey}
+
+Putting the constructs together, here is a three-bidder sealed-bid
+second-price (Vickrey) auction with a fixed-domain bid type.  The
+\TT{yield or split} statement carries three actor heads, declaring
+the three bids as simultaneous.
+
+\begin{lstlisting}[style=vg]
+type bid = {0 .. 2}
+
+macro max2(a: bid, b: bid): bid = (a >= b ? a : b);
+macro max3(a: bid, b: bid, c: bid): bid = max2(max2(a, b), c);
+macro secondMax(a: bid, b: bid, c: bid): bid =
+    (a == max3(a,b,c)) ? max2(b, c)
+  : (b == max3(a,b,c)) ? max2(a, c)
+  :                      max2(a, b);
+macro isWinner(myBid: bid, b1: bid, b2: bid, b3: bid): bool =
+    (myBid == max3(b1, b2, b3));
+
+game main() {
+  join Seller() $ 100 B1() $ 100 B2() $ 100 B3() $ 100;
+
+  yield or split
+    B1(b: bid)
+    B2(b: bid)
+    B3(b: bid);
+
+  withdraw {
+    Seller -> 100 + secondMax(B1.b, B2.b, B3.b);
+    B1 -> isWinner(B1.b, B1.b, B2.b, B3.b)
+            ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
+    B2 -> isWinner(B2.b, B1.b, B2.b, B3.b)
+            ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
+    B3 -> isWinner(B3.b, B1.b, B2.b, B3.b)
+            ? (100 - secondMax(B1.b, B2.b, B3.b)) : 100;
+  }
+}
+\end{lstlisting}
+
+The compiler does not assume the user has solved front-running:
+it reads three simultaneous public moves and rewrites the
+EventGraph so that each bidder commits to a hash first and reveals
+later, with the reveal of any bidder gated on the commits of the
+other two.  The resulting Solidity contract implements a sealed-bid
+auction; the resulting Gambit game has each bidder choose a hidden
+value in a common information set.  Both come from the same source.
+
+\subsection{Grammar}
+
+For reference, the full surface grammar lives in the ANTLR file
+\file{Vegas.g4} at the project root; the salient productions are
+roughly:
+\begin{align*}
+\mathit{program} &::= (\mathit{typeDec} \mid \mathit{macroDec})^*\ \TT{game}\ \mathit{ident}\ \TT{()}\ \TT{\{}\ \mathit{ext}\ \TT{\}}\\
+\mathit{ext} &::= \kw{join}\ \mathit{query}^+\ \TT{;}\ \mathit{ext} \mid (\kyield \mid \kreveal \mid \kcommit \mid \krandom)\ \texttt{or}\ \mathit{handler}\ \mathit{query}^+\ \TT{;}\ \mathit{ext} \\
+              &\mid \kwithdraw\ \mathit{outcome} \\
+\mathit{query} &::= \mathit{role}\ \TT{(}\ \mathit{paramDec}^*\ \TT{)}\ (\$\,\mathit{int})?\ (\kwhere\ \mathit{exp})?\ (\TT{||}\ \mathit{queryHandler})?\\
+\mathit{handler} &::= \TT{split} \mid \TT{burn} \mid \TT{null}.
+\end{align*}
+The grammar is unsurprising; what makes Vegas work is the analysis
+done in the next several sections.

@@ -1,0 +1,153 @@
+\section{Examples and Testing}
+\label{sec:evaluation}
+
+This section describes the example library, the golden-master
+test harness, and what we have learned from running them.  We
+make no quantitative claim: the goal is to show that the
+pipeline covers a range of protocol shapes, not to benchmark
+against any baseline.
+
+\subsection{The example library}
+
+The repository contains thirty-nine Vegas specifications under
+\file{examples/}.  They are written by hand and intended to
+exercise the language across three axes: textbook game-theory
+examples, smart-contract patterns, and adversarial constructions.
+
+\begin{description}\itemsep2pt
+\item[Classical games.]
+  \file{Prisoners.vg} (Prisoners' Dilemma),
+  \file{OddsEvens.vg} (matching pennies),
+  \file{MontyHall.vg} (Monty Hall, with and without chance),
+  \file{Centipede.vg} (the centipede game),
+  \file{UltimatumGame.vg},
+  \file{RPSLS.vg} (rock-paper-scissors-lizard-Spock),
+  \file{Dominance.vg} (dominance-solvable example),
+  \file{TicTacToe.vg}.
+
+\item[Mechanism design.]
+  \file{VickreyAuction.vg} (sealed-bid second-price),
+  \file{EntryFeeAuction.vg},
+  \file{GasPriceAuction.vg},
+  \file{HiddenReserve.vg} (reserve-price auction with hidden
+    reserve),
+  \file{Lottery.vg}, \file{ThreeWayLottery.vg},
+  \file{ThreeWayLotteryBuggy.vg} (an intentionally-flawed
+    variant used to demonstrate the equilibrium analyses
+    catching a vulnerability),
+  \file{CommitteeVoting.vg},
+  \file{StakeAndVote.vg}.
+
+\item[Smart-contract patterns.]
+  \file{EscrowContract.vg} (buyer/seller/arbiter escrow with
+    dispute),
+  \file{MicropaymentChannel.vg} (two-party payment channel),
+  \file{AtomicSwap.vg},
+  \file{BribedArbitrator.vg} (collusion-resistance test),
+  \file{ClaimFraud.vg},
+  \file{DataAvailability.vg},
+  \file{Insurance.vg},
+  \file{StakingSlashing.vg},
+  \file{PrivacyNoise.vg}.
+
+\item[Adversarial / structural.]
+  \file{Bet.vg} (simple betting),
+  \file{DoubleFlipLights.vg},
+  \file{CongestionRouting.vg},
+  \file{RandomLeader.vg},
+  \file{RumorForwarding.vg},
+  \file{Puzzle.vg},
+  \file{SpinTheDial.vg},
+  \file{TwoRobotCorridor.vg}.
+\end{description}
+
+Most examples are between ten and forty lines of Vegas source.
+The largest, \file{TicTacToe.vg}, exercises bounded enumeration
+of board states.  The Vickrey auction is the canonical mechanism
+example.
+
+\subsection{The golden-master harness}
+
+The test suite is structured around \emph{golden masters}:
+expected backend outputs checked into the repository under
+\file{src/test/resources/golden-masters/}, with one subdirectory
+per backend.  For each backend $B$ and each example $E$ for
+which $B$ is applicable, the test harness compiles $E$ with $B$
+and asserts byte-for-byte equality with the golden master
+\file{golden-masters/$B$/$E$.\textit{ext}}.  When a regression
+runs, the actual output is written to \file{test-diffs/$B$/$E$.\textit{ext}}
+and a diff is generated; a small Python helper
+\file{copy-test-outputs.py} promotes accepted changes back to
+the golden masters.
+
+This is the same kind of testing one would do for a compiler
+that emits any large text artifact: most changes to the
+generated code are wrong (regressions); the few that are right
+are accepted explicitly.  The harness is the project's primary
+defense against unintended drift across backends.
+
+Backends are not always applicable to all examples.  Three
+common reasons:
+
+\begin{itemize}\itemsep1pt
+\item Gambit and other game-theoretic backends reject any program
+  whose move alphabet is unbounded (\TT{int}); these examples
+  are restricted to the operational backends in the test list.
+\item Bitcoin/Lightning supports only the two-strategic-role
+  subset; multi-bidder auctions are excluded.
+\item MAID rejects any guard referencing a field written by
+  another node (\S\ref{sec:other-backends}); guarded examples
+  carry an explicit backend-disable annotation.
+\end{itemize}
+
+Each example has a small declaration listing the backends to
+disable; the harness uses this list when iterating.  Today
+roughly half of the examples are accepted by every applicable
+backend in the test list; the other half exercise one or two
+backend-specific concerns and disable a single backend for a
+documented reason.
+
+\subsection{What we've learned}
+
+A few patterns that the example library has surfaced.
+
+\paragraph{Distribution semantics changes the games.}  Many of
+the classical game-theory examples cannot be stated literally in
+Vegas: with a fixed pool, both-defect cannot be made worse than
+both-cooperate in absolute terms (the pool conserves).  The
+\file{Prisoners.vg} variant therefore shifts the outcome
+matrix while preserving the Nash structure.  This is not a
+weakness of the language --- it is a structural consequence of
+the conservation property the language enforces --- but it
+matters for translating textbook problems faithfully.
+
+\paragraph{Guards that look local are often contextual.}  The
+Monty Hall \TT{Host.goat != Guest.d} clause is the canonical
+example: it reads as a local constraint on Host's move, but it
+references another role's prior write.  Programmers writing
+Vegas tend to underestimate how often this happens.  The MAID
+backend's restriction is what brought this pattern into focus
+(the MAID encoding ignores it silently).
+
+\paragraph{Liveness handlers are non-trivial design.}  Choosing
+between \TT{or split}, \TT{or burn}, and \TT{or null} for any
+given action is a genuine design decision that affects both the
+contract and the game.  The example library carries
+explanatory comments around these choices, especially in
+\file{OddsEvens.vg}, where the comment block discusses the
+distinction between losing (a strategic outcome) and quitting
+(a non-strategic disruption) and the payoffs that make them
+distinguishable.
+
+\paragraph{Front-running protection is the main payoff for
+auctions.}  The Vickrey example, written naively as three
+simultaneous public \TT{yield}s, is automatically rewritten to
+a commit-reveal protocol.  Reading the Solidity output makes the
+rewriting visible: each bidder gets a pair of functions
+\TT{move\_$B_i$\_$c$(bytes32 \_hidden\_b)} for the commit and
+\TT{move\_$B_i$\_$r$(int256 \_b, uint256 \_salt)} for the reveal
+(with topological indices $c, r$), and the reveal's
+\TT{depends} chain lists every other bidder's commit as a
+prerequisite.  A hand-written equivalent would need careful
+attention to make this dependency right; here the IR computes
+it once.

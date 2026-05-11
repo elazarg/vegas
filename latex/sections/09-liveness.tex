@@ -1,0 +1,131 @@
+\section{Liveness and Quit Handlers}
+\label{sec:liveness}
+
+Vegas treats the operational question of \emph{what happens when
+someone stops responding} as part of the surface syntax rather
+than as an implementation detail.  This section walks through the
+design: how the language exposes the choice to the programmer,
+how the compiler realises it on the EVM, and where the model is
+honest about its current limits.
+
+\subsection{Why liveness is in the language}
+
+A multi-party on-chain protocol is exposed to two kinds of
+slow-or-absent participants: strategic ones (who decline to play
+because the next move is not in their interest), and incapable
+ones (client crashes, mempool censorship, gas exhaustion).  The
+deployed contract has to decide what to do in both cases, and the
+decision must be a total function of public history.  Vegas
+makes that decision part of the source: every action that could
+plausibly fail to occur carries an explicit handler:
+
+\begin{lstlisting}[style=vg]
+yield or split A(x: int);
+\end{lstlisting}
+
+The handler describes what the contract does, and the
+game-theoretic analysis sees \TT{Quit} as a strategic move
+available to the actor.  The two views agree by construction.
+
+\subsection{The three group handlers}
+
+A statement involving one or more roles in a single
+\TT{yield}/\TT{commit}/\TT{reveal} group carries one of three
+handlers.
+
+\paragraph{split} The quitter's deposit is split among the
+surviving roles (in a two-player game, the survivor gets it all).
+This is the default for adversarial games: nobody profits by
+walking out.
+
+\paragraph{burn} The quitter's deposit is sent to a designated
+burn address (or zero address, depending on chain conventions).
+Useful in games where giving the deposit to surviving roles would
+warp incentives --- voting schemes where a missing voter should
+not enrich the others, for instance.
+
+\paragraph{null} The missing field is treated as \TT{null} at the
+typing level (the field's type becomes \TT{opt T}), the node's
+\TT{done\_} flag is set by the contract, and the protocol
+proceeds.  The \TT{withdraw} clause is required to handle the
+optional case explicitly.  Useful for protocols where a
+non-response is itself strategically meaningful (a delegate
+failing to delegate).
+
+\subsection{Per-query payoff handlers}
+\label{sec:liveness:per-query}
+
+A single multi-role statement sometimes needs different outcomes
+depending on which role quit.  The language supports this via a
+\TT{||} qualifier on the role's query:
+
+\begin{lstlisting}[style=vg]
+yield or split Bob(ok: bool) || { Alice -> 40 };
+\end{lstlisting}
+
+The right-hand side of \TT{||} is an \emph{outcome}: a payoff
+allocation chosen from the same sublanguage that \TT{withdraw}
+clauses use (a brace-block payoff, or \TT{split}/\TT{burn}/\TT{null}).
+When the named role quits, the contract executes the handler's
+outcome \emph{instead of} the rest of the protocol; control does
+not return.  No subgame or callable game block is involved ---
+the handler is a terminal allocation chosen at the bail point.
+
+\subsection{Operational realisation}
+
+The Solidity backend implements \TT{Quit} via a timeout-and-bail
+mechanism (\S\ref{sec:solidity:bail}).  The contract maintains one
+global inactivity window: if no action has happened anywhere for
+\TT{TIMEOUT} seconds (default 24 hours), the next caller's
+modifier marks the named role as \TT{bailed} and resets the
+window.  Once bailed, the role's actions are rejected by the
+\TT{by(Role)} modifier; the bail is one-way.
+
+This single-window design is operationally simple and
+implementable in a few lines of Solidity, but its attribution is
+structural rather than analytical: it marks ``the role pointed at
+by the modifier'' as bailed, not ``the role that was supposed to
+act next''.  In a long protocol with several outstanding actions
+in different roles, this attribution can be coarser than one would
+ideally want.  A per-action deadline scheme would address this at
+the cost of substantially more state; the current design is the
+simpler starting point.
+
+\subsection{Liveness in the game model}
+
+For the Gambit backend, \TT{Quit} is an additional alphabet
+symbol at every move site with a handler.  Equilibrium analyses
+therefore see \TT{Quit} as a real move, with the payoff indicated
+by the handler.  This is what lets the analysis surface griefing
+incentives without modelling them outside the game.  In a
+simultaneous \TT{or split} statement, for instance, \TT{Quit} is
+strictly dominated by any non-quit move iff the split penalty
+exceeds the worst non-quit payoff; the dominance check on the
+generated EFG verifies the property mechanically.
+
+\subsection{Limits today}
+
+Two known limits worth flagging.
+
+\paragraph{Fair-play liveness is not statically checked.}  A
+\emph{fair-play guard} is a \TT{where} clause whose role can
+always find a satisfying value, regardless of prior moves.  The
+language does not verify that today; a contextual guard like
+\TT{yield B(y: int) where y != A.x \&\& y != A.x + 1 \&\& y != A.x - 1}
+over a type \TT{int = \{0..2\}} becomes unsatisfiable depending on
+\TT{A}'s play, forcing \TT{B} to quit through no fault of its own.
+The project's design notes sketch a static check
+(exhaustive enumeration over bounded types, or an SMT call for
+the general case) that would type the affected field as
+\TT{opt T} when satisfiability cannot be established; implementing
+it is on the TODO list under the name \emph{fair-play liveness}.
+
+\paragraph{Computational tractability is not checked either.}  A
+guard such as \TT{p * q == N} for a large semiprime \TT{N} is
+satisfiable by definition but practically infeasible to satisfy.
+Vegas treats this the same as a satisfiable guard; the player
+will quit, the contract will bail, and the game model will
+record that outcome via the handler.  No analysis distinguishes
+``empty move space'' from ``intractable move space''.  This is
+the standard limit of purely structural reasoning about action
+availability.

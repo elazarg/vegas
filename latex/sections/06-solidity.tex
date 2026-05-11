@@ -1,0 +1,268 @@
+\section{The Solidity and Vyper Backends}
+\label{sec:solidity}
+
+The EVM backends translate the EventGraph into a deployable smart
+contract.  Both languages target the same compilation pass via a
+shared EVM intermediate representation (\TT{evm.EVMIR}); only the
+final pretty-printer differs.  This section walks through the
+Solidity output and notes the few divergences for Vyper.  We are
+careful to describe the actual generated code, not an idealised
+version of it: the bail-out mechanism in particular is simpler than
+the language-level story might suggest, and a few of its
+consequences belong in the open-questions list rather than the
+guarantees list.
+
+\subsection{Threat model}
+\label{sec:solidity:threats}
+
+The compiled contract is meant to survive a transaction-ordering
+adversary --- a builder or competing searcher who can choose which
+pending transactions to include and in what order --- and to remain
+liveness-preserving when a participant stops responding.  It is not
+designed against:
+
+\begin{itemize}\itemsep1pt
+\item \emph{Censorship.}  An adversary who indefinitely excludes a
+  participant's transactions is modeled as forcing a timeout, which
+  marks the participant as \TT{bailed} and triggers the language-level
+  quit handler.
+\item \emph{Cross-contract interactions.}  The contract is a closed
+  system; no calls into other contracts are emitted (the only
+  outbound action is a direct ETH transfer to a registered
+  participant address during withdrawal).
+\item \emph{Gas-cost games.}  Gas is a real-world cost that affects
+  which moves are rational, but the analytical backends ignore it.
+  Bounded per-action gas envelopes (e.g.\ via
+  GASTAP~\citep{Albert2020Gastap}) would be needed to bring gas into
+  the strategic model; this is planned but not implemented.
+\item \emph{Cryptographic primitives.}  The contract relies on
+  keccak-256 being binding and hiding.  Domain separation and
+  per-deployment binding are in the hash composition
+  (\S\ref{sec:solidity:commit-reveal}), but the strength of the
+  primitive itself is taken as given.
+\end{itemize}
+
+The remainder of this section describes the construction; the
+``honestly imperfect'' parts of the design (especially the single
+global timeout window) are flagged inline.
+
+\subsection{Storage layout}
+
+The contract's storage is derived directly from the EventGraph.
+There are five families of slots.
+
+\paragraph{Per-node completion.}  A two-level mapping
+\TT{actionDone[role][actionId]} records, for each role and each
+node, whether the node has fired.  A symmetric mapping
+\TT{actionTimestamp[role][actionId]} stores the block timestamp at
+which it fired.  Node ids are integers assigned by a deterministic
+topological linearisation of the EventGraph; one
+\TT{uint256 constant ACTION\_\textit{Role}\_\textit{n}} is emitted
+per node.  The integer \TT{\textit{n}} is the node's source position
+(making the constant name human-readable), while the assigned
+constant \emph{value} is its topological index.
+
+\paragraph{Role registry.}  A mapping
+\TT{roles[address] => Role} associates EOAs with the roles they
+have joined, and a per-role \TT{address\_\textit{Role}} slot
+stores the registered address.  A small \TT{enum Role} carries one
+constructor per role plus a \TT{None} sentinel.
+
+\paragraph{Game state.}  For each \emph{written field} in the
+EventGraph the contract stores the field's value.  A field with
+\PUBLIC visibility uses a slot of the field's native type
+(\TT{int256}, \TT{bool}, etc.); a field with \COMMIT visibility
+uses a separate \TT{bytes32} slot for the commitment hash, with the
+revealed value filled in by the matching reveal action.  Each
+value slot is shadowed by a \TT{done\_\textit{slot}: bool} flag.
+
+\paragraph{Per-role bookkeeping.}  Three booleans per role:
+\TT{done\_\textit{Role}} (the role has joined),
+\TT{claimed\_\textit{Role}} (the role has claimed its terminal
+payout), and a private \TT{bailed[\textit{Role}]} (the role has been
+marked inactive after a timeout).
+
+\paragraph{Game-wide constants.}  A constant \TT{TIMEOUT} sets the
+inactivity window, in seconds (the default is 24 hours).  A
+constant \TT{COMMIT\_TAG} (a hashed domain-separation tag) and the
+contract's deployed address are folded into every commitment hash.
+
+\subsection{Modifiers and the depends pattern}
+\label{sec:solidity:depends}
+
+The contract has no global step counter.  Each per-node function is
+guarded by a \TT{depends} modifier per predecessor.  The modifier
+itself does two things: it advances the contract's
+inactivity-timeout state (potentially marking some role
+\TT{bailed}), and it conditionally requires the predecessor to have
+completed.  Read top to bottom:
+
+\begin{lstlisting}[style=sol]
+modifier depends(Role role, uint256 actionId) {
+    _check_timestamp(role);
+    if (!bailed[role]) {
+        require(actionDone[role][actionId], "dependency not satisfied");
+    }
+    _;
+}
+\end{lstlisting}
+
+The body invokes \TT{\_check\_timestamp(\textit{role})}, which marks
+\TT{\textit{role}} as \TT{bailed} iff the current
+\TT{block.timestamp} exceeds a shared global high-water mark
+\TT{lastTs} by more than \TT{TIMEOUT}; otherwise it leaves the
+state unchanged.  If \TT{\textit{role}} is not bailed, the
+predecessor's completion flag is required; if it is bailed, the
+\TT{require} is skipped and the dependent action proceeds.  Two
+additional modifiers complete the gating: \TT{action(role, id)}
+asserts that the action has not yet fired, marks it done, runs the
+body, and updates \TT{actionTimestamp} and \TT{lastTs};
+\TT{by(role)} asserts that the calling EOA holds the given role
+and is not itself bailed.
+
+A typical per-node function looks like:
+
+\begin{lstlisting}[style=sol]
+function move_Guest_3(int256 _d)
+    external
+    by(Role.Guest)
+    depends(Role.Host, ACTION_Host_0)
+    depends(Role.Guest, ACTION_Guest_1)
+    depends(Role.Host, ACTION_Host_2)
+    action(Role.Guest, ACTION_Guest_3)
+{
+    require(_d >= 0 && _d <= 2, "domain");
+    Guest_d = _d;
+    done_Guest_d = true;
+}
+\end{lstlisting}
+
+Every emitted action is named \TT{move\_\textit{Role}\_\textit{n}}
+where \textit{n} is the source position.  The function's dependency
+list is exactly the predecessor set of the node in the EventGraph
+(after the commit-reveal expansion).  Concurrent nodes share the
+prefix of the chain up to the divergence point and are otherwise
+free to be called in any order.
+
+\subsection{Commits and reveals}
+\label{sec:solidity:commit-reveal}
+
+Every COMMIT-tagged write becomes a function that takes a
+\TT{bytes32} commitment and stores it; every REVEAL-tagged write
+takes the cleartext value plus a salt, recomputes the commitment,
+and asserts equality with the stored hash before performing the
+public write.  The commitment hash is composed as
+
+\begin{equation*}
+  \mathit{keccak256}\bigl(
+    \mathrm{abi.encode}(
+      \textsc{COMMIT\_TAG},\
+      \mathrm{address(this)},\
+      \mathrm{role},\
+      \mathrm{actor},\
+      \mathit{keccak256}(\mathrm{payload})
+    )
+  \bigr).
+\end{equation*}
+
+The pieces serve distinct roles.  The \texttt{COMMIT\_TAG} provides
+cross-protocol domain separation.  \TT{address(this)} ties the
+commitment to this particular deployment, preventing replay across
+copies of the same protocol.  The \TT{role} identifier defends
+against role-swapping replays within a single deployment; the
+\TT{actor} address binds the commitment to the EOA that posted it.
+The payload is pre-hashed before being folded in, so the outer
+hash works over a fixed-size input regardless of the parameter
+list.
+
+Vyper emits the analogous construction using the language's
+\TT{assert} idiom and slightly different storage syntax.  The
+generated bytecode is comparable.
+
+\subsection{The single-window timeout and its consequences}
+\label{sec:solidity:bail}
+
+The timeout mechanism is simpler than the language-level story
+might suggest, and it is worth describing exactly.
+
+The contract maintains a single global \TT{lastTs} slot, updated to
+\TT{block.timestamp} on every successful action.  Whenever a
+modifier is entered, \TT{\_check\_timestamp(role)} is called: if
+\TT{block.timestamp > lastTs + TIMEOUT}, the named role is marked
+\TT{bailed} \emph{and} \TT{lastTs} is reset to the current
+timestamp.  In effect, the contract has one sliding inactivity
+window shared across all participants: if no action has happened
+anywhere for \TT{TIMEOUT} seconds, the next caller can mark
+\emph{some} role as bailed and the window restarts.
+
+This has two non-obvious consequences worth flagging:
+
+\begin{itemize}\itemsep1pt
+\item \emph{The role that gets marked is the role named in the
+  caller's modifier.}  \TT{depends(Role.Host, \ldots)} on a window
+  expiry marks \TT{Host} as bailed; \TT{by(Role.Guest)} on a window
+  expiry marks \TT{Guest}.  This is approximately right --- the
+  function call points at a role expected to have acted --- but it
+  is not the same thing as ``the unique unresponsive role''; the
+  attribution is structural rather than analytical.
+\item \emph{Bail is one-way.}  Once \TT{bailed[\textit{R}] = true},
+  the \TT{by(R)} modifier rejects any subsequent action from
+  \TT{R}.  A role that goes offline briefly and reconnects after
+  the window expires has lost the right to play.  The
+  language-level treatment of \TT{Quit} as a definitive move is the
+  source of this design; it is operationally simple, but it does
+  mean that a fair-playing role with a flaky connection is at risk
+  in long protocols.
+\end{itemize}
+
+When a dependent action runs against a bailed predecessor, the
+\TT{depends} modifier skips its \TT{require}, but it does \emph{not}
+fabricate writes for the missing fields.  Their value slots and
+their \TT{done\_} flags remain in their default state (zero, and
+\TT{false} respectively).  Downstream code that needs to
+distinguish ``never written'' from ``written to the default value''
+relies on the language's \TT{opt T} typing: a field declared with
+an \TT{or null} handler is typed \TT{opt T}, and the \TT{withdraw}
+clause is required to inspect its \TT{done\_} flag.
+
+The fair-play guarantee one would like --- ``every role can drive
+the contract from any reachable configuration to a terminal
+allocation'' --- is plausible for protocols whose \TT{withdraw}
+clause is total on the public state (including \TT{done\_} flags),
+but it is not proved.  Stating and proving it under the explicit
+execution model is the central refinement-theorem target of the
+ongoing VegasCore work; today, the test suite checks that the
+\TT{withdraw} clause type-checks against the optional fields it
+must handle, and that hand-played example traces reach a terminal
+allocation, but no machine-checked proof is shipped.
+
+\subsection{Withdraw and payout}
+
+The terminal \TT{withdraw} clause is compiled into one entry
+point per role.  Each role calls its own
+\TT{withdraw\_\textit{Role}()} to receive their share, guarded by
+a \TT{claimed\_\textit{Role}} flag to prevent double-payment.  The
+payout expression is lowered to EVM IR by direct structural
+translation; the body computes the expression against the public
+state (including \TT{done\_} flag inspection for optional fields)
+and transfers the resulting amount to the role's stored address
+using a low-level \TT{call} with the computed value.
+
+Conservation is checked statically against the deposit total
+during compilation (symbolic checks where possible; exhaustive
+enumeration for the finite-type case).  The contract therefore
+does not need to verify at runtime that all role payouts sum to
+the pool.
+
+\subsection{Things the backend deliberately leaves alone}
+
+Several real concerns are not addressed by the Solidity emission
+because they are scoped out of the language.  Gas costs as a
+strategic factor; mempool-level censorship beyond what the bail
+mechanism handles; cross-contract interactions and oracle reads;
+admin keys, upgrade proxies, and pausable patterns.  Each is a
+deliberate restriction in the same vein as the language's
+bounded-types-only stance: drawing the boundary tightly is what
+makes the analytical backends' outputs faithful to the deployed
+code, and what makes ``the same source for two views'' a defensible
+claim.
