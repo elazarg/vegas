@@ -89,12 +89,16 @@ data class NodeStruct(
  * @param id stable identifier within the DAG
  * @param spec semantic payload (params, join, guard)
  * @param struct structural metadata (owner, writes, visibility, guard reads)
+ * @param sample non-null iff this node is a Sample (chance) draw. Stage 1:
+ *   set for every node owned by a role in [GameIR.chanceRoles]; backends
+ *   may treat sample==null as "strategic" and sample!=null as "chance".
  * @property kind derived from [spec] and [struct].
  */
 data class NodeMeta(
     val id: NodeId,
     val spec: NodeSpec,
     val struct: NodeStruct,
+    val sample: SampleSpec? = null,
 ) {
     val kind: Visibility by lazy { inferKind(struct) }
 }
@@ -140,6 +144,10 @@ class EventGraph private constructor(
     fun owner(id: NodeId): RoleId = struct(id).owner
     fun writes(id: NodeId): Set<FieldRef> = struct(id).writes
     fun visibilityOf(id: NodeId): Map<FieldRef, Visibility> = struct(id).visibility
+
+    /** Sample shortcuts. */
+    fun sampleSpec(id: NodeId): SampleSpec? = meta(id).sample
+    fun isSampleNode(id: NodeId): Boolean = meta(id).sample != null
 
     /** Reachability queries. */
     fun reaches(from: NodeId, to: NodeId): Boolean =
@@ -287,13 +295,15 @@ class EventGraph private constructor(
                 val commitMeta = NodeMeta(
                     id = cid,
                     spec = commitSpec,
-                    struct = commitStruct
+                    struct = commitStruct,
+                    sample = meta.sample,
                 )
 
                 val revealMeta = NodeMeta(
                     id = rid,
                     spec = revealSpec,
-                    struct = revealStruct
+                    struct = revealStruct,
+                    sample = meta.sample,
                 )
 
                 // Commit predecessors: mapped original preds

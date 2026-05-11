@@ -1,5 +1,6 @@
 package vegas.ir
 
+import vegas.Rational
 import vegas.RoleId
 import vegas.VarId
 import vegas.FieldRef
@@ -78,6 +79,77 @@ data class Guard(
 
 data class Join(
     val deposit: Expr.Const.IntVal,
+)
+
+/**
+ * A finite probability distribution over Expr.Const values, normalized.
+ *
+ * Used by Sample nodes (chance / RNG) to declare the underlying randomness.
+ * Backends that compute posterior probabilities (Gambit, MAID, PRISM) must
+ * renormalize over the guard-surviving support per reachable context; the
+ * Dist itself is the *prior* declared at the source.
+ *
+ * Invariants:
+ *  - support is non-empty
+ *  - keys are distinct
+ *  - all weights are strictly positive
+ *  - weights sum to 1
+ */
+data class Dist(val support: List<Pair<Expr.Const, Rational>>) {
+    init {
+        require(support.isNotEmpty()) { "Dist support must be non-empty" }
+        require(support.distinctBy { it.first }.size == support.size) {
+            "Dist keys must be distinct: $support"
+        }
+        require(support.all { it.second.numerator > 0 }) {
+            "Dist weights must be strictly positive: $support"
+        }
+        val sum = support.map { it.second }.reduce { a, b -> a + b }
+        require(sum == Rational(1)) { "Dist weights must sum to 1, got $sum: $support" }
+    }
+
+    val values: List<Expr.Const> get() = support.map { it.first }
+
+    fun weight(v: Expr.Const): Rational? =
+        support.firstOrNull { it.first == v }?.second
+
+    companion object {
+        fun uniform(values: List<Expr.Const>): Dist {
+            require(values.isNotEmpty()) { "Cannot build uniform Dist over empty support" }
+            val w = Rational(1, values.size)
+            return Dist(values.map { it to w })
+        }
+    }
+}
+
+/**
+ * Where the randomness for a Sample node physically comes from.
+ *
+ * Each source carries a distinct threat model (who can bias the draw).
+ * Stage 1 supports only RoleSubmit, which is the legacy "random Role()"
+ * semantics. EVM-native sources (prevrandao, vrf, drand, commit_reveal
+ * aggregation) are reserved for later stages.
+ */
+sealed class EntropySource {
+    /**
+     * A designated role submits the value. Trust assumption: that role.
+     * This is the back-compat representation of today's "random Role()".
+     */
+    data class RoleSubmit(val role: RoleId) : EntropySource()
+}
+
+/**
+ * Per-node classification of a Sample (chance) node.
+ *
+ * @property dist   Declared prior distribution at the source. May be null
+ *                  when no explicit distribution is yet declared on the
+ *                  surface (back-compat path): backends then fall back to
+ *                  their legacy uniform-over-surviving-moves behavior.
+ * @property source Physical entropy source. Stage 1: always RoleSubmit.
+ */
+data class SampleSpec(
+    val dist: Dist?,
+    val source: EntropySource,
 )
 
 sealed class Type {

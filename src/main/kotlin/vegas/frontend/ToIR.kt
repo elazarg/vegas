@@ -15,7 +15,7 @@ fun compileToIR(ast: GameAst): GameIR {
     val phases = collectPhases(ast.game, typeEnv)
     val payoffs = extractPayoffs(ast.game, typeEnv)
 
-    val dag = actionDagFromPhases(phases)
+    val dag = actionDagFromPhases(phases, chanceRoles)
         ?: error("EventGraph construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
 
     val ir = GameIR(
@@ -185,7 +185,10 @@ private fun findPriorCommit(
  *  - commit/reveal ordering is illegal, or
  *  - guards read fields that are never visible beforehand.
  */
-fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
+fun actionDagFromPhases(
+    phases: List<Phase>,
+    chanceRoles: Set<RoleId> = emptySet(),
+): EventGraph? {
     val nodes = mutableSetOf<NodeId>()
     val deps = mutableMapOf<NodeId, MutableSet<NodeId>>()
 
@@ -257,11 +260,38 @@ fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
                 guardExpr = sig.guard.expr,
             )
 
-            payloads[id] = NodeMeta(id = id, spec = spec, struct = struct)
+            val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {
+                SampleSpec(
+                    dist = inferUniformDist(params),
+                    source = EntropySource.RoleSubmit(role),
+                )
+            } else null
+
+            payloads[id] = NodeMeta(id = id, spec = spec, struct = struct, sample = sample)
         }
     }
 
     return fromGraph(nodes, deps, payloads)
+}
+
+/**
+ * Build a uniform prior over a single-parameter chance node's domain.
+ *
+ * Stage 1 scope: handle the common case (one parameter with a bounded type).
+ * For 0-param nodes (impossible at this call site, but defensive), multi-param
+ * nodes, or unbounded IntType, return null — backends fall back to their
+ * legacy uniform-over-surviving-moves behavior, which is observably identical
+ * for current chance roles.
+ */
+private fun inferUniformDist(params: List<NodeParam>): Dist? {
+    if (params.size != 1) return null
+    val p = params.single()
+    val values: List<Expr.Const> = when (val t = p.type) {
+        is Type.BoolType -> listOf(Expr.Const.BoolVal(false), Expr.Const.BoolVal(true))
+        is Type.RangeType -> (t.min..t.max).map { Expr.Const.IntVal(it) }
+        is Type.IntType -> return null
+    }
+    return Dist.uniform(values)
 }
 
 private fun buildVisibilityMap(

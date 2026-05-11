@@ -34,6 +34,7 @@ import vegas.dag.FrontierMachine
 import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.ir.GameIR
+import vegas.ir.SampleSpec
 import vegas.ir.toOutcome
 import vegas.semantics.Configuration
 import vegas.semantics.FrontierAssignmentSlice
@@ -294,6 +295,11 @@ internal class TreeUnroller(
         val infoset = views.getValue(role)
         val infosetId = infosetManager.getHistoryNumber(role, infoset, isChance)
 
+        // Pre-compute per-move chance probabilities (renormalized over the
+        // guard-surviving support per reachable context).
+        val chanceProbs: Map<Label.Play, Rational> =
+            if (isChance) computeChanceProbabilities(roleMoves) else emptyMap()
+
         // Build choices for this role
         val choices = roleMoves.map { playMove ->
             val shouldExpand = when (playMove.tag) {
@@ -324,7 +330,7 @@ internal class TreeUnroller(
             GameTree.Choice(
                 action = extractActionLabel(playMove.delta, role),
                 subtree = subtree,
-                probability = if (isChance) Rational(1, roleMoves.size) else null
+                probability = if (isChance) chanceProbs.getValue(playMove) else null
             )
         }
 
@@ -343,6 +349,57 @@ internal class TreeUnroller(
             return Expr.Const.IntVal(outcome.v - deposit.v)
         }
         return ir.payoffs.mapValues { (role, expr) -> computeUtility(role, expr) }
+    }
+
+    /**
+     * Per-move chance probabilities at a single chance decision, renormalized
+     * over the guard-surviving moves (Codex review point 5).
+     *
+     * If every Action move's underlying Sample node carries an explicit Dist,
+     * the prior weight of each move is its value's mass under the Dist; the
+     * returned probability is `prior / sum(priors)`. If any move lacks an
+     * explicit Dist (or the moves come from a multi-parameter chance node,
+     * which Stage 1 does not yet support per-parameter), we fall back to the
+     * legacy uniform-over-surviving-moves behavior. Quit moves get uniform
+     * weight as a safety net (chance roles cannot quit today, but we don't
+     * want to crash if that ever changes).
+     */
+    private fun computeChanceProbabilities(
+        roleMoves: List<Label.Play>,
+    ): Map<Label.Play, Rational> {
+        if (roleMoves.isEmpty()) return emptyMap()
+
+        val priors: List<Rational?> = roleMoves.map { move -> priorWeight(move) }
+        val allDeclared = priors.all { it != null }
+
+        if (!allDeclared) {
+            val uniform = Rational(1, roleMoves.size)
+            return roleMoves.associateWith { uniform }
+        }
+
+        val total = priors.filterNotNull().reduce { a, b -> a + b }
+        if (total == Rational(0)) {
+            val uniform = Rational(1, roleMoves.size)
+            return roleMoves.associateWith { uniform }
+        }
+        return roleMoves.zip(priors).associate { (move, w) ->
+            move to (w!! / total)
+        }
+    }
+
+    /**
+     * Prior weight of a single chance move under its Sample node's declared
+     * distribution, or null if no explicit distribution applies.
+     */
+    private fun priorWeight(move: Label.Play): Rational? {
+        val actionId = (move.tag as? PlayTag.Action)?.actionId ?: return null
+        val spec: SampleSpec = ir.dag.sampleSpec(actionId) ?: return null
+        val dist = spec.dist ?: return null
+        // Stage 1: single-parameter chance nodes only. The delta entry for
+        // this action's owner gives the sampled value.
+        val values: Collection<Expr.Const> = move.delta.values
+        if (values.size != 1) return null
+        return dist.weight(values.first())
     }
 }
 
