@@ -55,13 +55,14 @@ node, whether the node has fired.  A symmetric mapping
 \TT{actionTimestamp[role][actionId]} stores the block timestamp at
 which it fired.  Each node is assigned a deterministic
 topological index; one
-\TT{uint256 constant ACTION\_\textit{Role}\_\textit{src}} is
-emitted per node, where \textit{src} is the node's per-role source
-position (giving each constant a human-readable name) and the
-constant's \emph{value} is its topological index.  Per-action
-functions in the contract are then named
-\TT{move\_\textit{Role}\_\textit{topo}}, using the topological
-index for guaranteed uniqueness across the whole contract.
+\TT{uint256 constant ACTION\_\textit{Role}\_\textit{n}} is
+emitted per node, where \textit{n} is the node's stable identifier
+(the phase index for nodes lifted directly from source, a fresh
+counter for nodes introduced by the commit-reveal expansion ---
+see \S\ref{sec:eventgraph}) and the constant's \emph{value} is
+its topological index.  Per-action functions in the contract are
+named \TT{move\_\textit{Role}\_\textit{topo}}, using the
+topological index for uniqueness across the whole contract.
 
 \paragraph{Role registry.}  A mapping
 \TT{roles[address] => Role} associates EOAs with the roles they
@@ -204,18 +205,21 @@ sliding inactivity window shared across all participants, but the
 bail is attributed precisely to roles whose specific named action
 is unfinished, not to the caller and not to bystanders.
 
-Two consequences worth flagging:
+Two properties of the emitted code worth flagging:
 
 \begin{itemize}\itemsep1pt
-\item \emph{Bail is precise.}  Only a role whose missing action
-  is named by some \TT{depends} clause can be bailed, and only
-  when the global window has expired.  A role that has completed
-  everything required of it cannot be bailed by a later caller;
-  a fair-playing caller cannot be bailed by their own attempt to
-  act.
-\item \emph{Bail is one-way.}  Once \TT{bailed[\textit{R}] =
-  true}, the \TT{by(R)} modifier rejects any subsequent action
-  from \TT{R}.  This matches the language-level treatment of
+\item \emph{Precision of attribution.}  The backend emits
+  \TT{depends(role, id)} clauses whose role is always the owner
+  of the named predecessor, so the only role a bail can mark is
+  one with an outstanding action.  A role that has completed
+  everything required of it cannot be bailed by a later caller,
+  and a fair-playing caller cannot be bailed by their own
+  attempt to act.  These are properties of the \emph{emitter} ---
+  they follow from how Vegas builds the modifier list per node
+  --- and are not separately checked at runtime.
+\item \emph{One-way bail.}  Once \TT{bailed[\textit{R}] = true},
+  the \TT{by(R)} modifier rejects any subsequent action from
+  \TT{R}.  This matches the language-level treatment of
   \TT{Quit} as a definitive move.  The remaining risk is the
   ordinary one: a fair-playing role whose connection is unstable
   for longer than \TT{TIMEOUT} loses their seat even if they

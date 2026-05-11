@@ -1,49 +1,95 @@
 \section{Connection to VegasCore}
 \label{sec:vegascore}
 
-A companion project, VegasCore, formalizes a core calculus over
-the same event-graph carrier in Lean~4~\citep{deMouraUllrich2021,mathlib2020}.
-The two artifacts are independent --- Vegas is a compiler tool;
-VegasCore is a self-contained semantic construction --- but they
-describe overlapping objects, and a programmer interested in
-proving properties of a Vegas program will eventually want to
-cross the bridge between them.  This section sketches the
-correspondence, lists where the two diverge, and gives the gap
-between today's state and a fully verified pipeline.
+VegasCore is a companion Lean~4 library
+\citep{deMouraUllrich2021,mathlib2020} that formalizes the
+event-graph calculus underlying Vegas's source language and
+proves the structural properties Vegas's IR relies on.  This
+section says what VegasCore is, what it mechanizes, and how the
+two artifacts fit together.  Vegas and VegasCore are independent
+codebases: the compiler is useful without the library, and the
+library is useful without the compiler.  What VegasCore adds is
+mechanical fulfilment of Vegas's design premise --- that
+game-theoretic reasoning about a Vegas program transfers, up to
+the stated execution model, to the deployed contract.
 
 \subsection{What VegasCore is}
 
-VegasCore is a Lean~4 library that formalizes the core
+VegasCore formalizes the core
 \TT{commit}/\TT{reveal}/\TT{sample}/\TT{let}/\TT{ret} calculus
 underlying Vegas's source language.  Its central object is an
 \TT{EventGraph} type elaborated from a checked program
-(\TT{WFProgram}); the well-formedness conditions
---- visibility, freshness of binders, completeness of reveals,
-normalization of sample distributions, and at-least-one-legal
-action --- are statically encoded as fields of \TT{WFProgram}.
-From a checked program VegasCore derives a probabilistic
-\TT{Machine}, native strategy carriers, and kernel-game
-presentations of the protocol; it states and proves frontier
-commutation, the commit/reveal information barrier, agreement of
-several outcome laws, a finite Kuhn realization theorem, and
-backend-refinement transport.  All of this is mechanized in
-Lean.
+(\TT{WFProgram}); the well-formedness conditions --- visibility,
+freshness of binders, reveal completeness, normalization of
+sample distributions, and at-least-one-legal-action --- are
+statically encoded as fields of \TT{WFProgram}.  From a checked
+program the library derives a probabilistic \TT{Machine}, native
+strategy carriers, kernel-game presentations, and FOSG/EFG
+bridges; on top of these it states and proves a small inventory
+of structural and strategic theorems.
 
-VegasCore's role in the project is to provide a
-formally-mechanized referent for the kind of semantics that
-Vegas's compiler informally implements.  Where Vegas's IR
-constructor refuses to accept a graph violating the
-visibility-on-reads invariant, VegasCore proves the corresponding
-theorem about the elaborated graph; where Vegas's
-commit-reveal-expansion pass produces an informationally
-correct graph by construction, VegasCore proves frontier
-commutation and the information barrier as theorems about the
-abstract event graph.
+\subsection{What VegasCore mechanizes}
+\label{sec:vegascore:theorems}
+
+The theorem inventory is the centre of the library; it is also
+the answer to the question ``where do the structural properties
+Vegas's IR claims actually live?''
+
+\begin{itemize}\itemsep2pt
+\item \emph{Frontier diamond and preservation.}  Distinct
+  enabled events in an event graph preserve each other's
+  enablement and commute extensionally.  This is the formal
+  counterpart of Vegas's claim
+  (\S\ref{sec:eventgraph:frontier}) that concurrent nodes can be
+  scheduled in either order without changing the resulting
+  configuration.
+\item \emph{Commit/reveal information barrier.}  No reveal node
+  is on the frontier of any configuration whose graph still has
+  an unfinished prior commit.  This is the property Vegas's
+  commit-reveal expansion pass (\S\ref{sec:cr:barrier}) is
+  designed to produce; in VegasCore it is proved once for the
+  canonical event graph and inherited by every graph in
+  commit-reveal normal form.
+\item \emph{Trace-to-public agreement.}  The blocked-trace pure
+  and PMF-behavioral kernel games derived from the event graph
+  agree, on outcome kernels and expected utilities, with their
+  terminal-public-state projections.  This is the technical
+  underpinning of the claim that Vegas's Gambit output and a
+  hypothetical trace-game analysis would agree.
+\item \emph{Finite Kuhn realization.}  The bounded event-graph
+  FOSG satisfies the mixed-to-behavioral strategy equivalence;
+  this transports through native/FOSG equivalence to Vegas's
+  kernel-game presentation.  In particular, a mixed analysis
+  done over per-history pure strategies and a behavioural
+  analysis done over per-information-set strategies yield the
+  same outcome distributions.
+\item \emph{EFG presentation.}  The canonical FOSG-to-EFG bridge
+  preserves payoff-vector outcome laws.  This is the formal
+  basis for treating the Gambit \TT{.efg} output as a faithful
+  presentation of the program's strategic content.
+\item \emph{Stochastic-refinement transport.}  A stochastic step
+  refinement plus a compatible block-law lift yields an
+  expected-utility-preserving morphism from a backend kernel
+  game into the canonical event-graph kernel game; Nash
+  equilibria pull back along this morphism.  This is the
+  scaffolding on which a future backend-refinement proof (the
+  Solidity-to-event-graph direction in particular) would be
+  built.
+\end{itemize}
+
+The first two items are what Vegas's IR and commit-reveal
+expansion pass deliver structurally; they are stated above so a
+Vegas reader can see that the structural properties claimed in
+\S\ref{sec:eventgraph}--\S\ref{sec:commit-reveal} are not just
+``true by inspection of the rewrite'' but mechanically proved
+about the canonical form the rewrite produces.  The remaining
+items mechanize what one would otherwise reason about by hand
+when treating a Vegas program as a game.
 
 \subsection{Shared vocabulary}
 
 The two projects use the same names for the things they have in
-common.  The list is short and almost exact:
+common:
 
 \begin{center}
 \begin{tabular}{ll}
@@ -61,96 +107,126 @@ frontier (\TT{FrontierMachine}) & frontier \\
 \end{tabular}
 \end{center}
 
-For an entry-level reading of either project, this table is the
-glossary: the Vegas reader who picks up the VegasCore chapter
-already knows what an EventGraph is, and vice versa.
+A reader of either document who has read this table is equipped
+to cross-reference the other.
 
 \subsection{Where they diverge, and why}
 
-Each artifact has features the other does not.  The asymmetries
-are deliberate.
+Each artifact has features the other does not.
 
-\paragraph{Vegas surface keywords and macros.}  VegasCore's
-surface language exposes the five core constructors directly;
-Vegas's surface adds the user-facing
+\paragraph{Surface keywords and macros.}  VegasCore's surface
+language exposes the five core constructors directly; Vegas's
+surface adds the user-facing
 \TT{yield}/\TT{join}/\TT{commit}/\TT{reveal}/\TT{random}
-keywords, macros for expression-level abbreviation, the
-\TT{or split/burn/null} handler form, and \TT{||} subgame
-transfers.  These all lower at IR construction time into the
-core constructors; they exist in Vegas because they make
-specifications readable, not because they enlarge the semantic
-universe.
+keywords, macros, the \TT{or split/burn/null} handler forms, and
+the \TT{||} per-query handler.  These all lower into the core
+constructors at IR construction time; they exist in Vegas
+because they make specifications readable, not because they
+enlarge the semantic universe.
 
-\paragraph{The commit-reveal expansion pass.}  Vegas's IR runs an
-explicit rewrite (\S\ref{sec:commit-reveal}) that introduces
-commit nodes for concurrent public writes.  VegasCore models
-programs \emph{after} the analogous transformation: its event
-graph already distinguishes commit and reveal nodes.  Vegas's
-pass is a compiler operation, not a semantic notion.  Equivalence
-of the pre- and post-rewrite graphs at the strategic level is
-something one would want to state and prove, but as of today
-that proof is not in either codebase.
+\paragraph{The commit-reveal expansion pass.}  Vegas's IR runs
+an explicit rewrite (\S\ref{sec:commit-reveal}) that introduces
+commit-reveal pairs for concurrent public writes.  VegasCore
+models programs whose graphs are \emph{already} in commit-reveal
+normal form: its calculus has commit and reveal as primitive
+constructors and never needs a rewrite.  The pass in Vegas is
+the bridge between a user-friendly surface and the canonical
+form VegasCore governs; the strategic equivalence of the
+pre- and post-rewrite graphs is a property one would want to
+state and prove on the Vegas side, and it is not.
 
-\paragraph{Operational subgame layer.}  Quit handlers, bail-out
-timeouts, and the resulting subgame structure are first-class in
-Vegas; VegasCore presently treats quit as a strategic move only,
-without modelling the deadline mechanism.  A backend-refinement
-chapter in VegasCore covers a generic notion of operational
-refinement that could carry the bail mechanism, but the
-Vegas-to-VegasCore mapping of the timeout subgame is not yet
-written down.
+\paragraph{The operational handler layer.}  Quit handlers,
+bail-out timeouts, and the structural choices in the Solidity
+backend (\S\ref{sec:solidity:bail}) are first-class in Vegas;
+VegasCore presently treats \TT{Quit} as a strategic move only,
+without modelling the deadline mechanism.  A
+backend-refinement chapter in VegasCore covers a generic notion
+of operational refinement that could carry the bail mechanism,
+but the Vegas-to-VegasCore mapping of the timeout subgame is
+not yet written down.
 
-\paragraph{Static obligations.}  VegasCore's
-\TT{WFProgram} contains four well-formedness obligations as
-fields: freshness of binders, reveal completeness, normalized
-distributions, and at-least-one-legal-action.  Vegas's
-typechecker and IR constructor enforce the same conditions but
-without exposing them under a single uniform name; they live in
-the typechecker, in the EventGraph constructor, and in the
-commit-reveal pass.  Lifting them under VegasCore-style names
-would make the correspondence cleaner; it is on the TODO list.
+\paragraph{Static obligations.}  VegasCore's \TT{WFProgram}
+carries the four well-formedness obligations as fields;
+Vegas's typechecker and IR constructor enforce the same
+conditions but spread across the typechecker, the EventGraph
+constructor, and the commit-reveal pass without exposing them
+under a single uniform name.  Lifting them under VegasCore-style
+names is a planned refactor.
 
 \paragraph{Backends.}  Vegas emits Solidity, Vyper, Gambit,
-SMT-LIB, Scribble, Bitcoin, MAID, GraphViz, and the Diamond DAG
-witness records (\S\ref{sec:other:diamond}); VegasCore emits
-nothing --- it is a library of definitions and theorems.  This
-is the kind of asymmetry one expects: one side runs, the other
-side proves.
+SMT-LIB, Scribble, MAID, GraphViz, the Diamond DAG witness
+records (\S\ref{sec:other:diamond}), and a sketch
+Bitcoin/Lightning transcript; VegasCore emits no backends ---
+it is a library of definitions and theorems.
+
+\subsection{What this means for using Vegas today}
+\label{sec:vegascore:status}
+
+Vegas's design premise is that game-theoretic reasoning about a
+program transfers, modulo the stated execution model, to the
+deployed contract.  The compiler structures the source so that
+this transfer is well-defined: a Vegas program is a game with
+public history, information sets given by the visibility
+discipline, and a payoff function over the terminal state.  Two
+distinct routes are then available for cashing the transfer in.
+
+\begin{itemize}\itemsep2pt
+\item \emph{Mechanical analysis on the generated artifacts.}  The
+  Gambit \TT{.efg} output drives Gambit's equilibrium solvers
+  and dominance checks; the SMT-LIB output drives Z3 for
+  reachability and coalition queries; the Diamond DAG
+  (\S\ref{sec:other:diamond}) supports per-program proofs in
+  Coq or Lean.  These artifacts are produced from the same
+  EventGraph that drives the deployed Solidity contract.
+\item \emph{Reasoning at the source level.}  The Vegas program
+  is short enough to read as a game directly --- and for the
+  cases where the bundled backends are not the right tool, the
+  language is structured to make hand analysis tractable.  The
+  conservation property, the visibility discipline, the explicit
+  handler choices, and the commit-reveal-canonical IR all bound
+  what a strategic reasoner has to consider.
+\end{itemize}
+
+VegasCore is the third route, available when the user is willing
+to pay the cost of working in Lean: with the theorem inventory
+above, the structural facts that ground both of the above are
+mechanically certified, and an in-Lean equilibrium argument can
+be transported by the Kuhn realization and EFG presentation
+theorems to a Vegas program's kernel-game presentation.
 
 \subsection{What is and is not proved today}
 
-The current state of the two-sided story is the following:
+The current state of the connection:
 
 \begin{itemize}\itemsep1pt
-\item For programs that lower to VegasCore's core calculus, the
-  semantics formalized by VegasCore is consistent with the
-  EventGraph that Vegas's frontend produces \emph{by construction
-  of the lowering}: the lowering uses the same dependency
-  inference and visibility discipline.  The IR-level invariants
-  Vegas's constructor enforces are theorems in VegasCore.
-\item The various backends agree with Vegas's IR structurally:
-  every backend reads the same EventGraph and lowers it
-  systematically.  This is closer to a code-review property than
-  to a formal one --- there is no compiler proof.
+\item For Vegas programs in commit-reveal normal form, the
+  semantics VegasCore mechanizes is consistent with the
+  EventGraph the compiler produces: the lowering uses the same
+  dependency inference and visibility discipline, and the IR-level
+  invariants Vegas's constructor enforces correspond to
+  VegasCore's well-formedness obligations and the structural
+  theorems above.
+\item The backends agree with Vegas's IR structurally: every
+  backend reads the same EventGraph and lowers it
+  systematically.  This is a code-review property, not a formal
+  one --- there is no compiler proof.
 \item There is no formal proof, today, that any specific
-  backend's output (Solidity, Gambit, etc.) refines the
-  EventGraph in any externally meaningful sense.  The
-  fellowship-funded extension of this work proposes
-  Solidity-to-EventGraph refinement as the central new theorem
-  on which the practical claim of ``what you analyze is what
-  gets deployed'' would rest.
+  backend's output refines the EventGraph in any externally
+  meaningful sense.  The Solidity-to-EventGraph refinement
+  proof, in particular, would close the most strategically
+  important gap; it is the central new theorem proposed in the
+  fellowship-funded continuation of this work.
 \item The Diamond DAG (Coq/Lean) backend
-  (\S\ref{sec:other:diamond}) is a different bet: rather than
+  (\S\ref{sec:other:diamond}) is a different route: rather than
   prove correctness of the compiler once, it ships a typed
   certificate \emph{with each compiled program}.  Both routes
   --- verified compiler and verified compiled artifact --- are
-  on the project's TODO list as separate workstreams.  They are
-  not redundant; they cover different audiences.
+  on the project's TODO list as separate workstreams.
 \end{itemize}
 
-In summary: Vegas can be used today as a tool
-without VegasCore (the compiler stands alone), and VegasCore can
-be used today as a Lean library without Vegas (the calculus
-stands alone).  Connecting them with mechanically-checked
-refinement proofs is the natural next step and the main subject
-of ongoing work.
+The honest summary is that Vegas's transferability premise is
+defended today by three things: the structural design of the
+IR, the mechanically proved theorems VegasCore contributes about
+that structure, and the systematic-by-code-review nature of the
+backends.  A formally certified end-to-end pipeline is the
+natural next milestone, not a prerequisite for present use.

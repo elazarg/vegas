@@ -172,20 +172,55 @@ public writes is not at risk and stays a single node.  This is
 intentional: there is no point in adding round-trips for moves
 that the dependency relation already serialises.
 
+\subsection{The information-barrier property}
+\label{sec:cr:barrier}
+
+What the rewrite produces is a graph in \emph{commit-reveal
+normal form}: every node whose original write was concurrent
+with another's has been split into a commit-then-reveal pair,
+and every reveal in the result is dominated in the DAG by all
+of its risk partners' commits.  The strategic property the
+rewrite delivers is the \emph{information barrier}: in any
+configuration of the rewritten graph, no reveal node is on the
+frontier while any of its commit prerequisites --- its own or a
+risk-partner's --- is still unresolved.
+
+Stated informally for the rewritten graph $G$:
+\begin{quote}\itshape
+For every reveal node $r$ and every configuration $C$ of $G$
+with $r$ enabled in $C$, every node $c \in \mathrm{commitPred}(r)$
+has been assigned in $C$.
+\end{quote}
+By the construction of the rewrite this holds: each
+$r = a^r$ has $\{a^c\} \cup \{b^c : b \in \mathrm{partners}(a)\}$
+among its predecessors, so $r$ can only be enabled when every
+named commit is done.
+
+This property is the rewrite's purpose, but stating it about the
+rewrite alone is half the story.  The same property is proved as
+a theorem in the companion Lean library VegasCore as the
+``Commit/reveal information barrier'' result over the canonical
+event graph (see \S\ref{sec:vegascore}): any event graph in
+which commits dominate reveals enjoys the barrier, regardless of
+how it was obtained.  Vegas's rewrite produces such graphs from
+not-yet-canonical input; VegasCore proves that any such graph
+behaves the way the barrier says.
+
 \subsection{Implementation}
 
-The rewrite lives at \file{ir/EventGraph.kt} as a static
-method \TT{expandCommitReveal} on the \TT{EventGraph} class.  It
-runs once, immediately after the initial IR construction, before
-any backend gets to read the graph.  The implementation is about
-sixty lines of Kotlin and is reachability-driven: it iterates over
-the existing nodes, builds the risk-partner relation by checking
-$\neg(\mathrm{reach}(a,b) \vee \mathrm{reach}(b,a))$ for each pair
-of pure-public nodes, and then performs the local rewrite for each
-risk-partner-bearing node, allocating fresh node ids above the
-current maximum.  The resulting graph is re-validated by the
-EventGraph constructor (it must still be acyclic, the new
+The rewrite lives at \file{ir/EventGraph.kt} as a static method
+\TT{expandCommitReveal} on the \TT{EventGraph} class.  It runs
+once, immediately after the initial IR construction, before any
+backend reads the graph.  The implementation is roughly sixty
+lines of Kotlin and is reachability-driven: it iterates over the
+existing nodes, builds the risk-partner relation by checking
+$\neg(\mathrm{reach}(a,b) \vee \mathrm{reach}(b,a))$ for each
+pair of pure-public nodes, and then performs the local rewrite
+for each risk-partner-bearing node, allocating fresh node ids
+above the current maximum.  The resulting graph is re-validated
+by the EventGraph constructor (it must still be acyclic, the new
 \COMMIT-\REVEAL pairs must be in order, and the read-visibility
-discipline must be preserved); the rewrite is constructed so that
-all three properties are preserved by inspection, and the
-post-rewrite validation is mostly defensive.
+discipline must be preserved).  The post-rewrite validation is
+mostly defensive: all three properties are preserved by the
+local rewrite construction, and the barrier property of
+\S\ref{sec:cr:barrier} is preserved transitively.

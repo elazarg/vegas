@@ -58,23 +58,24 @@ their off-chain client library is sending messages in the right
 order; Scribble's projection toolchain can derive per-role local
 types from the global protocol.
 
-\subsection{Bitcoin / Lightning}
+\subsection{Bitcoin / Lightning (sketch)}
 
-A separate backend (\file{backend/bitcoin/}) targets the two-party
-Lightning channel for the subset of Vegas games with exactly two
-strategic roles.  Each EventGraph node is implemented as a state
-in a Bitcoin script state machine; commitments use OP\_HASH160 and
-OP\_EQUAL, with state transitions encoded as signed updates of
-the channel's commitment transaction.  The output of the backend
-is a textual transcript of the Lightning protocol moves needed to
-realise the game; deploying it on a real Lightning node is
-out-of-band work.
+A proof-of-concept backend (\file{backend/bitcoin/}) targets the
+two-party Lightning channel for the subset of Vegas games with
+exactly two strategic roles.  Each EventGraph node is mapped to
+a state in a Bitcoin script state machine; commitments use
+\TT{OP\_HASH160} and \TT{OP\_EQUAL}, with state transitions
+encoded as signed updates of the channel's commitment
+transaction.  The output is a textual transcript of the
+Lightning protocol moves needed to realise the game --- not a
+deployable artifact.  Deployment on a real Lightning node, and
+the integration work that would entail, is out-of-band.
 
-This backend is the most specialised of the bunch: it does not
-generalise to more than two roles or to non-balanced deposit
-structures.  Its value is that it demonstrates that the EventGraph
+Its value here is the existence proof: the EventGraph
 abstraction lifts to a non-EVM execution layer with completely
 different cryptographic primitives, with no change to the IR.
+A proper Bitcoin/Lightning backend is on the future-work list,
+not a claim of the present work.
 
 \subsection{MAID}
 
@@ -193,7 +194,8 @@ than to the state-machine view that Gambit's tree presents.
 \subsection{GraphViz}
 
 The simplest backend: a textual DOT description of the EventGraph
-for debugging and presentation, with node shapes encoding
-visibility (rounded boxes for \PUBLIC, squares for \COMMIT,
-hexagons for \REVEAL, diamonds for sinks).  Useful for inspecting
-the result of the commit-reveal expansion pass.
+for debugging and presentation.  Player nodes are boxes; chance
+roles are diamonds.  Visibility is encoded in fill colour: pink
+for \COMMIT writes, green for \REVEAL writes, light grey for
+\PUBLIC writes.  Useful for inspecting the result of the
+commit-reveal expansion pass.

@@ -264,9 +264,15 @@ events that the player could not have distinguished anyway.  The
 set of fields observable by role $R$ at node $B$ is
 
 \begin{equation*}
-  \mathrm{obs}_R(B) \;=\; \bigl\{\, f \;\big|\; f \text{ is written by some predecessor } A \text{ of } B,
-            \text{ and either } \mathrm{owner}(A) = R \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\}.
+  \mathrm{obs}_R(B) \;=\; \bigl\{\, f \;\big|\; f \text{ is written by some ancestor } A \text{ of } B,
+            \text{ and either } \mathrm{owner}(A) = R \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\},
 \end{equation*}
+where ``ancestor'' means $A$ reaches $B$ in the dependency DAG.
+The owner of a node always observes their own writes; for owners
+this includes \emph{committed} fields as well as the
+public/revealed ones, since a player knows the value they
+themselves chose to commit.  Public and revealed writes are
+observable to every role.
 
 This is the projection used by the Gambit backend to compute
 information sets and, in a closely related form, by the MAID and
@@ -305,13 +311,9 @@ human reviewer would perform when reading a hand-written
 commit-reveal contract --- the IR just performs them
 systematically.
 
-A note on the read-visibility check: in addition to fields written
-\PUBLIC or revealed by a predecessor, the validator also accepts a
-guard read of a field that the actor itself committed earlier on
-the same DAG path.  An owner ``sees their own writes'' is therefore
-a slightly stronger statement than the bullet above admits: it
-includes their own \emph{committed} fields as well as the
-public/revealed ones.  In practice the typechecker's pre-IR
-desugaring strips fields written by the current node from the
-guard's scope, so this branch matters mostly for guards that
-reference an actor's earlier private writes.
+In practice the typechecker's pre-IR desugaring strips fields
+written by the current node from the guard's scope, so the
+``owner sees their own committed fields'' branch of the
+visibility rule matters mostly for guards that reference an
+actor's \emph{earlier} private writes from elsewhere in the
+protocol.

@@ -29,18 +29,32 @@ what, what is hidden and revealed when, and how the pool is split
 at the end.  Programs are short --- the running examples in this
 report are a dozen lines each --- and look more like the textbook
 description of a game than like a smart-contract framework.  The
-compiler reads the program, infers a dependency relation among its
-actions, and emits a family of artifacts that all denote the same
-protocol from different viewpoints: a Solidity contract for
+compiler reads the program, infers a dependency relation among
+its actions, and emits a family of artifacts that all denote the
+same protocol from different viewpoints: a Solidity contract for
 deployment, an extensive-form game for equilibrium analysis, an
-SMT-LIB encoding for reachability queries, and several others.  Each
-artifact is mechanically derived from the same source.
+SMT-LIB encoding for reachability queries, and several others.
 
-This report describes how that compilation is organized, what the
-language can and cannot express, how the central intermediate
-representation --- the \emph{event graph} --- captures the strategic
-structure of a protocol, and how the per-backend lowerings are
-constrained so that the artifacts agree.
+The premise is not that strategic correctness is proved
+automatically.  The premise is that game-theoretic reasoning
+about the program transfers, modulo the stated execution model,
+to the deployed contract: if an analyst (or a tool) concludes that
+truthful bidding is dominant in the source-language Vickrey
+specification, that conclusion carries over to the Solidity
+contract running on chain.  EFG generation is one channel for
+that reasoning; hand analysis on the source is another;
+mechanical proof in a companion Lean library is a third.  Each is
+made possible by the same property: the compiler structures the
+source so that the program \emph{is} a game with a public history,
+information sets given by the visibility discipline, and a
+payoff function over the terminal state, and every backend is a
+lowering of that game.
+
+This report describes how that compilation is organized, what
+the language can and cannot express, how the central
+intermediate representation --- the \emph{event graph} ---
+captures the strategic structure of a protocol, and how the
+per-backend lowerings are constrained so that the artifacts agree.
 
 \subsection{What Vegas is and is not}
 
@@ -187,8 +201,7 @@ EventGraph in detail; the rest of the report uses it pervasively.
 \subsection{Contributions and outline}
 \label{sec:intro:contributions}
 
-The contributions of this report are pragmatic rather than
-foundational.  We claim:
+The contributions of this report are:
 
 \begin{enumerate}\itemsep2pt
 \item \emph{A language design} (\S\ref{sec:language}) that makes it

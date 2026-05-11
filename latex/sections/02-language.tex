@@ -33,8 +33,8 @@ explicit reassignment.
 
 \subsection{Action statements}
 
-There are four action kinds.  Each writes one or more fields owned
-by its actor.
+There are five action kinds.  Each writes one or more fields
+owned by its actor (for \TT{random}, the actor is a chance role).
 
 \paragraph{\TT{join}.}  Initial deposit and admission.  The
 \TT{join} phase appears once, at the top of the game.  A role
@@ -70,6 +70,16 @@ this (a committed value that is never revealed and never reachable
 through a quit handler is rejected).  Before reveal, only the
 committing actor knows the value --- operationally, the contract
 holds only the hash.
+
+\paragraph{\TT{random}.}  A public chance event: a value is
+sampled by a designated chance role from an explicit finite-support
+distribution.
+\begin{lstlisting}[style=vg]
+random Chance(coin: bool);
+\end{lstlisting}
+The chance role is not a strategic player; \TT{random} writes
+behave like \PUBLIC yields for visibility, and the Gambit backend
+emits a chance node with the declared distribution.
 
 \paragraph{Simultaneous moves.}  Multiple roles can appear in a
 single statement; they are then deemed simultaneous:
