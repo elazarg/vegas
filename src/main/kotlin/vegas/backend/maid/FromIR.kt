@@ -143,7 +143,9 @@ private class MaidConverter(private val ir: GameIR) {
 
         for (meta in ir.dag.metas) {
             val owner = meta.struct.owner
-            val isChance = owner in ir.chanceRoles
+            // Per-node sample-ness (Stage 2): join steps of chance roles are
+            // not random draws, so the per-role view would over-classify them.
+            val isChance = meta.sample != null
             val nodeType = if (isChance) MaidNodeType.CHANCE else MaidNodeType.DECISION
 
             for (param in meta.spec.params) {

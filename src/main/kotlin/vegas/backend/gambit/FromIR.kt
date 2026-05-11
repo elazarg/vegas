@@ -243,9 +243,18 @@ internal class TreeUnroller(
 
         val role = roles[roleIndex]
         var roleMoves = movesByRole[role]
-        val isChance = role in ir.chanceRoles
 
         val actionsForRole = config.actionsByRole(ir.dag)[role].orEmpty()
+        // Per-node chance check (Stage 2): a role's decision at this frontier
+        // is a chance node iff every action it owns here is a sample node.
+        // The all-or-nothing invariant must hold and is asserted defensively.
+        val sampleFlags = actionsForRole.map { ir.dag.isSampleNode(it) }
+        val isChance: Boolean = when {
+            sampleFlags.isEmpty() -> false
+            sampleFlags.all { it } -> true
+            sampleFlags.none { it } -> false
+            else -> error("Mixed sample/strategic actions for role ${role.name} at the current frontier")
+        }
         val allParams = actionsForRole.flatMap { ir.dag.params(it) }
         val hasQuit = config.history.quit(role)
 

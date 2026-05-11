@@ -149,6 +149,19 @@ class EventGraph private constructor(
     fun sampleSpec(id: NodeId): SampleSpec? = meta(id).sample
     fun isSampleNode(id: NodeId): Boolean = meta(id).sample != null
 
+    /**
+     * Roles that own at least one sample (chance) node in this DAG.
+     *
+     * This is the per-node-truth source for [GameIR.chanceRoles]; the
+     * latter is derived from this set so the two views can never diverge.
+     */
+    val chanceRoles: Set<RoleId> by lazy {
+        payloads.values
+            .filter { it.sample != null }
+            .map { it.struct.owner }
+            .toSet()
+    }
+
     /** Reachability queries. */
     fun reaches(from: NodeId, to: NodeId): Boolean =
         reach.reaches(from, to)

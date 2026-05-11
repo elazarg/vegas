@@ -21,7 +21,6 @@ fun compileToIR(ast: GameAst): GameIR {
     val ir = GameIR(
         name = ast.name,
         roles = roles,
-        chanceRoles = chanceRoles,
         dag = EventGraph.expandCommitReveal(dag),
         payoffs = payoffs,
     )

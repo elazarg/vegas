@@ -181,11 +181,16 @@ data class Signature(
 /**
  * A GameIR describes a multi-party interaction where roles perform actions
  * that may depend on each other, leading to payoffs for each role.
+ *
+ * [chanceRoles] is derived from the DAG's per-node sample metadata so the
+ * two views cannot diverge. Per-node sample-ness ([EventGraph.isSampleNode])
+ * is the source of truth; this set is the role-level projection.
  */
 data class GameIR(
     val name: String,
     val roles: Set<RoleId>,
-    val chanceRoles: Set<RoleId>,
     val dag: EventGraph,
-    val payoffs: Map<RoleId, Expr>
-)
+    val payoffs: Map<RoleId, Expr>,
+) {
+    val chanceRoles: Set<RoleId> get() = dag.chanceRoles
+}
