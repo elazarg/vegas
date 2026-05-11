@@ -9,6 +9,22 @@
  * - guardReads → Information edges
  * - Payoffs → Utility nodes + CPDs
  * - Visibility (COMMIT/REVEAL/PUBLIC) → Information flow timing
+ *
+ * ## Expressiveness limit: self-only guards
+ *
+ * A MAID node carries a single static domain (its `domain` field). It cannot
+ * encode a *context-dependent* legal action set, i.e. one whose allowed
+ * values depend on prior nodes' writes. A `where` clause that references
+ * only the variable being written here ("self-only", e.g. `where x != 2`)
+ * could in principle be folded into a restricted per-node domain, but a
+ * guard referencing other nodes (e.g. `where Host.goat != Guest.d`) is
+ * fundamentally not representable in plain MAID.
+ *
+ * This backend therefore gates on `NodeStruct.guardReads`: if any node's
+ * guard references a field written by a different node, MAID emission is
+ * refused with an [UnsupportedMaidGuardException]. Self-only guards remain
+ * accepted (their domain restriction is currently still discarded — a TODO
+ * for the self-only encoding pass).
  */
 package vegas.backend.maid
 
@@ -23,14 +39,39 @@ import vegas.semantics.eval
 import java.util.UUID
 
 /**
+ * Thrown when [generateMaid] is called on an IR whose guards reference other
+ * nodes' writes. Such guards cannot be encoded in plain MAID (no per-context
+ * domain restriction). See file-level docstring.
+ */
+class UnsupportedMaidGuardException(message: String) : RuntimeException(message)
+
+/**
  * Generate a MAID from Vegas IR.
  *
+ * @throws UnsupportedMaidGuardException if any guard references fields
+ *         written by other nodes (contextual guards are not representable
+ *         in MAID).
  * @param ir The compiled Vegas GameIR
  * @return MaidGame ready for JSON serialization
  */
 fun generateMaid(ir: GameIR): MaidGame {
+    rejectContextualGuards(ir)
     val converter = MaidConverter(ir)
     return converter.convert()
+}
+
+private fun rejectContextualGuards(ir: GameIR) {
+    val offenders = ir.dag.metas
+        .filter { it.struct.guardReads.isNotEmpty() }
+    if (offenders.isEmpty()) return
+    val detail = offenders.joinToString("; ") { meta ->
+        val refs = meta.struct.guardReads.joinToString(",") { "${it.owner.name}.${it.param.name}" }
+        "${meta.struct.owner.name}@${meta.id.second} reads {$refs}"
+    }
+    throw UnsupportedMaidGuardException(
+        "MAID cannot encode context-dependent guards (no per-node " +
+        "context-conditioned domain). Offending nodes: $detail"
+    )
 }
 
 /**

@@ -56,7 +56,7 @@ We identify six levels, from surface syntax down to deployed contracts:
 No dedicated parser test file exists. Parsing is tested only indirectly:
 - `ExamplesValidationTest` verifies all `.vg` example files parse successfully.
 - `MacroTest` exercises macro-related parsing.
-- `ActionDagTypecheckTest` parses valid/invalid files.
+- `EventGraphTypecheckTest` parses valid/invalid files.
 
 ### 1.2 Missing Tests
 
@@ -221,7 +221,7 @@ class GuardRejectionTest : FunSpec({
         // ... advance to Host's move after Guest picks door 1 ...
 
         val illegalMove = GameMove(
-            actionId = hostActionId,
+            nodeId = hostNodeId,
             role = host,
             visibility = Visibility.PUBLIC,
             assignments = mapOf(goatVar to Expr.Const.IntVal(1)) // same as Guest
@@ -382,7 +382,7 @@ class EthNegativeTest : FunSpec({
 
         // Host tries to reveal goat = same door as Guest → should revert
         val illegalMove = GameMove(
-            actionId = hostRevealId,
+            nodeId = hostRevealId,
             role = hostRole,
             visibility = Visibility.PUBLIC,
             assignments = mapOf(goatVar to Expr.Const.IntVal(1))

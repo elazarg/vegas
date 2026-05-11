@@ -10,6 +10,70 @@
 
 ---
 
+## 0. Alignment with VegasCore
+
+VegasCore is the companion Lean 4 formalization of the Vegas core calculus.
+The two artifacts are independent — VegasCore is a self-contained semantic
+construction; Vegas is the compiler tool — but where they describe the same
+object, we use the same name on both sides.
+
+### 0.1 Aligned vocabulary
+
+| Vegas (this codebase)            | VegasCore (Lean)        |
+|----------------------------------|-------------------------|
+| `EventGraph` (was `ActionDag`)   | `EventGraph`            |
+| `NodeId` (was `ActionId`)        | event/node id           |
+| `NodeMeta` / `Struct` / `Spec`   | per-node payload        |
+| `Guard(scope, expr)`             | per-node guard `R`      |
+| `Visibility {COMMIT, REVEAL, PUBLIC}` | hidden/pub + Commit/Reveal node kinds (encoded jointly here) |
+| `FrontierMachine`                | frontier                |
+| terminal `withdraw`              | `Ret`                   |
+| `random`                         | `Sample`                |
+
+### 0.2 Vegas-only concepts (deliberate divergence)
+
+Each of these is Vegas-specific and stays under its current name; the
+reason is given. VegasCore does not need to mirror them.
+
+* **Surface keywords** (`join`, `yield`, `commit`, `reveal`, `random`,
+  `withdraw`, `where`, `||`, `or split/burn/null`, `let!`). User-facing;
+  lower into VegasCore's five core constructors at the IR level.
+* **Macros.** Inlined before IR; no semantic role downstream.
+* **Risk-partner detection and automatic commit-reveal insertion.** A
+  compilation pass, not a semantic notion. VegasCore is post-insertion.
+* **Quit handlers, bail, timeouts, subgames.** Operational/Solidity-side
+  concerns; VegasCore currently treats quit as a strategic move only.
+* **`chanceRoles : Set<RoleId>`** (vs VegasCore's per-node `Sample`
+  carriers). Coarser abstraction kept for backend simplicity.
+* **`FieldRef = (Role, VarId)` as the field identifier.** VegasCore uses
+  a typed-context position; the shapes are isomorphic for checked
+  programs but the Lean encoding bakes typing in. Kept Vegas-side.
+* **Diamond-DAG-Strategy emission** in the Gallina/Lean backends. An
+  original Vegas contribution: emits a `Record ActionDag` (fair-play
+  completeness proof) paired with `Record EventDag` (trace). The
+  Action/Event distinction here is theory-load-bearing and does *not*
+  follow the type-name rename above.
+* **Eight non-VegasCore backends** (Solidity, Vyper, Gambit, SMT,
+  Scribble, Bitcoin/Lightning, MAID, Gallina/Lean). Each has its own
+  internal vocabulary.
+
+### 0.3 Known semantic gaps
+
+* **MAID is gated.** Plain MAIDs cannot encode context-dependent legal
+  action sets (`MaidNode.domain` is a single static list). Vegas now
+  refuses to emit MAID for any program whose guards reference fields
+  written by other nodes; self-only guards (`where x != 2`) are accepted
+  but their domain restriction is currently still discarded — see
+  `backend/maid/FromIR.kt` and TODO.
+* **Static obligations are spread across the pipeline.** The four
+  VegasCore-style well-formedness obligations (freshness, reveal
+  completeness, distribution normalization, at-least-one-legal-action)
+  are enforced today but live in different files under different names
+  (`TypeChecker`, `EventGraph.fromGraph`, `ToIR`). Lifting them under
+  VegasCore's names is on the TODO list.
+
+---
+
 ## 1. High-Level Picture
 
 ### 1.1 Vegas in One Sentence
@@ -22,7 +86,7 @@ Vegas is a **protocol DSL** that compiles to:
 
 For a fixed Vegas program:
 
-> Vegas program → IR → `ActionDag` (Dependency DAG) →
+> Vegas program → IR → `EventGraph` (Dependency DAG) →
 > (a) Solidity contract,
 > (b) EFG (Gambit),
 > (c) optional SMT/DQBF encodings.
@@ -80,12 +144,12 @@ This matches the way Vegas already works with commit/reveal and `where` clauses,
 
 ## 3. Core Data Structures
 
-### 3.1 ActionId
+### 3.1 NodeId
 
-We keep ActionIds simple and IR-oriented:
+We keep NodeIds simple and IR-oriented:
 
 ```kotlin
-typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - source sequence number)
+typealias NodeId = Pair<RoleId, Int> // (Role, StepIndex - source sequence number)
 ```
 
 * `RoleId` = logical participant.
@@ -93,12 +157,12 @@ typealias ActionId = Pair<RoleId, Int> // (Role, StepIndex - source sequence num
 
 This can be refined later (e.g. adding a local action index) without changing the DAG API.
 
-### 3.2 ActionMeta and ActionStruct
+### 3.2 NodeMeta and NodeStruct
 
-Metadata describes **who**, **what**, and **how visible**. In the implementation (`ActionDag.kt`), this is split into `ActionMeta` (container) and `ActionStruct` (structural visibility):
+Metadata describes **who**, **what**, and **how visible**. In the implementation (`EventGraph.kt`), this is split into `NodeMeta` (container) and `NodeStruct` (structural visibility):
 
 ```kotlin
-data class ActionStruct(
+data class NodeStruct(
     val owner: RoleId,
     val writes: Set<FieldRef>,            // fields produced/updated
     val visibility: Map<FieldRef, Visibility>,
@@ -126,34 +190,34 @@ Interpretation:
 
 This is the **property-bundle hook**: the semantics of “what becomes true” is driven by `writes`, `visibility`, and the IR’s `where` clauses.
 
-### 3.3 ActionDag (Dependency DAG)
+### 3.3 EventGraph (Dependency DAG)
 
-`ActionDag` wraps a generic `Dag<ActionId>` with metadata and reachability info:
+`EventGraph` wraps a generic `Dag<NodeId>` with metadata and reachability info:
 
 ```kotlin
-class ActionDag private constructor(
-    private val dag: Dag<ActionId>,
-    private val payloads: Map<ActionId, ActionMeta>,
-    private val reach: Reachability<ActionId>
-) : Dag<ActionId> by dag {
+class EventGraph private constructor(
+    private val dag: Dag<NodeId>,
+    private val payloads: Map<NodeId, NodeMeta>,
+    private val reach: Reachability<NodeId>
+) : Dag<NodeId> by dag {
 
-    fun meta(id: ActionId): ActionMeta = payloads.getValue(id)
+    fun meta(id: NodeId): NodeMeta = payloads.getValue(id)
 
-    fun owner(id: ActionId): RoleId = meta(id).struct.owner
-    fun writes(id: ActionId): Set<FieldRef> = meta(id).struct.writes
-    fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = meta(id).struct.visibility
+    fun owner(id: NodeId): RoleId = meta(id).struct.owner
+    fun writes(id: NodeId): Set<FieldRef> = meta(id).struct.writes
+    fun visibilityOf(id: NodeId): Map<FieldRef, Visibility> = meta(id).struct.visibility
     // ...
 
     /** Convenience: can these actions run without ordering constraints? */
-    fun canExecuteConcurrently(a: ActionId, b: ActionId): Boolean =
+    fun canExecuteConcurrently(a: NodeId, b: NodeId): Boolean =
         !reach.comparable(a, b) // Implementation uses precomputed reachability
 
     companion object {
         fun fromGraph(
-            nodes: Set<ActionId>,
-            deps: Map<ActionId, Set<ActionId>>,
-            payloads: Map<ActionId, ActionMeta>,
-        ): ActionDag? {
+            nodes: Set<NodeId>,
+            deps: Map<NodeId, Set<NodeId>>,
+            payloads: Map<NodeId, NodeMeta>,
+        ): EventGraph? {
             // Checks acyclicity and visibility invariants
             // Returns null if invalid
         }
@@ -168,7 +232,7 @@ This means:
 
 ### 3.4 DAG Invariants
 
-Any `ActionDag` must satisfy:
+Any `EventGraph` must satisfy:
 
 1. **Acyclicity:**
 
@@ -199,13 +263,13 @@ These invariants model the all-or-nothing, on-chain commit–reveal pattern.
 
 ## 4. Building the Dependency DAG from IR
 
-**File:** `src/main/kotlin/vegas/ir/ActionDag.kt`
+**File:** `src/main/kotlin/vegas/ir/EventGraph.kt`
 
-We derive `ActionDag` from `GameIR`:
+We derive `EventGraph` from `GameIR`:
 
 1. **Collect nodes:**
 
-    * For each source index `i` and each role `r` that has an action at that index, create `ActionId(r, i)`.
+    * For each source index `i` and each role `r` that has an action at that index, create `NodeId(r, i)`.
 
 2. **Infer dependencies:**
 
@@ -224,7 +288,7 @@ We derive `ActionDag` from `GameIR`:
 
 3. **Build metadata:**
 
-   For every `ActionId(r, i)`:
+   For every `NodeId(r, i)`:
 
     * `role = r`
     * `writes = set of FieldRef` derived from the action’s signature / IR.
@@ -234,7 +298,7 @@ We derive `ActionDag` from `GameIR`:
 4. **Construct DAG:**
 
    ```kotlin
-   return ActionDag.fromGraph(
+   return EventGraph.fromGraph(
        nodes = actions,
        deps = dependencies,
        payloads = payloads
@@ -263,7 +327,7 @@ Outline:
 1. **Linearize DAG (deterministic IDs):**
 
    ```kotlin
-   private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
+   private fun linearizeDag(dag: EventGraph): Map<NodeId, Int> =
        dag.topo()
           // Stable deterministic ordering: by index, then role name
           // (arbitrary but consistent across compilations)
@@ -337,7 +401,7 @@ Outline:
 
 **Approach:**
 
-* `FrontierMachine<ActionId>` maintains the set of currently enabled actions (all prerequisites done).
+* `FrontierMachine<NodeId>` maintains the set of currently enabled actions (all prerequisites done).
 * For each frontier:
 
     * group enabled actions by owner,
@@ -352,7 +416,7 @@ Outline:
 **Implementation sketch:**
 
 ```kotlin
-class DagGameTreeBuilder(ir: GameIR, dag: ActionDag) {
+class DagGameTreeBuilder(ir: GameIR, dag: EventGraph) {
     fun build(): GameTree {
         val frontier = FrontierMachine(dag)
         return buildFromFrontier(frontier, State.empty())
@@ -362,7 +426,7 @@ class DagGameTreeBuilder(ir: GameIR, dag: ActionDag) {
 
 Implementation uses:
 
-* `ActionDag` metadata (guardReads and visibility),
+* `EventGraph` metadata (guardReads and visibility),
 * `Algo.ancestorsOf` for transitive closure of known fields,
 * plus current state to determine what each role knows at each node.
 
@@ -399,7 +463,7 @@ DAG is core infrastructure and **must** be well-tested.
 
 ### 6.1 Unit Tests for DAG Construction
 
-**Files:** `src/test/kotlin/vegas/ActionDagCoreTest.kt`, `src/test/kotlin/vegas/ActionDagFromIrTest.kt`
+**Files:** `src/test/kotlin/vegas/EventGraphCoreTest.kt`, `src/test/kotlin/vegas/EventGraphFromIrTest.kt`
 
 Tests:
 
@@ -472,7 +536,7 @@ For each example game:
 
 ### 6.4 Property-Based Tests (Optional, Future)
 
-* Generate random small DAGs (with synthetic `ActionMetadata`) and check:
+* Generate random small DAGs (with synthetic `NodeMeta`) and check:
 
     * `topo()` respects ordering.
     * `canExecuteConcurrently` matches graph properties.
@@ -487,7 +551,7 @@ These are **axes**, not yet implemented. This doc keeps the current design compa
 1. **Richer property layer:**
 
     * Today: properties live implicitly in IR `where`/guards.
-    * Future: `Prop(expr, kind: GUARD | ASSERTION | ORACLE_BACKED)` inside `ActionMeta`.
+    * Future: `Prop(expr, kind: GUARD | ASSERTION | ORACLE_BACKED)` inside `NodeMeta`.
 
 2. **Crypto / oracle modeling:**
 
@@ -513,7 +577,7 @@ These are **axes**, not yet implemented. This doc keeps the current design compa
 
 ## 8. Summary
 
-* Vegas’ **core semantic object** is `ActionDag` (a `Dag<ActionId>`) annotated with `ActionMeta` (role, writes, visibility, reads).
+* Vegas’ **core semantic object** is `EventGraph` (a `Dag<NodeId>`) annotated with `NodeMeta` (role, writes, visibility, reads).
 * We are **already intensional** at value level: actions choose concrete values that matter later.
 * We deliberately stay **extensional** at proof-object level: we track **which facts are established**, not how proofs are structured.
 * The **property-bundle view** (what each node makes true and visible) is the main lever for expressing:

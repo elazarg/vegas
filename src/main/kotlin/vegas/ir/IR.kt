@@ -64,18 +64,16 @@ fun Expr.Const.asInt(): Int = when (this) {
 }
 
 /**
- * Requirements specify when an action can execute.
+ * Guard: the precondition gating a node's execution.
  *
- * after: Control dependencies (must-happen-before). Forms DAG.
- * sees: Data dependencies (which fields this action's condition reads).
- *       WF condition: Fields in condition must appear in sees.
- * condition: Logical guard enabling action.
+ * scope: Fields this guard MAY read. Must be DAG predecessors.
+ * expr:  Boolean expression; the node fires only when it evaluates true.
  *
- * All backends implement via "done flags": <action>_<param>_done.
+ * Aligned with VegasCore's per-node guard predicate `R`.
  */
-data class Requirement(
-    val captures: Set<FieldRef>,    // Fields this guard MAY read (must be from DAG predecessors)
-    val condition: Expr             // boolean; see "Guard scheduling"
+data class Guard(
+    val scope: Set<FieldRef>,
+    val expr: Expr,
 )
 
 data class Join(
@@ -105,7 +103,7 @@ data class Parameter(
 data class Signature(
     val join: Join?,              // non-null if this is the role's "join" step
     val parameters: List<Parameter>,
-    val requires: Requirement      // guard for this action (snapshot semantics)
+    val guard: Guard,             // precondition for this action (snapshot semantics)
 )
 
 /**

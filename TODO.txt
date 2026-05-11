@@ -1,4 +1,32 @@
 TODO:
+
+# Alignment with VegasCore
+
+* Verified compiled artifacts: emit a new backend that imports Vegas.Core.Program
+  from VegasCore and produces a per-program WFProgram value with decide/rfl
+  certificates discharging freshness, reveal-completeness, distribution
+  normalization, and at-least-one-legal-action. This is the per-artifact
+  alternative to a fully verified compiler.
+* Named static obligations: expose the typechecker's well-formedness checks
+  under VegasCore-aligned names (freshness, revealComplete, normalizedDists,
+  legal). Several are already enforced implicitly across TypeChecker/
+  EventGraph.fromGraph/ToIR; lifting them into one named pass would make the
+  cross-references with VegasCore unambiguous.
+* Fair-play liveness pass (the `legal` obligation; see docs/LIVENESS.md):
+  prove guard satisfiability in every reachable configuration, or fall back
+  to conservative `opt T` typing for unprovable cases.
+
+# MAID
+
+* Currently MAID emission is gated to refuse contextual guards (a guard that
+  references writes from other nodes). Self-only guards are accepted but
+  their domain restriction is still discarded. Implement the self-only path:
+  fold `where x != 2` into a restricted per-node domain.
+* Longer-term: either drop MAID in favor of EFG/Gambit, or upgrade to a
+  constrained-MAID encoding that can carry context-dependent action sets.
+
+# Existing TODOs
+
 * Generate clients / client stubs
 * Support ERC-20 / ERC-777 tokens (code generation)
 * Support multi-token games

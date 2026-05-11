@@ -6,7 +6,7 @@ Vegas is a domain-specific language for specifying strategic games. It emphasize
 
 ## Execution Model: The Dependency DAG
 
-Unlike traditional imperative languages that execute line-by-line, or round-based systems that execute in lock-step, Vegas compiles your program into a **Directed Acyclic Graph (DAG)** of actions.
+Unlike traditional imperative languages that execute line-by-line, or round-based systems that execute in lock-step, Vegas compiles your program into a **Directed Acyclic Graph (DAG)** of actions. Internally this graph is called the **EventGraph** (matching the same name in the VegasCore Lean formalization); each surface-level action becomes a node in it.
 
 ### 1. Action Dependencies
 The compiler analyzes data flow to determine dependencies. An action $B$ depends on action $A$ if:

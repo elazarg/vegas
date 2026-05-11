@@ -204,7 +204,7 @@ fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
             val id = role to pIdx
             val dset = deps.getOrPut(id) { mutableSetOf() }
             val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
-            val guardReads = sig.requires.captures - writes
+            val guardReads = sig.guard.scope - writes
 
             // Phase-order dependency: immediately prior phase must have happened
             val prevPhase = pIdx - 1
@@ -238,7 +238,7 @@ fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
             val id = role to pIdx
 
             val writes = sig.parameters.map { FieldRef(role, it.name) }.toSet()
-            val guardReads = sig.requires.captures - writes
+            val guardReads = sig.guard.scope - writes
 
             val visibility = buildVisibilityMap(role, pIdx, sig, phases)
 
@@ -254,7 +254,7 @@ fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
             val spec = NodeSpec(
                 params = params,
                 join = sig.join,
-                guardExpr = sig.requires.condition,
+                guardExpr = sig.guard.expr,
             )
 
             payloads[id] = NodeMeta(id = id, spec = spec, struct = struct)
@@ -322,7 +322,7 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
                 visible = kind != Kind.COMMIT
             )
         },
-        requires = Requirement(
+        guard = Guard(
             // IMPORTANT: collectCaptures must be called on the original AST expression
             // BEFORE lowerExpr performs let-desugaring via substitution.
             // However, collectCaptures recursively processes Let nodes (see line 381-384),
@@ -335,9 +335,9 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
             //   - Returns: {Alice.bid}
             //   - lowerExpr substitutes to: (Alice.bid > 100)
             //   - Runtime evaluation uses: Alice.bid
-            // The capture set correctly reflects the runtime field access.
-            captures = collectCaptures(query.where),
-            condition = lowerExpr(query.where, typeEnv)
+            // The scope correctly reflects the runtime field access.
+            scope = collectCaptures(query.where),
+            expr = lowerExpr(query.where, typeEnv)
         )
     )
 }
