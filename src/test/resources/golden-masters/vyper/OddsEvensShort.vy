@@ -42,7 +42,6 @@ def __init__():
 @payable
 def move_Odd_1():
     assert self.roles[msg.sender] == Role.None, "bad role"
-    self._check_timestamp(Role.None)
     assert not self.bailed[Role.None], "you bailed"
     assert not self.actionDone[Role.Odd][0], "already done"
     assert (not self.done_Odd), "already joined"
@@ -58,7 +57,6 @@ def move_Odd_1():
 @payable
 def move_Even_0():
     assert self.roles[msg.sender] == Role.None, "bad role"
-    self._check_timestamp(Role.None)
     assert not self.bailed[Role.None], "you bailed"
     assert not self.actionDone[Role.Even][0], "already done"
     assert (not self.done_Even), "already joined"
@@ -73,13 +71,16 @@ def move_Even_0():
 @external
 def move_Odd_2(_hidden_c: bytes32):
     assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
     assert not self.bailed[Role.Odd], "you bailed"
     assert not self.actionDone[Role.Odd][2], "already done"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
     self.Odd_c_hidden = _hidden_c
@@ -91,13 +92,16 @@ def move_Odd_2(_hidden_c: bytes32):
 @external
 def move_Even_4(_hidden_c: bytes32):
     assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
     assert not self.bailed[Role.Even], "you bailed"
     assert not self.actionDone[Role.Even][4], "already done"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
     self.Even_c_hidden = _hidden_c
@@ -109,19 +113,26 @@ def move_Even_4(_hidden_c: bytes32):
 @external
 def move_Odd_3(_c: bool, _salt: uint256):
     assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
     assert not self.bailed[Role.Odd], "you bailed"
     assert not self.actionDone[Role.Odd][3], "already done"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][2]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][2], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][4]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     self._checkReveal(self.Odd_c_hidden, Role.Odd, msg.sender, _abi_encode(_c, _salt))
@@ -134,19 +145,26 @@ def move_Odd_3(_c: bool, _salt: uint256):
 @external
 def move_Even_5(_c: bool, _salt: uint256):
     assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
     assert not self.bailed[Role.Even], "you bailed"
     assert not self.actionDone[Role.Even][5], "already done"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][0], "dependency not satisfied"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][2]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][2], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][4]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][4], "dependency not satisfied"
     self._checkReveal(self.Even_c_hidden, Role.Even, msg.sender, _abi_encode(_c, _salt))
@@ -159,13 +177,16 @@ def move_Even_5(_c: bool, _salt: uint256):
 @external
 def withdraw_Odd():
     assert self.roles[msg.sender] == Role.Odd, "bad role"
-    self._check_timestamp(Role.Odd)
     assert not self.bailed[Role.Odd], "you bailed"
     assert not self.actionDone[Role.Odd][4], "already done"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][3], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][5], "dependency not satisfied"
     assert (not self.claimed_Odd), "already claimed"
@@ -181,13 +202,16 @@ def withdraw_Odd():
 @external
 def withdraw_Even():
     assert self.roles[msg.sender] == Role.Even, "bad role"
-    self._check_timestamp(Role.Even)
     assert not self.bailed[Role.Even], "you bailed"
     assert not self.actionDone[Role.Even][6], "already done"
-    self._check_timestamp(Role.Odd)
+    if (not self.actionDone[Role.Odd][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Odd] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Odd]:
         assert self.actionDone[Role.Odd][3], "dependency not satisfied"
-    self._check_timestamp(Role.Even)
+    if (not self.actionDone[Role.Even][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+        self.bailed[Role.Even] = True
+        self.lastTs = block.timestamp
     if not self.bailed[Role.Even]:
         assert self.actionDone[Role.Even][5], "dependency not satisfied"
     assert (not self.claimed_Even), "already claimed"
@@ -204,14 +228,6 @@ def withdraw_Even():
 @external
 def __default__():
     assert False, "direct ETH not allowed"
-
-@internal
-def _check_timestamp(role: Role):
-    if role == Role.None:
-        return
-    if block.timestamp > self.lastTs + TIMEOUT:
-        self.bailed[role] = True
-        self.lastTs = block.timestamp
 
 @internal
 @view

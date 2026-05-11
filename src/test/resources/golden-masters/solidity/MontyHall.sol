@@ -40,18 +40,11 @@ contract MontyHall {
     
     mapping(Role => bool) private bailed;
     
-    function _check_timestamp(Role role) private {
-        if (role == Role.None) {
-            return;
-        }
-        if (block.timestamp > lastTs + TIMEOUT) {
+    modifier depends(Role role, uint256 actionId) {
+        if (!actionDone[role][actionId] && block.timestamp > lastTs + TIMEOUT) {
             bailed[role] = true;
             lastTs = block.timestamp;
         }
-    }
-    
-    modifier depends(Role role, uint256 actionId) {
-        _check_timestamp(role);
         if (!bailed[role]) {
             require(actionDone[role][actionId], "dependency not satisfied");
         }
@@ -68,7 +61,6 @@ contract MontyHall {
     
     modifier by(Role role) {
         require((roles[msg.sender] == role), "bad role");
-        _check_timestamp(role);
         require(!bailed[role], "you bailed");
         _;
     }

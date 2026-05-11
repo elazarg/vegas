@@ -45,9 +45,6 @@ fun generateVyper(contract: EvmContract): String {
         appendLine()
 
         // Internal Helpers
-        renderCheckTimestampHelper()
-        appendLine()
-
         if (needsCheckReveal(contract)) {
             renderCheckRevealHelper()
             appendLine()
@@ -114,8 +111,7 @@ private fun StringBuilder.renderAction(a: EvmAction) {
         val roleCheck = "self.$roleMap[msg.sender] == ${roleEnumMember(a.invokedBy.name)}"
         appendLine("assert $roleCheck, \"bad role\"")
 
-        // Timeout check (inline from 'by' modifier)
-        appendLine("self._check_timestamp(${roleEnumMember(a.invokedBy.name)})")
+        // Bail check (inline from 'by' modifier) - bail attribution happens in 'depends'
         appendLine("assert not self.bailed[${roleEnumMember(a.invokedBy.name)}], \"you bailed\"")
 
         // Not Done Check (inline 'action' modifier)
@@ -123,11 +119,15 @@ private fun StringBuilder.renderAction(a: EvmAction) {
         val actionIdx = a.actionId.second
         appendLine("assert not self.actionDone[$actionRole][$actionIdx], \"already done\"")
 
-        // Dependencies (inline 'depends' modifier) - only assert is conditional on bail
+        // Dependencies (inline 'depends' modifier) - bail attribution gated on the
+        // dependency not being satisfied, so the delinquent role (not the caller)
+        // is the one marked bailed.
         a.dependencies.forEach { dep ->
             val depRole = roleEnumMember(dep.first.name)
             val depIdx = dep.second
-            appendLine("self._check_timestamp($depRole)")
+            appendLine("if (not self.actionDone[$depRole][$depIdx]) and (block.timestamp > self.lastTs + TIMEOUT):")
+            appendLine("    self.bailed[$depRole] = True")
+            appendLine("    self.lastTs = block.timestamp")
             appendLine("if not self.bailed[$depRole]:")
             // Manual indentation for single assert inside if block
             appendLine("    assert self.actionDone[$depRole][$depIdx], \"dependency not satisfied\"")
@@ -166,25 +166,6 @@ private fun StringBuilder.renderDefaultFunction() {
     appendLine("def __default__():")
     indent {
         appendLine("assert False, \"direct ETH not allowed\"")
-    }
-}
-
-private fun StringBuilder.renderCheckTimestampHelper() {
-    // Timeout handling - allows bailout if game stalls
-    // Matches Solidity's _check_timestamp function
-    appendLine("@internal")
-    appendLine("def _check_timestamp(role: Role):")
-    indent {
-        appendLine("if role == Role.None:")
-        indent {
-            appendLine("return")
-        }
-        // Second condition is independent - check timeout after early return
-        appendLine("if block.timestamp > self.lastTs + TIMEOUT:")
-        indent {
-            appendLine("self.bailed[role] = True")
-            appendLine("self.lastTs = block.timestamp")
-        }
     }
 }
 
