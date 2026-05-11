@@ -143,7 +143,7 @@ function move_Guest_3(int256 _d)
     action(Role.Guest, 3)
     depends(Role.Host, 2)
 {
-    require(_d >= 0 && _d <= 2, "domain");
+    require(((_d >= 0) && (_d <= 2)), "domain");
     Guest_d = _d;
     done_Guest_d = true;
 }

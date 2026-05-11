@@ -87,7 +87,12 @@ happens); each reveal node only branches by 2 (the committed
 value or Quit), but the reveal frontier is visited once per
 commit combination, so the total tree size grows
 multiplicatively.  The bundled Vickrey example uses a 3-value
-bid type to keep the tree analysable.  This is fine for the example library;
+bid type to keep the tree analysable.  This is a limit of
+tree-enumeration analysis, not of the language: a Vegas
+program with a larger bid type compiles and deploys correctly,
+but the resulting EFG becomes too large for Gambit-style
+equilibrium search, and the analyst gains nothing from the EFG
+backend past that point.  This is fine for the example library;
 it is not what one would deploy against a competitive-bidding
 mechanism with millions of bid levels.  Vegas's contract-side bid types are typically narrow because
 Gambit cannot otherwise analyse them; wider ranges deploy fine
@@ -107,9 +112,9 @@ has an or-handler.  This is the right thing
 game-theoretically (it captures the strategic option of timing
 out), but it does inflate the tree.
 
-\paragraph{Chance nodes.}  Public randomness (\TT{random}) is
-emitted as Gambit chance moves with the relevant probabilities
-read off the source.  Each chance event is a node of its own,
-with the same simultaneity treatment as a player move (chance
-events on the same frontier appear as a single composite chance
-move).
+\paragraph{Chance nodes.}  Actions owned by a role declared
+with \TT{random} (\S\ref{sec:language}) are emitted as Gambit
+chance moves with a uniform distribution over the action's
+domain --- the current source language has no syntax for
+non-uniform distributions.  Each chance event is a node of its
+own, with the same simultaneity treatment as a player move.

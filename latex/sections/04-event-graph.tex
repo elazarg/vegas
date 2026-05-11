@@ -45,8 +45,8 @@ artifacts.
 \end{center}
 
 The frontend (\file{vegas/frontend/}) parses with an
-ANTLR-generated parser, inlines macros, and runs a four-pass type
-checker that validates type aliases, macro signatures, the
+ANTLR-generated parser, inlines macros, and runs a typechecker
+that validates the type universe, macro signatures, the
 protocol's join/yield/reveal/commit/withdraw structure, and the
 visibility discipline of guards.  It then lowers to an
 intermediate representation \TT{GameIR}, which packages the
@@ -161,9 +161,12 @@ A \emph{configuration} of the EventGraph is a partial assignment
 from nodes to outcomes (one outcome per node: a tuple of values
 for the node's written fields, or \texttt{Quit}).  A node is
 \emph{enabled} in a configuration when all its predecessors have
-been assigned and its guard, evaluated on the configuration's
-public writes plus the actor's local view, is true.  The set of
-enabled, unassigned nodes is the configuration's \emph{frontier}.
+been assigned.  The set of enabled, unassigned nodes is the
+configuration's structural \emph{frontier}.  Whether an actor
+may actually play a given enabled node depends additionally on
+their guard evaluating to true under the configuration; that
+extra check lives in the semantics layer, not in the frontier
+computation itself.
 
 Two properties of the frontier matter for the backends:
 
@@ -198,11 +201,11 @@ The Monty Hall example from \S\ref{sec:intro:first-example}
 produces the EventGraph below.  Every statement in that source is
 its own top-level phase, so the dependency relation is a chain
 plus one long-distance edge from the Host's \COMMIT to the
-matching \REVEAL.  Squares are \COMMIT writes, hexagons are
-\REVEAL writes, ovals are \PUBLIC writes.  The commit-reveal
-expansion pass (\S\ref{sec:commit-reveal}) does nothing here,
-because none of the public writes are concurrent with each
-other.
+matching \REVEAL.  Plain rounded boxes are \PUBLIC writes,
+red squared boxes are \COMMIT writes, and the green hexagon is
+the \REVEAL.  The commit-reveal expansion pass
+(\S\ref{sec:commit-reveal}) does nothing here, because none of
+the public writes are concurrent with each other.
 
 \begin{center}
 \begin{tikzpicture}[

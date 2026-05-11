@@ -101,29 +101,42 @@ reveal nodes that all wait for the full commit phase (right).
 \begin{center}
 \begin{tikzpicture}[
   every node/.style={font=\small},
-  pu/.style={draw, rounded corners, inner sep=2pt, minimum width=1.5cm, minimum height=4mm, fill=blue!8},
-  cnode/.style={draw, inner sep=2pt, minimum width=1.5cm, minimum height=4mm, fill=red!10},
+  pu/.style={draw, rounded corners, inner sep=2pt, minimum width=1.4cm, minimum height=4mm, fill=blue!8},
+  cnode/.style={draw, inner sep=2pt, minimum width=1.4cm, minimum height=4mm, fill=red!10},
   rv/.style={draw, regular polygon, regular polygon sides=6, inner sep=0pt,
-             minimum width=1.6cm, minimum height=5mm, fill=green!10},
-  arr/.style={-{Stealth[length=2mm]}, thick}
+             minimum width=1.5cm, minimum height=5mm, fill=green!10},
+  bar/.style={draw, fill=gray!20, minimum width=4.4cm, minimum height=4mm,
+              inner sep=2pt},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  arrg/.style={-{Stealth[length=2mm]}, thick, gray},
 ]
-\node[pu] (b1) at (-0.8, 0)   {B1.b};
-\node[pu] (b2) at ( 0.6, 0)   {B2.b};
-\node[pu] (b3) at ( 2.0, 0)   {B3.b};
-\node     at ( 0.6,-0.9) {\textit{before rewrite}};
+\node[pu] (b1) at (-0.9, 0)   {B1.b};
+\node[pu] (b2) at ( 0.5, 0)   {B2.b};
+\node[pu] (b3) at ( 1.9, 0)   {B3.b};
+\node     at ( 0.5,-0.9) {\textit{before rewrite}};
 
-\node[cnode] (c1) at ( 6.0, 0.5) {B1.b};
-\node[cnode] (c2) at ( 7.4, 0.5) {B2.b};
-\node[cnode] (c3) at ( 8.8, 0.5) {B3.b};
-\node[rv] (r1) at ( 6.0,-1.2) {B1.b};
-\node[rv] (r2) at ( 7.4,-1.2) {B2.b};
-\node[rv] (r3) at ( 8.8,-1.2) {B3.b};
-\node     at ( 7.4,-2.1) {\textit{after rewrite}};
-\foreach \c in {c1, c2, c3}
-  \foreach \r in {r1, r2, r3}
-    \draw[arr, gray] (\c) -- (\r);
+\node[cnode] (c1) at ( 5.6, 0.8) {B1.b};
+\node[cnode] (c2) at ( 7.0, 0.8) {B2.b};
+\node[cnode] (c3) at ( 8.4, 0.8) {B3.b};
+\node[bar]   (bar) at (7.0,-0.3) {commit phase complete};
+\node[rv]    (r1) at ( 5.6,-1.5) {B1.b};
+\node[rv]    (r2) at ( 7.0,-1.5) {B2.b};
+\node[rv]    (r3) at ( 8.4,-1.5) {B3.b};
+\node     at ( 7.0,-2.4) {\textit{after rewrite}};
+\draw[arrg] (c1) -- (bar);
+\draw[arrg] (c2) -- (bar);
+\draw[arrg] (c3) -- (bar);
+\draw[arr]  (bar) -- (r1);
+\draw[arr]  (bar) -- (r2);
+\draw[arr]  (bar) -- (r3);
 \end{tikzpicture}
 \end{center}
+
+The grey horizontal bar above stands for the join of the three
+commits in the predecessor set of each reveal: every reveal lists
+all three commits as predecessors, so we draw the dependency once
+as a fan-in/fan-out around the conceptual ``commit phase
+complete'' marker instead of as nine crossing arrows.
 
 After the rewrite, each bidder's reveal depends on every bidder's
 commit.  Reading off the new graph: no reveal is enabled on a

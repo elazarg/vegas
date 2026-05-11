@@ -33,8 +33,11 @@ explicit reassignment.
 
 \subsection{Action statements}
 
-There are five action kinds.  Each writes one or more fields
-owned by its actor (for \TT{random}, the actor is a chance role).
+There are five action kinds.  Three of them (\TT{yield},
+\TT{commit}, \TT{reveal}) write one or more fields owned by
+the actor; \TT{join} and \TT{random} declare a role
+(strategic and chance, respectively) and record its deposit,
+without writing protocol fields.
 
 \paragraph{\TT{join}.}  Initial deposit and admission.  The
 \TT{join} phase appears once, at the top of the game.  A role listed in the join phase is bound to the game, with its
@@ -178,12 +181,15 @@ Vegas types are deliberately small.  The base types are:
   needs a finite move alphabet).
 \end{itemize}
 
-A field declared with the \TT{hidden} prefix
-(\TT{yield Host(car: hidden door)}) is private to its owner until
-revealed.  An \TT{opt T} type marks a value that may be missing
-(typically because the actor took the \TT{Quit} branch); the
-language requires \TT{withdraw} expressions to handle the
-\TT{null} case explicitly.
+Two type modifiers --- \TT{hidden} and \TT{opt} --- are
+introduced by the compiler rather than written in source.  A
+\TT{commit} action's parameter is implicitly typed
+\TT{hidden T}: the value is private to the committing actor
+until the matching \TT{reveal} fires.  A field associated with
+an \TT{or null} handler is implicitly typed \TT{opt T}, marking
+that it may be \TT{null} when the actor takes the \TT{Quit}
+branch; the language requires \TT{withdraw} expressions to
+handle the \TT{null} case explicitly.
 
 \subsection{Macros}
 

@@ -19,10 +19,15 @@ VegasCore formalizes the core
 \TT{commit}/\TT{reveal}/\TT{sample}/\TT{let}/\TT{ret} calculus
 underlying Vegas's source language.  Its central object is an
 \TT{EventGraph} type elaborated from a checked program
-(\TT{WFProgram}); the well-formedness conditions --- visibility,
-freshness of binders, reveal completeness, normalization of
-sample distributions, and at-least-one-legal-action --- are
-statically encoded as fields of \TT{WFProgram}.  From a checked
+(\TT{WFProgram}); five well-formedness conditions are
+statically encoded as fields of \TT{WFProgram}:
+\TT{WFCtx} (scoped visibility of the typing context),
+\TT{FreshBindings} (each variable is bound at exactly one
+program point), \TT{RevealComplete} (every committed value is
+revealed on every non-quit path), \TT{NormalizedDists}
+(every \TT{sample} carries a probability distribution that
+sums to one), and \TT{Legal} (every commit site has at least
+one legal value in every reachable configuration).  From a checked
 program the library derives a probabilistic \TT{Machine}, native
 strategy carriers, kernel-game presentations, and FOSG/EFG
 bridges; on top of these it states and proves a small inventory
@@ -36,6 +41,20 @@ the answer to the question ``where do the structural properties
 Vegas's IR claims live?''
 
 \begin{itemize}\itemsep2pt
+\item \emph{Definitional lowering.}  Surface
+  \TT{VegasLang} programs lower definitionally to the typed
+  core \TT{VegasCore}; the nullable-yield compiler is provably
+  equal to the canonical lowering pointwise.  Concrete programs
+  are checked by reflection.  This is what lets a
+  language-level program be treated as a core-calculus object
+  without an intermediate trust step.
+\item \emph{Event-graph adequacy.}  The elaboration
+  \TT{VegasCore $\to$ EventGraph} produces a finite ranked DAG
+  whose terminal-configuration outcome agrees with the program's
+  declared payoff expressions.  This grounds the claim that the
+  EventGraph Vegas's frontend builds and the kernel-game
+  presentations VegasCore proves theorems about denote the same
+  protocol.
 \item \emph{Frontier diamond and preservation.}  Distinct
   enabled events in an event graph preserve each other's
   enablement and commute extensionally.  This is the formal
@@ -146,7 +165,7 @@ but the Vegas-to-VegasCore mapping of the timeout subgame is
 not yet written down.
 
 \paragraph{Static obligations.}  VegasCore's \TT{WFProgram}
-carries the four well-formedness obligations as fields;
+carries the five well-formedness obligations as fields;
 Vegas's typechecker and IR constructor enforce the same
 conditions but spread across the typechecker, the EventGraph
 constructor, and the commit-reveal pass without exposing them
