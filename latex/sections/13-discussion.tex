@@ -35,7 +35,7 @@ exhaustive.
 
 \paragraph{No mechanical equivalence between backends.}  The
 backends each read the EventGraph and emit their own artifact.
-Equivalence is by construction and by code review, not by proof.
+Equivalence is structural and reviewed in code, not proved.
 A regression that ships an inconsistent pair of artifacts would
 not be caught by anything stronger than the golden-master test
 suite, and that suite checks output text rather than semantic
@@ -123,7 +123,7 @@ The most immediate work items are recorded in the project's
   token flows, and gas-aware liveness (the gas-escrow stage
   policy sketched in the fellowship proposal) are the natural
   next steps.  Each requires care to keep the analytical
-  backends honest.
+  backends faithful to the source.
 \item \emph{Operational refinement to the EVM.}  The bail-out
   subgame is the place where the Solidity contract and the
   game model can most plausibly disagree.  A Lean proof that
@@ -137,6 +137,27 @@ The most immediate work items are recorded in the project's
   integration --- e.g.\ replaying the analysis as a
   back-annotation on the Vegas source, surfacing dominance and
   best-response findings inline --- is plausible.
+
+\item \emph{A game-relevant program logic.}  Vegas's source
+  language presents a protocol whose specification has already
+  been stripped of distribution and runtime concerns.  A natural
+  question is whether one could lift program logic in the
+  Hoare-triple tradition onto this object, with an assertion
+  language rich enough to talk about the things a Vegas
+  programmer actually cares about: which agent knows what at
+  each point in the protocol (epistemic modalities $K_R\,\varphi$
+  in the style of dynamic epistemic logic), and what the
+  strategic future of the current configuration is worth
+  (something like prophecy variables, or open-games-style
+  co-utility~\citep{GhaniHedgesWinschel2018CGT} flowing
+  contextually backwards from the leaves).  The combination is
+  speculative; we do not know what the right primitives are.
+  But the building blocks --- a finite event graph with
+  explicit visibility, terminal payoff expressions, and
+  mechanized strategic semantics in VegasCore --- are unusually
+  well-aligned with the ingredients such a logic would need.
+  We mark it as a direction worth thinking about, not as a
+  planned development.
 \end{itemize}
 
 The goal is not a finished tool today.  The goal is a

@@ -61,22 +61,20 @@ equilibrium analysis, an SMT-LIB encoding for reachability
 queries, a witness-record encoding for proof, and the source
 text itself, kept short enough to be read as a game directly.
 
-The transferability premise is what the rest of the report is
-about: how the four moves above are realised, what is delivered
-today, and what is left open.
-
-This report describes how that compilation is organized, what
-the language can and cannot express, how the central
-intermediate representation --- the \emph{event graph} ---
-captures the strategic structure of a protocol, and how the
-per-backend lowerings are constrained so that the artifacts agree.
+The rest of the report describes how those four moves are
+realised: what the language can and cannot express, how the
+central intermediate representation --- the \emph{event graph}
+--- captures the strategic structure of a protocol, how the
+per-backend lowerings are constrained so that the artifacts
+agree, and what remains open.
 
 \subsection{What Vegas is and is not}
 
-Vegas is deliberately narrow.  The aim is to make the round trip from
-specification to deployed contract to game-theoretic analysis short
-and reliable for a useful class of protocols, not to be a general
-purpose smart-contract language.  Concretely, in scope are:
+Vegas is deliberately narrow.  The aim is to make the round
+trip from specification to deployed contract to game-theoretic
+analysis short and reliable for a useful class of protocols,
+not to be a general-purpose smart-contract language.
+Concretely, in scope are:
 
 \begin{itemize}\itemsep1pt
 \item finite, terminating multi-party protocols with a single
@@ -100,8 +98,9 @@ Out of scope, on purpose:
 \item unbounded data and loops --- the event graph must be finite;
 \item ERC-20/ERC-777 token flows and multi-token games (planned, not
   in the current language);
-\item interactions with arbitrary other contracts (the protocol is a
-  closed system; cross-contract MEV is parameter, not modelled);
+\item interactions with arbitrary other contracts (the protocol
+  is a closed system; cross-contract MEV is parameterised, not
+  modelled);
 \item private randomness from outside oracles;
 \item dynamic player counts (the role set is fixed at compile time).
 \end{itemize}
@@ -149,12 +148,12 @@ game main() {
 \end{lstlisting}
 
 From this twelve-line source Vegas produces every artifact listed
-in the abstract: a roughly two-hundred-line Solidity contract that
-enforces the protocol step by step (with cryptographic commitments
-for the Host's hidden door and a fall-back to the \TT{or split}
-clauses when a role times out); an extensive-form game in
-Gambit's format, containing the move tree and the information
-sets induced by the dependency relation; an SMT-LIB
+in the abstract: a Solidity contract of around 160 lines that
+enforces the protocol step by step (with cryptographic
+commitments for the Host's hidden door and a fall-back to the
+\TT{or split} clauses when a role times out); an extensive-form
+game in Gambit's format, containing the move tree and the
+information sets induced by the dependency relation; an SMT-LIB
 witness-existence encoding; and a Coq/Lean witness-record
 encoding (the Diamond DAG of \S\ref{sec:other:diamond}).  All are
 produced by the current compiler and exercised by the

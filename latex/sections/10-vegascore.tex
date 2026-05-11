@@ -168,7 +168,7 @@ deployed contract.  The compiler structures the source so that
 this transfer is well-defined: a Vegas program is a game with
 public history, information sets given by the visibility
 discipline, and a payoff function over the terminal state.  Two
-distinct routes are then available for cashing the transfer in.
+distinct routes are then available for drawing on the transfer.
 
 \begin{itemize}\itemsep2pt
 \item \emph{Mechanical analysis on the generated artifacts.}  The
@@ -224,8 +224,8 @@ The current state of the connection:
   on the project's TODO list as separate workstreams.
 \end{itemize}
 
-The honest summary is that Vegas's transferability premise is
-defended today by three things: the structural design of the
+In short: Vegas's transferability premise is defended today by
+three things --- the structural design of the
 IR, the mechanically proved theorems VegasCore contributes about
 that structure, and the systematic-by-code-review nature of the
 backends.  A formally certified end-to-end pipeline is the

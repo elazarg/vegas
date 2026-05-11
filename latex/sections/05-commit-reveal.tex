@@ -196,15 +196,14 @@ $r = a^r$ has $\{a^c\} \cup \{b^c : b \in \mathrm{partners}(a)\}$
 among its predecessors, so $r$ can only be enabled when every
 named commit is done.
 
-This property is the rewrite's purpose, but stating it about the
-rewrite alone is half the story.  The same property is proved as
-a theorem in the companion Lean library VegasCore as the
-``Commit/reveal information barrier'' result over the canonical
-event graph (see \S\ref{sec:vegascore}): any event graph in
-which commits dominate reveals enjoys the barrier, regardless of
+The same property is proved as a theorem in the companion Lean
+library VegasCore as the ``Commit/reveal information barrier''
+result over the canonical event graph
+(\S\ref{sec:vegascore:theorems}): any event graph in which
+commits dominate reveals satisfies the barrier, regardless of
 how it was obtained.  Vegas's rewrite produces such graphs from
-not-yet-canonical input; VegasCore proves that any such graph
-behaves the way the barrier says.
+not-yet-canonical input; VegasCore certifies that any such graph
+satisfies the barrier.
 
 \subsection{Implementation}
 
