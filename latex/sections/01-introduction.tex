@@ -38,17 +38,32 @@ SMT-LIB encoding for reachability queries, and several others.
 The premise is not that strategic correctness is proved
 automatically.  The premise is that game-theoretic reasoning
 about the program transfers, modulo the stated execution model,
-to the deployed contract: if an analyst (or a tool) concludes that
-truthful bidding is dominant in the source-language Vickrey
+to the deployed contract: if an analyst (or a tool) concludes
+that truthful bidding is dominant in the source-language Vickrey
 specification, that conclusion carries over to the Solidity
-contract running on chain.  EFG generation is one channel for
-that reasoning; hand analysis on the source is another;
-mechanical proof in a companion Lean library is a third.  Each is
-made possible by the same property: the compiler structures the
-source so that the program \emph{is} a game with a public history,
-information sets given by the visibility discipline, and a
-payoff function over the terminal state, and every backend is a
-lowering of that game.
+contract running on chain.
+
+To make transferability defensible, the language design does
+four things in concert.  It makes the game-relevant information
+\emph{explicit} --- the information structure of the protocol,
+the visibility of each value, and the utility function over the
+terminal public state.  It \emph{hides} from the programmer
+everything that does not affect the strategic content:
+cryptographic commitments, the scheduling of independent
+transactions, gas accounting, hash collisions, the choice of
+EVM versus another runtime.  It \emph{forces} the programmer to
+deal with what cannot be hidden --- the operational handling of
+unresponsive participants, the conservation of the locked pool,
+the boundary between public and private fields.  And it
+\emph{provides several lenses} on the resulting program: an
+executable contract on chain, an extensive-form game for
+equilibrium analysis, an SMT-LIB encoding for reachability
+queries, a witness-record encoding for proof, and the source
+text itself, kept short enough to be read as a game directly.
+
+The transferability premise is what the rest of the report is
+about: how the four moves above are realised, what is delivered
+today, and what is left open.
 
 This report describes how that compilation is organized, what
 the language can and cannot express, how the central
