@@ -64,9 +64,12 @@ A node of the EventGraph represents one statement in the protocol:
 a \TT{join}, a \TT{yield}, a \TT{commit}, a \TT{reveal}, or a
 \TT{random}.  Each node is identified by a pair
 $\mathit{NodeId} = (\Role, n)$ where $\Role$ is the actor and $n$
-is an integer giving the node's source position.  The pair is
-stable: it is fixed at IR construction time and used throughout
-backends as a deterministic identifier.
+is a stable integer drawn from a per-protocol counter (the
+phase index in the source for nodes lifted directly from
+syntax; a fresh counter above the current maximum for nodes
+introduced by the commit-reveal expansion pass).  The pair is
+fixed at IR construction time and used throughout backends as a
+deterministic identifier.
 
 To each node the IR attaches a payload of three pieces:
 
@@ -147,9 +150,9 @@ relation.  In particular:
 \end{itemize}
 
 If any of these conditions fails, the EventGraph constructor
-refuses to build the graph; the compiler surfaces this as a
-static error.  Backends therefore work in a setting where the
-information flow is fully consistent.
+returns no value, and the frontend turns the failure into a
+static error on the offending source span.  Backends therefore
+read only graphs whose information flow is consistent.
 
 \subsection{Configurations and frontier}
 \label{sec:eventgraph:frontier}
@@ -246,16 +249,19 @@ This is the typical shape of turn-taking games: a sequential
 chain plus the structural pair for hidden information.
 Concurrency-driven rewriting becomes interesting when several
 roles share a single yield statement, as in the Vickrey example
-treated in \S\ref{sec:commit-reveal}.
+(\S\ref{sec:lang:vickrey}) revisited under commit-reveal
+expansion in \S\ref{sec:commit-reveal}.
 
 \subsection{Visibility-aware perfect recall}
 \label{sec:eventgraph:visibility-recall}
 
-For game-theoretic analysis, two players are in the same
-information set at a node $B$ iff they have observed the same
-sequence of public events leading to $B$.  In the EventGraph this
-becomes a structural notion: the set of fields observable by role
-$R$ at node $B$ is
+For game-theoretic analysis, two histories belong to a player's
+information set when the player cannot tell them apart from what
+they have observed.  The EventGraph turns this into a structural
+notion: \emph{set}-valued, not sequence-valued, because the
+graph's concurrent diamonds quotient out orderings of independent
+events that the player could not have distinguished anyway.  The
+set of fields observable by role $R$ at node $B$ is
 
 \begin{equation*}
   \mathrm{obs}_R(B) \;=\; \bigl\{\, f \;\big|\; f \text{ is written by some predecessor } A \text{ of } B,

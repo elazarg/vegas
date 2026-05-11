@@ -63,10 +63,13 @@ A \TT{where} clause on a \TT{commit} is \emph{deferred}: it is
 checked at the matching \TT{reveal}, not at the commit, because the
 committed value is not yet observable.
 
-\paragraph{\TT{reveal}.}  Make a previously committed field public.
-Every \TT{commit} is paired with at most one \TT{reveal} for the
-same field; before reveal, only the committing actor knows the
-value (operationally: the contract has only the hash).
+\paragraph{\TT{reveal}.}  Make a previously committed field
+public.  Every \TT{commit} is paired with exactly one \TT{reveal}
+on each non-quit path through the game; the type checker enforces
+this (a committed value that is never revealed and never reachable
+through a quit handler is rejected).  Before reveal, only the
+committing actor knows the value --- operationally, the contract
+holds only the hash.
 
 \paragraph{Simultaneous moves.}  Multiple roles can appear in a
 single statement; they are then deemed simultaneous:

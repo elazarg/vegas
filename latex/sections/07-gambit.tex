@@ -81,14 +81,17 @@ A few characteristics of the backend should be acknowledged.
 \paragraph{Tree size blows up with the type universe.}  The
 backend enumerates the cross-product of move alphabets at each
 frontier.  Three bidders with 11-value bids and a quit option
-yield $12^3 = 1728$ branches at the reveal frontier.  This is
-fine for the example library; it is not what one would deploy
-against a competitive-bidding mechanism with millions of bid
-levels.  Vegas's contract-side bid types are typically small
-because Gambit needs them small; the deployed contract can carry
-larger ranges, but then Gambit-side analysis becomes infeasible.
-This is the explicit tradeoff implied by ``the same source for
-both views''.
+yield $12^3 = 1728$ branches at the commit frontier (where the
+strategic choice happens); each reveal node only branches by 2
+(the committed value or Quit), but the reveal frontier is
+visited once per commit combination, so the total tree size
+grows multiplicatively.  This is fine for the example library;
+it is not what one would deploy against a competitive-bidding
+mechanism with millions of bid levels.  Vegas's contract-side
+bid types are typically small because Gambit needs them small;
+the deployed contract can carry larger ranges, but then
+Gambit-side analysis becomes infeasible.  This is the explicit
+tradeoff in carrying both views in the same source.
 
 \paragraph{Move alphabets must be bounded.}  An action whose
 parameter has type \TT{int} is rejected by the Gambit backend at

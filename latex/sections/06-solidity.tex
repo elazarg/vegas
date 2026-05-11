@@ -41,7 +41,6 @@ designed against:
 \end{itemize}
 
 The remainder of this section describes the construction; the
-
 rougher edges of the design --- especially the single global
 timeout window --- are flagged inline as they come up.
 
@@ -94,14 +93,18 @@ contract's deployed address are folded into every commitment hash.
 
 The contract has no global step counter.  Each per-node function
 is guarded by a \TT{depends} modifier per predecessor.  The
-modifier does two things: it advances the contract's
-inactivity-timeout state (potentially marking some role
-\TT{bailed}), and it conditionally requires the predecessor to
-have completed.
+modifier does two things: it triggers a bail of the named role
+if the named predecessor is still unfinished after the timeout
+window has elapsed, and it conditionally requires the predecessor
+to have completed.
 
 \begin{lstlisting}[style=sol]
 modifier depends(Role role, uint256 actionId) {
-    _check_timestamp(role);
+    if (!actionDone[role][actionId]
+        && block.timestamp > lastTs + TIMEOUT) {
+        bailed[role] = true;
+        lastTs = block.timestamp;
+    }
     if (!bailed[role]) {
         require(actionDone[role][actionId], "dependency not satisfied");
     }
@@ -109,18 +112,21 @@ modifier depends(Role role, uint256 actionId) {
 }
 \end{lstlisting}
 
-The body invokes \TT{\_check\_timestamp(\textit{role})}, which marks
-\TT{\textit{role}} as \TT{bailed} iff the current
-\TT{block.timestamp} exceeds a shared global high-water mark
-\TT{lastTs} by more than \TT{TIMEOUT}; otherwise it leaves the
-state unchanged.  If \TT{\textit{role}} is not bailed, the
-predecessor's completion flag is required; if it is bailed, the
-\TT{require} is skipped and the dependent action proceeds.  Two
-additional modifiers complete the gating: \TT{action(role, id)}
-asserts that the action has not yet fired, marks it done, runs the
-body, and updates \TT{actionTimestamp} and \TT{lastTs};
-\TT{by(role)} asserts that the calling EOA holds the given role
-and is not itself bailed.
+The bail check is gated on \TT{!actionDone[role][actionId]}: a
+role is bailed only if the specific predecessor named here is
+still unfinished and the global \TT{lastTs} window has expired.
+A role that has already completed its predecessor cannot be
+bailed by a later caller naming a different predecessor of
+theirs.  If the role is not bailed, the predecessor's completion
+flag is required; if it is bailed, the \TT{require} is skipped
+and the dependent action proceeds.  Two additional modifiers
+complete the gating: \TT{action(role, id)} asserts that the
+action has not yet fired, marks it done, runs the body, and
+updates \TT{actionTimestamp} and \TT{lastTs}; \TT{by(role)}
+asserts that the calling EOA holds the given role and that the
+role is not itself bailed.  \TT{by} does not consult the
+timeout: a fair-playing caller cannot be bailed by their own
+call.
 
 A typical per-node function looks like (taken from the generated
 Monty Hall contract, where node 3 is Guest's public yield of the
@@ -188,36 +194,32 @@ The timeout mechanism is simpler than the language-level story
 might suggest, and it is worth describing exactly.
 
 The contract maintains a single global \TT{lastTs} slot, updated
-to \TT{block.timestamp} on every successful action.  Whenever a
-modifier is entered, \TT{\_check\_timestamp(role)} is called: if
-the role is not \TT{Role.None} and \TT{block.timestamp > lastTs +
-TIMEOUT}, the named role is marked \TT{bailed} and \TT{lastTs} is
-reset to the current timestamp.  The contract has one sliding
-inactivity window shared across all participants: if no action
-has happened anywhere for \TT{TIMEOUT} seconds, the next caller's
-modifier marks its named role as bailed and the window restarts.
+to \TT{block.timestamp} on every successful action.  Bail is
+triggered only inside the \TT{depends(role, id)} modifier
+(\S\ref{sec:solidity:depends}): when
+\TT{actionDone[role][id]} is still false and
+\TT{block.timestamp > lastTs + TIMEOUT}, that role is marked
+\TT{bailed} and the window resets.  There is therefore one
+sliding inactivity window shared across all participants, but the
+bail is attributed precisely to roles whose specific named action
+is unfinished, not to the caller and not to bystanders.
 
 Two consequences worth flagging:
 
 \begin{itemize}\itemsep1pt
-\item \emph{Attribution is by modifier, not by analysis.}  The
-  bailed role is the one named in the modifier of the call that
-  triggers the check, not the unique role that has failed to act.
-  \TT{depends(Role.Host, \ldots)} on a window expiry marks
-  \TT{Host}; \TT{by(Role.Guest)} on a window expiry marks
-  \TT{Guest}.  For most protocols the function called next does
-  point at a role that was expected to have acted, so the
-  attribution is close enough.  The \TT{Role.None} corner case is
-  handled separately: \TT{join} actions all use
-  \TT{by(Role.None)} and never mark anyone bailed.
+\item \emph{Bail is precise.}  Only a role whose missing action
+  is named by some \TT{depends} clause can be bailed, and only
+  when the global window has expired.  A role that has completed
+  everything required of it cannot be bailed by a later caller;
+  a fair-playing caller cannot be bailed by their own attempt to
+  act.
 \item \emph{Bail is one-way.}  Once \TT{bailed[\textit{R}] =
   true}, the \TT{by(R)} modifier rejects any subsequent action
-  from \TT{R}.  A role that goes offline briefly and reconnects
-  after the window expires has lost the right to play.  The
-  language-level treatment of \TT{Quit} as a definitive move is
-  the source of this design.  It is operationally simple, but it
-  does mean that a fair-playing role with a flaky connection is
-  at risk in long protocols.
+  from \TT{R}.  This matches the language-level treatment of
+  \TT{Quit} as a definitive move.  The remaining risk is the
+  ordinary one: a fair-playing role whose connection is unstable
+  for longer than \TT{TIMEOUT} loses their seat even if they
+  intended to play.
 \end{itemize}
 
 When a dependent action runs against a bailed predecessor, the

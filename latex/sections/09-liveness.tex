@@ -68,14 +68,14 @@ the handler is a terminal allocation chosen at the bail point.
 The Solidity backend implements \TT{Quit} via a sliding-window
 timeout described in detail in \S\ref{sec:solidity:bail}.  In
 short: a single global \TT{lastTs} slot advances on every action;
-when it falls behind \TT{block.timestamp} by more than
-\TT{TIMEOUT} seconds, the next modifier marks its named role as
-bailed and resets the window.  Bail is one-way and attribution is
-structural rather than analytical --- the role marked is the role
-named by the next modifier, not necessarily the unique role that
-failed to act.  A per-action deadline scheme would tighten the
-attribution at the cost of substantially more state; the current
-design is the simpler starting point.
+the \TT{depends(role, id)} modifier bails \TT{role} when the
+named action is still unfinished and the window has expired.
+Bail is one-way, and the bailed role is always one with a
+genuinely outstanding action --- the caller cannot bail
+themselves, and bystanders with no outstanding dependency cannot
+be bailed.  A per-action deadline scheme would tighten the
+window further at the cost of substantially more state; the
+single-window design is the simpler starting point.
 
 \subsection{Liveness in the game model}
 

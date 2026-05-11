@@ -131,7 +131,7 @@ encoding (the Diamond DAG of \S\ref{sec:other:diamond}).  All are
 produced by the current compiler and exercised by the
 golden-master test suite.  The Solidity output is deployable to a
 local Anvil node; fed to Gambit, the EFG returns the
-mixed-strategy equilibrium for Monty Hall.  Nothing in the
+``always switch'' equilibrium for Monty Hall.  Nothing in the
 twelve-line source mentions Ethereum, cryptographic commitments,
 timeouts, gas, or game trees.
 
@@ -207,9 +207,10 @@ foundational.  We claim:
   concurrent public writes and replaces each one with a
   commit-then-reveal pair, with predecessors set up so that no
   player can observe another player's reveal before committing
-  themselves.  Within the protocol, protection against
-  observation-before-action MEV is then a structural property of
-  the IR rather than an implementation discipline.
+  themselves.  This addresses one specific subclass of MEV ---
+  observation-before-action on simultaneous moves within the
+  protocol --- by making the mitigation a structural property
+  of the IR rather than an implementation discipline.
 
 \item \emph{A family of backends} (\S\S\ref{sec:solidity}--\ref{sec:other-backends})
   that each consume the same EventGraph: Solidity and Vyper for
@@ -217,12 +218,13 @@ foundational.  We claim:
   timeout-driven bail-out for non-responsive participants; Gambit
   for extensive-form game generation via frontier exploration;
   SMT-LIB for reachability queries; Scribble for the session-typed
-  protocol description; a Bitcoin/Lightning backend for the
-  two-player fragment; a Coq/Lean ``Diamond DAG'' witness-record
-  encoding that captures the per-step constraint bundle as a
-  dependent type.
+  protocol description; a sketch Bitcoin/Lightning move transcript
+  for the two-party fragment (a textual artifact, not deployable
+  bytecode); a Coq/Lean ``Diamond DAG'' witness-record encoding
+  that captures the per-step constraint bundle as a dependent
+  type.
 
-\item \emph{An operational subgame layer}
+\item \emph{An operational handler layer}
   (\S\ref{sec:liveness}) for liveness and griefing: every action
   can be guarded by a handler that fires if the actor does not
   respond within a deadline.  The handler is a strategic choice
