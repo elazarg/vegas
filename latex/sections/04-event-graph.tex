@@ -273,11 +273,15 @@ The owner of a node always observes their own writes, including
 themselves chose to commit.  Public and revealed writes are
 observable to every role.
 
-This is the projection used by the Gambit backend to compute
-information sets and, in a closely related form, by the MAID and
-Scribble backends.  An IR helper \TT{observableFieldsAt(B)}
-computes it; the formula above is the only place where
-observability is defined.
+The IR helper \TT{observableFieldsAt(B)} computes this set with
+$R$ specialised to the owner of $B$ --- the only case the
+single-source backends ever need, since each per-role decision
+node belongs to its own owner.  Backends that want the
+projection for a non-owner role (e.g.\ Gambit, when building
+information sets for a player not at the current decision)
+compute it from the same formula with $R$ varying.  The
+formula above is the only place where observability is
+defined.
 
 \subsection{Implementation notes}
 
@@ -285,8 +289,8 @@ The EventGraph class wraps a generic \TT{Dag<NodeId>} with the
 per-node payload map and a precomputed reachability relation.
 Reachability is computed once when the graph is built and reused
 for all queries; building it eagerly is the right tradeoff in
-this setting because the graph is small (forty-some nodes for
-the largest example) and the queries are many
+this setting because the graph is small (under a dozen nodes
+for the largest bundled example) and the queries are many
 (\TT{reaches}, \TT{ancestorsOf}, \TT{canExecuteConcurrently}).
 
 The constructor takes a node set, a per-node predecessor map, and

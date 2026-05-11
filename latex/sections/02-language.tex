@@ -70,15 +70,18 @@ through a quit handler is rejected).  Before reveal, only the
 committing actor knows the value --- operationally, the contract
 holds only the hash.
 
-\paragraph{\TT{random}.}  A public chance event: a value is
-sampled by a designated chance role from an explicit finite-support
-distribution.
+\paragraph{\TT{random}.}  Declares a chance role.  Syntactically
+parallel to \TT{join}: the role is given a deposit and added to
+the game's actor set, but it acts on behalf of nature rather
+than a strategic player.
 \begin{lstlisting}[style=vg]
-random Chance(coin: bool);
+random Host() $ 100;
 \end{lstlisting}
-The chance role is not a strategic player; \TT{random} writes
-behave like \PUBLIC yields for visibility, and the Gambit backend
-emits a chance node with the declared distribution.
+A chance role's subsequent \TT{yield}/\TT{commit}/\TT{reveal}
+actions are interpreted as chance events whose moves the Gambit
+backend emits with a uniform distribution over the action's
+domain.  The current language has no syntax for explicit
+non-uniform distributions; that is on the future-work list.
 
 \paragraph{Simultaneous moves.}  Multiple roles can appear in a
 single statement; they are then deemed simultaneous:
@@ -153,8 +156,12 @@ withdraw (A.c && B.c) ? { A -> 100; B -> 100 }
        : (B.c)        ? { A -> 0;   B -> 200 }
        :                { A -> 90;  B -> 110 }
 \end{lstlisting}
-The compiler statically checks conservation against the constant
-total deposit; payoff expressions may reference any public field.
+Conservation --- that the per-branch payouts sum to the pool ---
+is a design invariant of the language: every \TT{withdraw}
+clause should allocate the pool exactly, with no implicit dust
+or burn.  Statically checking this against arbitrary payoff
+expressions is not currently performed by the compiler; it is on
+the TODO list.
 
 \subsection{Types}
 
@@ -252,10 +259,13 @@ For reference, the full surface grammar lives in the ANTLR file
 roughly:
 \begin{align*}
 \mathit{program} &::= (\mathit{typeDec} \mid \mathit{macroDec})^*\ \TT{game}\ \mathit{ident}\ \TT{()}\ \TT{\{}\ \mathit{ext}\ \TT{\}}\\
-\mathit{ext} &::= \kw{join}\ \mathit{query}^+\ \TT{;}\ \mathit{ext} \mid (\kyield \mid \kreveal \mid \kcommit \mid \krandom)\ \texttt{or}\ \mathit{handler}\ \mathit{query}^+\ \TT{;}\ \mathit{ext} \\
-              &\mid \kwithdraw\ \mathit{outcome} \\
+\mathit{ext} &::= \mathit{kind}\ (\texttt{or}\ \mathit{handler})?\ \mathit{query}^+\ \TT{;}\ \mathit{ext}
+              \mid \kwithdraw\ \mathit{outcome}\\
+\mathit{kind} &::= \kjoin \mid \kyield \mid \kreveal \mid \kcommit \mid \krandom\\
 \mathit{query} &::= \mathit{role}\ \TT{(}\ \mathit{paramDec}^*\ \TT{)}\ (\$\,\mathit{int})?\ (\kwhere\ \mathit{exp})?\ (\TT{||}\ \mathit{queryHandler})?\\
 \mathit{handler} &::= \TT{split} \mid \TT{burn} \mid \TT{null}.
 \end{align*}
+The \texttt{or}-handler is optional, and \TT{join}/\TT{random}
+are admitted in the same production as the other action kinds.
 The grammar is unsurprising; what makes Vegas work is the analysis
 done in the next several sections.

@@ -73,10 +73,13 @@ constructor per role plus a \TT{None} sentinel.
 \paragraph{Game state.}  For each \emph{written field} in the
 EventGraph the contract stores the field's value.  A field with
 \PUBLIC visibility uses a slot of the field's native type
-(\TT{int256}, \TT{bool}, etc.); a field with \COMMIT visibility
-uses a separate \TT{bytes32} slot for the commitment hash, with the
-revealed value filled in by the matching reveal action.  Each
-value slot is shadowed by a \TT{done\_\textit{slot}: bool} flag.
+(\TT{int256}, \TT{bool}, \ldots).  A field with \COMMIT
+visibility uses two slots: a \TT{bytes32} commitment hash filled
+in at commit time, and a separate native-type slot for the
+cleartext value filled in at reveal time.  Each slot is
+shadowed by a \TT{done\_\textit{slot}: bool} flag, so the
+contract can distinguish ``never written'' from ``written to
+the default value''.
 
 \paragraph{Per-role bookkeeping.}  Three booleans per role:
 \TT{done\_\textit{Role}} (the role has joined),
@@ -146,6 +149,13 @@ function move_Guest_3(int256 _d)
 }
 \end{lstlisting}
 
+In this Monty Hall example the function-name suffix
+(topological index) and the modifier arguments (stable node
+identifiers) happen to coincide --- the source is already in
+topological order, and no commit-reveal expansion runs.  In
+games where expansion introduces fresh ids, the two diverge:
+the bidder commit \TT{move\_B1\_4(\ldots) action(Role.B1, 2)}
+in the generated Vickrey contract is a typical example.
 The function's \TT{depends} clauses list exactly the node's
 direct predecessors in the EventGraph (after the commit-reveal
 expansion); for the rest of the chain, the \TT{require} chains
@@ -259,11 +269,13 @@ state (including \TT{done\_} flag inspection for optional fields)
 and transfers the resulting amount to the role's stored address
 using a low-level \TT{call} with the computed value.
 
-Conservation is checked statically against the deposit total
-during compilation (symbolic checks where possible; exhaustive
-enumeration for the finite-type case).  The contract therefore
-does not need to verify at runtime that all role payouts sum to
-the pool.
+Conservation --- that all role payouts sum to the pool --- is
+a design invariant of the language (\S\ref{sec:language}), but
+the current compiler does not statically verify it across
+arbitrary payoff expressions.  A static check (symbolic or, for
+the finite-type case, by exhaustive enumeration) is on the TODO
+list; until it lands, the property rests on per-program
+inspection of the \TT{withdraw} clause.
 
 \subsection{Things the backend deliberately leaves alone}
 

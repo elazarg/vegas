@@ -156,8 +156,10 @@ records to emit:
   \TT{decide}/\TT{rfl} obligation in the appropriate $W_i$.
 \item \TT{INDEPENDENT} (\TT{lean-independent} /
   \TT{gallina-independent}) emits \TT{EventDag} only, with
-  hidden fields wrapped in a \TT{Maybe} carrier and an
-  \TT{isPresent} discipline on reveals.
+  ancestor witnesses wrapped in a \TT{Maybe} carrier (so a
+  trace can model a partial play in which some prior actor's
+  contribution is absent) and an \TT{isPresent} discipline on
+  reveals.
 \item \TT{MONOTONIC} (\TT{lean-monotone} / \TT{gallina-monotone})
   emits both records, with monotonicity guards
   (\TT{$W_i$\_guard\_have\_$w_j$}) certifying that prior commits
