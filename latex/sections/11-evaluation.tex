@@ -128,8 +128,7 @@ however, for translating textbook problems faithfully.
 \paragraph{Guards that look local are often contextual.}  The
 Monty Hall \TT{Host.goat != Guest.d} clause is the canonical
 example: it reads as a local constraint on Host's move, but it
-references another role's prior write.  Programmers writing
-Vegas tend to underestimate how often this happens.  The MAID
+references another role's prior write.  This pattern is easy to miss when writing Vegas by hand.  The MAID
 backend's restriction is what brought this pattern into focus
 (the MAID encoding ignores it silently).
 

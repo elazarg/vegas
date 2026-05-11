@@ -33,7 +33,7 @@ of structural and strategic theorems.
 
 The theorem inventory is the centre of the library; it is also
 the answer to the question ``where do the structural properties
-Vegas's IR claims actually live?''
+Vegas's IR claims live?''
 
 \begin{itemize}\itemsep2pt
 \item \emph{Frontier diamond and preservation.}  Distinct
@@ -133,7 +133,7 @@ constructors and never needs a rewrite.  The pass in Vegas is
 the bridge between a user-friendly surface and the canonical
 form VegasCore governs; the strategic equivalence of the
 pre- and post-rewrite graphs is a property one would want to
-state and prove on the Vegas side, and it is not.
+state and prove on the Vegas side; it is not yet stated.
 
 \paragraph{The operational handler layer.}  Quit handlers,
 bail-out timeouts, and the structural choices in the Solidity
@@ -187,12 +187,12 @@ distinct routes are then available for drawing on the transfer.
   what a strategic reasoner has to consider.
 \end{itemize}
 
-VegasCore is the third route, available when the user is willing
-to pay the cost of working in Lean: with the theorem inventory
-above, the structural facts that ground both of the above are
-mechanically certified, and an in-Lean equilibrium argument can
-be transported by the Kuhn realization and EFG presentation
-theorems to a Vegas program's kernel-game presentation.
+VegasCore is a third route, available when the user is willing
+to work in Lean.  The theorem inventory above mechanically
+certifies the structural facts that ground the previous two
+routes, and an in-Lean equilibrium argument can be transported
+through the Kuhn-realization and EFG-presentation theorems to a
+Vegas program's kernel-game presentation.
 
 \subsection{What is and is not proved today}
 
@@ -225,8 +225,8 @@ The current state of the connection:
 \end{itemize}
 
 In short: Vegas's transferability premise is defended today by
-three things --- the structural design of the
-IR, the mechanically proved theorems VegasCore contributes about
-that structure, and the systematic-by-code-review nature of the
-backends.  A formally certified end-to-end pipeline is the
-natural next milestone, not a prerequisite for present use.
+three things --- the design of the IR, the mechanically proved
+theorems VegasCore contributes about that structure, and the
+systematic-by-code-review nature of the backends.  A formally
+certified end-to-end pipeline is the natural next milestone,
+not a prerequisite for present use.

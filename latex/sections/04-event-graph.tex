@@ -268,9 +268,8 @@ set of fields observable by role $R$ at node $B$ is
             \text{ and either } \mathrm{owner}(A) = R \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\},
 \end{equation*}
 where ``ancestor'' means $A$ reaches $B$ in the dependency DAG.
-The owner of a node always observes their own writes; for owners
-this includes \emph{committed} fields as well as the
-public/revealed ones, since a player knows the value they
+The owner of a node always observes their own writes, including
+\emph{committed} fields, since a player knows the value they
 themselves chose to commit.  Public and revealed writes are
 observable to every role.
 
@@ -306,14 +305,13 @@ Three internal validators run inside the constructor:
 
 The corresponding error in the frontend is a static error, with a
 source span pointing back to the offending \TT{where} clause or
-\TT{commit/reveal} pair.  This is the same set of checks a
+\TT{commit}/\TT{reveal} pair.  This is the same set of checks a
 human reviewer would perform when reading a hand-written
-commit-reveal contract --- the IR just performs them
+commit-reveal contract --- the IR performs them
 systematically.
 
-In practice the typechecker's pre-IR desugaring strips fields
-written by the current node from the guard's scope, so the
-``owner sees their own committed fields'' branch of the
-visibility rule matters mostly for guards that reference an
-actor's \emph{earlier} private writes from elsewhere in the
-protocol.
+In practice, the typechecker's pre-IR desugaring removes fields
+written by the current node from the guard's scope.  The
+owner-sees-own-committed-fields rule therefore matters mostly
+for guards that reference an actor's \emph{earlier} private
+writes elsewhere in the protocol.

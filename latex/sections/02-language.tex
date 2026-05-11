@@ -37,8 +37,7 @@ There are five action kinds.  Each writes one or more fields
 owned by its actor (for \TT{random}, the actor is a chance role).
 
 \paragraph{\TT{join}.}  Initial deposit and admission.  The
-\TT{join} phase appears once, at the top of the game.  A role
-listed in the join phase is committed to the game and has its
+\TT{join} phase appears once, at the top of the game.  A role listed in the join phase is bound to the game, with its
 deposit locked into the pool.
 
 \paragraph{\TT{yield}.}  A public move.  The actor declares a value
@@ -238,11 +237,11 @@ game main() {
 }
 \end{lstlisting}
 
-The compiler does not assume the user has solved front-running:
-it reads three simultaneous public moves and rewrites the
-EventGraph so that each bidder commits to a hash first and reveals
-later, with the reveal of any bidder gated on the commits of the
-other two.  The resulting Solidity contract implements a sealed-bid
+The compiler does not assume the front-running problem has been
+solved.  It reads three simultaneous public moves and rewrites
+the EventGraph so that each bidder commits to a hash first and
+reveals later, with every reveal gated on every other bidder's
+commit.  The resulting Solidity contract implements a sealed-bid
 auction; the resulting Gambit game has each bidder choose a hidden
 value in a common information set.  Both come from the same source.
 

@@ -12,15 +12,15 @@ function.  These two readings are seldom kept in sync.  The
 contract is written, audited, deployed, and run as a state
 machine; the game is sketched, sometimes proved correct on paper,
 almost never mechanically connected to the bytecode the validators
-actually execute.
+execute.
 
-The gap is where strategic surprises live.  A sealed-bid auction
-whose commit phase happens to publish enough information to be
-front-run.  An escrow whose timeout branch creates a griefing
-incentive that no equilibrium analysis predicted because the
-model omitted the timeout.  A voting scheme whose Solidity
-implementation reveals the tally one block earlier than the
-analysis assumed.
+The gap is where strategic surprises live.  Consider a
+sealed-bid auction whose commit phase publishes enough
+information to be front-run; or an escrow whose timeout branch
+creates a griefing incentive that no equilibrium analysis
+predicted, because the model omitted the timeout; or a voting
+scheme whose Solidity implementation reveals the tally one
+block earlier than the analysis assumed.
 
 Vegas is a small programming language and compiler aimed at this
 specific gap.  A Vegas program is a finite multi-party protocol
@@ -54,10 +54,9 @@ transactions, gas accounting, hash collisions, the choice of
 EVM versus another runtime.  It \emph{forces} the programmer to
 deal with what cannot be hidden --- the operational handling of
 unresponsive participants, the conservation of the locked pool,
-the boundary between public and private fields.  And it
-\emph{provides several lenses} on the resulting program: an
-executable contract on chain, an extensive-form game for
-equilibrium analysis, an SMT-LIB encoding for reachability
+the boundary between public and private fields.  And it \emph{exposes} the resulting program through several
+lenses: an executable contract on chain, an extensive-form game
+for equilibrium analysis, an SMT-LIB encoding for reachability
 queries, a witness-record encoding for proof, and the source
 text itself, kept short enough to be read as a game directly.
 
@@ -70,11 +69,11 @@ agree, and what remains open.
 
 \subsection{What Vegas is and is not}
 
-Vegas is deliberately narrow.  The aim is to make the round
-trip from specification to deployed contract to game-theoretic
-analysis short and reliable for a useful class of protocols,
-not to be a general-purpose smart-contract language.
-Concretely, in scope are:
+Vegas is deliberately narrow.  The aim is a short, reliable
+path from specification to deployed contract to game-theoretic
+analysis, over a useful class of protocols --- not a
+general-purpose smart-contract language.  Concretely, in scope
+are:
 
 \begin{itemize}\itemsep1pt
 \item finite, terminating multi-party protocols with a single
@@ -92,7 +91,7 @@ Concretely, in scope are:
 \item terminal allocation of the pool by a \TT{withdraw} clause.
 \end{itemize}
 
-Out of scope, on purpose:
+Deliberately out of scope:
 
 \begin{itemize}\itemsep1pt
 \item unbounded data and loops --- the event graph must be finite;
@@ -165,10 +164,9 @@ timeouts, gas, or game trees.
 
 The example is small enough to verify by inspection that the two
 artifacts agree on what they say is hidden, what is public, when
-each player observes what, and which deviations are punished.  At
-larger scale the agreement has to be argued, not inspected --- which
-is what motivates the companion Lean formalization VegasCore
-discussed in \S\ref{sec:vegascore}.
+each player observes what, and which deviations are punished.  At larger scale the agreement must be argued rather than
+inspected; that argument is what motivates the companion Lean
+formalization VegasCore (\S\ref{sec:vegascore}).
 
 \subsection{Why an event graph}
 \label{sec:intro:why-graph}
@@ -176,9 +174,8 @@ discussed in \S\ref{sec:vegascore}.
 A natural alternative would be to compile the surface syntax
 directly to a state machine for Solidity and directly to a tree
 for Gambit, twice, with the two backends owning their own
-semantics.  That is also what an experienced human writes by hand
-when they want both views of the same protocol.  Vegas does not
-do this for three reasons.
+semantics.  That is also the natural hand-written approach when both views
+are wanted.  Vegas does not do this for three reasons.
 
 First, the textual order of the Vegas source does \emph{not} encode
 the strategic structure.  In the Monty Hall example above, the line

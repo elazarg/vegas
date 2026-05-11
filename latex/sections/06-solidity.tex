@@ -40,9 +40,9 @@ designed against:
   primitive itself is taken as given.
 \end{itemize}
 
-The remainder of this section describes the construction; the
-rougher edges of the design --- especially the single global
-timeout window --- are flagged inline as they come up.
+The remainder of this section describes the construction.  The
+design's looser parts --- especially the single global timeout
+window --- are flagged inline as they come up.
 
 \subsection{Storage layout}
 
@@ -205,7 +205,7 @@ sliding inactivity window shared across all participants, but the
 bail is attributed precisely to roles whose specific named action
 is unfinished, not to the caller and not to bystanders.
 
-Two properties of the emitted code worth flagging:
+Two properties of the emitted code are worth flagging:
 
 \begin{itemize}\itemsep1pt
 \item \emph{Precision of attribution.}  The backend emits
@@ -271,9 +271,8 @@ Several real concerns are not addressed by the Solidity emission
 because they are scoped out of the language.  Gas costs as a
 strategic factor; mempool-level censorship beyond what the bail
 mechanism handles; cross-contract interactions and oracle reads;
-admin keys, upgrade proxies, and pausable patterns.  Each is a
-deliberate restriction in the same vein as the language's
-bounded-types-only stance: drawing the boundary tightly is what
-makes the analytical backends' outputs faithful to the deployed
-code, and what makes ``the same source for two views'' a defensible
-claim.
+admin keys, upgrade proxies, and pausable patterns.  Each is a deliberate restriction, in the same spirit as the
+language's bounded-types-only stance.  Drawing the boundary
+tightly is what keeps the analytical backends' outputs faithful
+to the deployed code, and what makes a single source for two
+views a defensible claim.

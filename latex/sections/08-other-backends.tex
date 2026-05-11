@@ -7,8 +7,7 @@ EventGraph but address different consumers: a constraint solver
 Lightning channel (for the two-party fragment), a MAID exporter
 (for the Thrones game-theory workbench), a GraphViz visualisation,
 and a Coq/Lean deep embedding of the protocol as a dependent
-typing problem.  Each is short enough that we describe them
-together here.
+typing problem.  Each is short enough to cover in one section.
 
 \subsection{SMT-LIB}
 
@@ -109,10 +108,9 @@ expressive target.
 
 The Gallina (Coq) and Lean~4 backends emit a deep embedding of
 the EventGraph as a dependently-typed family of records.  The
-shape of the encoding is worth describing in its own terms: it
-treats every move and every guard as a type-level proof
-obligation, and player strategies become functions on
-typed prior witnesses.
+encoding is worth describing directly: every move and every
+guard is a type-level proof obligation, and player strategies
+become functions on typed prior witnesses.
 
 For an EventGraph with $n$ nodes, the backend emits a chain of
 records $W_0, W_1, \dots, W_n$, where $W_i$ is the (typed) state
@@ -179,14 +177,14 @@ backend, emitting a Vegas program as an instance of VegasCore's
 \TT{WFProgram} type, is planned (and listed in
 \file{TODO.txt}) to bridge the two.
 
-The encoding is interesting for two reasons.  It is
-self-contained: the Lean object can be passed to a theorem prover
-without depending on a large semantics library; the encoding
-\emph{is} the semantics.  And because each step is a function on
-prior witnesses, the player's choice schedule appears as a
-strategy in the strict type-theoretic sense --- an inhabitant of
-a function space whose codomain is pinned by domain and
-where-clause proofs.  This view is closer to the
+The encoding is interesting for two reasons.  First, it is
+self-contained: the Lean object can be passed to a theorem
+prover without depending on a large semantics library; the
+encoding \emph{is} the semantics.  Second, because each step is
+a function on prior witnesses, the player's choice schedule
+appears as a strategy in the strict type-theoretic sense --- an
+inhabitant of a function space whose codomain is pinned by
+domain and where-clause proofs.  This view is closer to the
 IF-logic and compositional-game-theory style of game
 semantics~\citep{HintikkaSandu1989,GhaniHedgesWinschel2018CGT}
 than to the state-machine view that Gambit's tree presents.

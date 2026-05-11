@@ -29,24 +29,27 @@ about its incentive properties is left to a parallel pen-and-paper
 exercise on the latter.  Vegas is a domain-specific language and
 compiler that treats both views as outputs of a single specification.
 
-A Vegas program describes a finite protocol in the natural sequential
-style of a referee: who joins, who plays what, who reveals, and who
-gets paid.  The compiler analyses the data flow of the specification
-to build a finite \emph{event graph} --- a directed acyclic graph of
-guarded writes --- and uses it as a single intermediate representation
-that each backend reads in turn: (i) a Solidity (and Vyper) contract
-whose execution scheduler is the dependency relation itself, with
-built-in commit-reveal protection against transaction-ordering
-adversaries and a timeout-driven bail-out for non-responsive
-participants; (ii) a Gambit extensive-form game suitable for
-equilibrium analysis; (iii) several auxiliary artifacts --- an
-SMT-LIB encoding for reachability queries, a Coq/Lean witness-record
-encoding of the protocol's per-step constraint structure, a
-session-typed (Scribble) protocol description, and a sketch
-Bitcoin/Lightning move transcript for the two-party fragment.  The expressive power of the
-language is restricted by design: only finite types, no loops, no
-inter-contract calls.  These restrictions are what make the whole
-array of artifacts feasible to produce automatically from one source.
+A Vegas program describes a finite protocol in the natural
+sequential style of a referee: who joins, who plays what, who
+reveals, and who gets paid.  The compiler analyses the data flow
+of the specification, builds a finite \emph{event graph} (a
+directed acyclic graph of guarded writes), and uses it as a
+single intermediate representation that every backend reads in
+turn.  Two principal outputs are a Solidity (or Vyper) contract
+whose execution scheduler is the dependency relation itself
+--- with built-in commit-reveal protection against
+transaction-ordering adversaries and a timeout-driven bail-out
+for non-responsive participants --- and a Gambit extensive-form
+game suitable for equilibrium analysis.  Several auxiliary
+artifacts follow the same source: an SMT-LIB encoding for
+reachability queries, a Coq/Lean witness-record encoding of the
+protocol's per-step constraint structure, a session-typed
+(Scribble) protocol description, and a sketch Bitcoin/Lightning
+move transcript for the two-party fragment.  The expressive
+power of the language is restricted by design: only finite
+types, no loops, no inter-contract calls.  These restrictions
+are what make every artifact mechanically derivable from one
+source.
 
 The report describes the language, the event-graph intermediate
 representation, the automatic commit-reveal rewriting pass, the

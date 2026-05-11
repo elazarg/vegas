@@ -89,10 +89,9 @@ commit combination, so the total tree size grows
 multiplicatively.  The bundled Vickrey example uses a 3-value
 bid type to keep the tree analysable.  This is fine for the example library;
 it is not what one would deploy against a competitive-bidding
-mechanism with millions of bid levels.  Vegas's contract-side
-bid types are typically small because Gambit needs them small;
-the deployed contract can carry larger ranges, but then
-Gambit-side analysis becomes infeasible.  This is the explicit
+mechanism with millions of bid levels.  Vegas's contract-side bid types are typically narrow because
+Gambit cannot otherwise analyse them; wider ranges deploy fine
+but make Gambit-side analysis infeasible.  This is the explicit
 tradeoff in carrying both views in the same source.
 
 \paragraph{Move alphabets must be bounded.}  An action whose

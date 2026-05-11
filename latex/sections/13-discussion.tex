@@ -13,9 +13,9 @@ Gambit, SMT, and witness-record backends provide views that
 would otherwise be done by hand and seldom done at all.  The
 test harness keeps the views consistent.
 
-The one thing the tool is designed for is shortening the loop
-between ``the protocol I want to play'' and ``the contract that
-will play it'' --- short, mechanical, auditable.  The example library exercises this with thirty-nine
+The tool is designed for one thing: shortening the loop between
+a protocol's specification and the deployed contract that runs
+it --- short, mechanical, auditable.  The example library exercises this with thirty-nine
 specifications spanning textbook game theory, mechanism design,
 and adversarial-pattern smart-contract scenarios.  The pipeline
 runs in fractions of a second per example.
@@ -82,8 +82,8 @@ function on histories.
 \subsection{Foundations first}
 
 The unifying theme of the limitations is intent rather than
-oversight.  Vegas was built with the explicit goal of staying
-small enough to describe completely: a finite-graph IR,
+oversight.  Vegas was built with the goal of staying small
+enough to describe completely: a finite-graph IR,
 finite-type moves, a fixed pool, deterministic guards, no
 external calls.
 This is a smaller language than its closest neighbours in the
