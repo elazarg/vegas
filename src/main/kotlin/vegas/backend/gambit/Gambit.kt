@@ -72,7 +72,7 @@ internal sealed class GameTree {
      * - Per-role knowledge (HistoryViews)
      * - Position in role iteration
      * - Accumulated joint choices
-     * - Role + ActionId that led here (for policy re-evaluation)
+     * - Role + NodeId that led here (for policy re-evaluation)
      *
      * @property context Hydration context for resuming generation
      */

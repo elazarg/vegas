@@ -1,8 +1,8 @@
 package vegas.runtime
 
 import vegas.FieldRef
-import vegas.ir.ActionDag
-import vegas.ir.ActionId
+import vegas.ir.EventGraph
+import vegas.ir.NodeId
 import vegas.semantics.*
 
 /**
@@ -21,7 +21,7 @@ object MoveTranslator {
      * For the semantic model, a role's play contains assignments for all its
      * actions in the current frontier. This splits them back into per-action moves.
      */
-    fun labelToMoves(label: Label.Play, dag: ActionDag, enabledActions: Set<ActionId>): List<GameMove> {
+    fun labelToMoves(label: Label.Play, dag: EventGraph, enabledActions: Set<NodeId>): List<GameMove> {
         val role = label.role
 
         // Group the delta's fields by which enabled action they belong to

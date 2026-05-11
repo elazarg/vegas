@@ -3,8 +3,8 @@ package vegas.backend.scribble
 import vegas.RoleId
 import vegas.ir.GameIR
 import vegas.ir.Type
-import vegas.ir.ActionDag
-import vegas.ir.ActionMeta
+import vegas.ir.EventGraph
+import vegas.ir.NodeMeta
 import vegas.ir.Visibility
 
 fun genScribbleFromIR(g: GameIR): String {
@@ -28,14 +28,14 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
     )
 }
 
-private fun dagToScribble(dag: ActionDag, allRoles: Set<RoleId>): List<Sast.Action> {
+private fun dagToScribble(dag: EventGraph, allRoles: Set<RoleId>): List<Sast.Action> {
     // Use topological sort to ensure dependencies are respected (e.g. commit-reveal ordering)
     return dag.topo().flatMap { id ->
         actionToScribble(dag.meta(id), allRoles)
     }
 }
 
-private fun actionToScribble(meta: ActionMeta, allRoles: Set<RoleId>): List<Sast.Action> {
+private fun actionToScribble(meta: NodeMeta, allRoles: Set<RoleId>): List<Sast.Action> {
     val actions = mutableListOf<Sast.Action>()
     val role = meta.struct.owner
 

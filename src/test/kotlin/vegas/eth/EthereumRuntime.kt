@@ -73,11 +73,11 @@ class EthereumSession(
         allRoles.forEachIndexed { idx, role -> put(role, idx + 1) }
     }
 
-    /** Map from ActionId to EvmAction for lookup. */
-    private val actionMap: Map<ActionId, EvmAction> = evmContract.actions.associateBy { it.actionId }
+    /** Map from NodeId to EvmAction for lookup. */
+    private val actionMap: Map<NodeId, EvmAction> = evmContract.actions.associateBy { it.actionId }
 
     /** Track which actions have been submitted. */
-    private val completedActions = mutableSetOf<ActionId>()
+    private val completedActions = mutableSetOf<NodeId>()
 
     /** Salts used for commit-reveal. Key: FieldRef -> (salt, clearValue). */
     private val commitSecrets = mutableMapOf<FieldRef, Pair<Long, AbiValue>>()
@@ -89,7 +89,7 @@ class EthereumSession(
 
     override fun submitMove(move: GameMove) {
         val action = actionMap[move.actionId]
-            ?: error("No EVM action for ActionId ${move.actionId}")
+            ?: error("No EVM action for NodeId ${move.actionId}")
 
         val role = move.role
         val account = roleAccounts[role]

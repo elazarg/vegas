@@ -3,7 +3,7 @@ package vegas
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.semantics.Label
 import vegas.semantics.PlayTag
@@ -23,7 +23,7 @@ class LabelTest : FreeSpec({
         "contains role and delta" {
             val aliceField = FieldRef(alice, VarId("x"))
             val delta = mapOf(aliceField to Expr.Const.BoolVal(true))
-            val actionId: ActionId = alice to 0
+            val actionId: NodeId = alice to 0
 
             val play = Label.Play(
                 role = alice,
@@ -58,7 +58,7 @@ class LabelTest : FreeSpec({
                 field1 to Expr.Const.BoolVal(false),
                 field2 to Expr.Const.IntVal(42)
             )
-            val actionId: ActionId = bob to 1
+            val actionId: NodeId = bob to 1
 
             val play = Label.Play(
                 role = bob,
@@ -75,7 +75,7 @@ class LabelTest : FreeSpec({
     "PlayTag.Action" - {
 
         "preserves actionId" {
-            val actionId: ActionId = alice to 2
+            val actionId: NodeId = alice to 2
             val tag = PlayTag.Action(actionId)
 
             tag.actionId shouldBe actionId
@@ -89,7 +89,7 @@ class LabelTest : FreeSpec({
         }
 
         "same actionId creates equal tags" {
-            val actionId: ActionId = bob to 0
+            val actionId: NodeId = bob to 0
             val tag1 = PlayTag.Action(actionId)
             val tag2 = PlayTag.Action(actionId)
 

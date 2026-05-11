@@ -53,7 +53,7 @@ class GameClient(
     }
 
     /** Submit a move with explicit parameter values. */
-    fun submitMove(role: RoleId, actionId: ActionId, values: Map<VarId, Any>) {
+    fun submitMove(role: RoleId, actionId: NodeId, values: Map<VarId, Any>) {
         val meta = game.dag.meta(actionId)
         val assignments = values.mapValues { (_, v) -> toConst(v, meta.kind) }
         session.submitMove(GameMove(
@@ -149,7 +149,7 @@ data class RoleState(
  */
 data class MoveOption(
     val index: Int,
-    val actionId: ActionId,
+    val actionId: NodeId,
     val role: RoleId,
     val visibility: Visibility,
     val description: String,

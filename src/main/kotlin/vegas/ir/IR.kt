@@ -116,6 +116,6 @@ data class GameIR(
     val name: String,
     val roles: Set<RoleId>,
     val chanceRoles: Set<RoleId>,
-    val dag: ActionDag,
+    val dag: EventGraph,
     val payoffs: Map<RoleId, Expr>
 )

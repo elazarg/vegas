@@ -165,7 +165,7 @@ object LightningCompiler {
     /**
      * Compute the Lightning pot from the GameIR:
      *
-     *  - For each action whose owner is in [players], if its ActionSpec has a non-null `join`,
+     *  - For each action whose owner is in [players], if its NodeSpec has a non-null `join`,
      *    we add join.deposit.v to the pot.
      *
      * Assumptions (current Vegas language):

@@ -5,9 +5,9 @@ import io.kotest.matchers.shouldBe
 import vegas.frontend.parseFile
 
 /**
- * Tests that invalid ActionDag structures are rejected by the typechecker.
+ * Tests that invalid EventGraph structures are rejected by the typechecker.
  */
-class ActionDagTypecheckTest : FreeSpec({
+class EventGraphTypecheckTest : FreeSpec({
 
     "typechecker should reject invalid DAG structures" - {
 
@@ -18,7 +18,7 @@ class ActionDagTypecheckTest : FreeSpec({
             try {
                 typeCheck(ast)
             } catch (_: StaticError) {
-                // Either the existing checker or ActionDag validator should catch this
+                // Either the existing checker or EventGraph validator should catch this
                 caught = true
             }
 

@@ -12,10 +12,10 @@ fun GameIR.toGraphviz(): String =
     )
 
 /**
- * Render an ActionDag as Graphviz DOT.
+ * Render an EventGraph as Graphviz DOT.
  */
-fun ActionDag.toGraphviz(
-    gameName: String = "ActionDag",
+fun EventGraph.toGraphviz(
+    gameName: String = "EventGraph",
     chanceRoles: Set<RoleId> = emptySet(),
 ): String {
     val sb = StringBuilder()
@@ -28,7 +28,7 @@ fun ActionDag.toGraphviz(
     sb.appendLine("  splines=true;") // Use 'ortho' for square lines, 'true' for curved
 
     // Group actions by owning role
-    val byRole: Map<RoleId, List<ActionId>> =
+    val byRole: Map<RoleId, List<NodeId>> =
         actions.groupBy { owner(it) }
 
     // Emit one cluster per role
@@ -84,7 +84,7 @@ fun ActionDag.toGraphviz(
 /* Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
-private fun ActionDag.nodeId(id: ActionId): String {
+private fun EventGraph.nodeId(id: NodeId): String {
     val roleName = try { owner(id).name } catch (_: Throwable) { owner(id).toString() }
     val raw = "n_${roleName}_${id.second}"
     return "\"${escapeId(raw)}\""
@@ -93,7 +93,7 @@ private fun ActionDag.nodeId(id: ActionId): String {
 /** * Generates an HTML-like label for Graphviz.
  * This allows mixing fonts, sizes, and layout within the node.
  */
-private fun ActionDag.nodeHtmlLabel(id: ActionId, index: Int): String {
+private fun EventGraph.nodeHtmlLabel(id: NodeId, index: Int): String {
     val kind = kind(id)
     val params = params(id)
 

@@ -1,5 +1,5 @@
 EFG 2 R "MontyHall" { "Host" "Guest" }
-"Generated from ActionDag"
+"Generated from EventGraph"
 
 p "" 1 1 "" { "Hidden(0)" "Hidden(1)" "Hidden(2)" "Quit" } 0
 p "" 2 1 "" { "0" "1" "2" "Quit" } 0

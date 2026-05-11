@@ -4,9 +4,9 @@ import vegas.FieldRef
 import vegas.RoleId
 import vegas.StaticError
 import vegas.VarId
-import vegas.ir.ActionDag
-import vegas.ir.ActionId
-import vegas.ir.ActionSpec
+import vegas.ir.EventGraph
+import vegas.ir.NodeId
+import vegas.ir.NodeSpec
 import vegas.ir.Expr
 import vegas.ir.GameIR
 import vegas.ir.Type
@@ -175,12 +175,12 @@ fun applyMove(config: Configuration, label: Label): Configuration {
  * Guards are evaluated with the assignment layered on top of the player's knowledge.
  */
 private fun enumerateAssignmentsForAction(
-    dag: ActionDag,
-    actionId: ActionId,
+    dag: EventGraph,
+    actionId: NodeId,
     history: History,
     playerKnowledge: History,
 ): List<Map<VarId, Expr.Const>> {
-    val spec: ActionSpec = dag.spec(actionId)
+    val spec: NodeSpec = dag.spec(actionId)
     val role = dag.owner(actionId)
 
     if (spec.params.isEmpty()) return listOf(emptyMap())
@@ -250,8 +250,8 @@ private fun enumerateAssignmentsForAction(
  * @return Unified frontier slice mapping FieldRef -> Expr.Const
  */
 private fun combineAssignmentsIntoFrontier(
-    roleToActionId: (ActionId) -> RoleId,
-    actions: List<ActionId>,
+    roleToActionId: (NodeId) -> RoleId,
+    actions: List<NodeId>,
     assignments: List<Map<VarId, Expr.Const>>
 ): FrontierAssignmentSlice {
     val frontierSlice = mutableMapOf<FieldRef, Expr.Const>()
@@ -269,19 +269,19 @@ private fun combineAssignmentsIntoFrontier(
  * Enumerate all explicit (non-abandonment) joint assignments for a role across all
  * its actions in the current frontier.
  *
- * Returns pairs of (ActionId, FrontierAssignmentSlice) where:
- * - ActionId identifies this as an explicit move (for policy checking)
+ * Returns pairs of (NodeId, FrontierAssignmentSlice) where:
+ * - NodeId identifies this as an explicit move (for policy checking)
  * - FrontierAssignmentSlice contains the actual field assignments
  *
- * For joint moves across multiple actions, uses the first ActionId as a marker.
+ * For joint moves across multiple actions, uses the first NodeId as a marker.
  */
 fun enumerateRoleFrontierChoices(
-    dag: ActionDag,
+    dag: EventGraph,
     role: RoleId,
-    actions: List<ActionId>,
+    actions: List<NodeId>,
     history: History,
     playerKnowledge: History,
-): List<Pair<ActionId, FrontierAssignmentSlice>> {
+): List<Pair<NodeId, FrontierAssignmentSlice>> {
     // ========== Check if Role Has Abandoned ==========
     // Once a role has abandoned (some field Quit), it has no explicit choices anymore.
     if (history.quit(role)) return emptyList()
@@ -299,7 +299,7 @@ fun enumerateRoleFrontierChoices(
     // Cross-product over actions; then flatten into a single FrontierAssignmentSlice.
     val combinations: List<List<Map<VarId, Expr.Const>>> = cartesian(perActionAssignments)
 
-    // Use first ActionId as a marker for explicit moves (for policy checking)
+    // Use first NodeId as a marker for explicit moves (for policy checking)
     val representativeActionId = actions.first()
 
     return combinations.map { localAssigmentList ->

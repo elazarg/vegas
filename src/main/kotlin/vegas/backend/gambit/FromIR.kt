@@ -1,7 +1,7 @@
 /**
  * # Gambit EFG Backend
  *
- * This package converts Vegas ActionDag IR into Gambit's Extensive Form Game (EFG) format.
+ * This package converts Vegas EventGraph IR into Gambit's Extensive Form Game (EFG) format.
  *
  * ## Architecture
  *
@@ -31,7 +31,7 @@ import vegas.RoleId
 import vegas.StaticError
 import vegas.VarId
 import vegas.dag.FrontierMachine
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.ir.GameIR
 import vegas.ir.toOutcome
@@ -63,7 +63,7 @@ fun interface ExpansionPolicy {
      * @param action The action being considered (null = quit)
      * @return true to expand immediately, false to create Continuation
      */
-    fun shouldExpand(owner: RoleId, action: ActionId?): Boolean
+    fun shouldExpand(owner: RoleId, action: NodeId?): Boolean
 
 
     companion object {
@@ -100,13 +100,13 @@ fun interface ExpansionPolicy {
 }
 
 /**
- * Build a Gambit EFG string from the ActionDag-based IR.
+ * Build a Gambit EFG string from the EventGraph-based IR.
  *
  * Uses policy-driven generation with optional abandonment branch inclusion.
  *
  * Semantics (informally):
  *
- *  - The ActionDag is a partial order of actions. At runtime, we explore it by
+ *  - The EventGraph is a partial order of actions. At runtime, we explore it by
  *    repeatedly taking a *frontier* of currently enabled actions. Each resolved
  *    frontier contributes one "epistemic layer" of writes along a history.
  *
@@ -132,7 +132,7 @@ fun interface ExpansionPolicy {
  *        global history and all players' knowledge stacks.
  *
  * This layering is epistemic, not part of the IR itself: it is induced by the
- * frontier exploration of the ActionDag and respects its causal partial order.
+ * frontier exploration of the EventGraph and respects its causal partial order.
  */
 fun generateExtensiveFormGame(
     ir: GameIR,
@@ -158,7 +158,7 @@ fun generateExtensiveFormGame(
 
     return ExtensiveFormGame(
         name = ir.name.ifEmpty { "Game" },
-        description = "Generated from ActionDag",
+        description = "Generated from EventGraph",
         strategicPlayers = ir.roles,
         tree = tree
     ).toEfg()
@@ -413,7 +413,7 @@ private class InfosetManager(roles: Set<RoleId>) {
 internal data class GeneratorContext(
     val configuration: Configuration,
     // The "Edge Identity" (For Policy / Resume)
-    val actionId: ActionId?
+    val actionId: NodeId?
 )
 
 

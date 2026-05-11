@@ -1,5 +1,5 @@
 EFG 2 R "Prisoners" { "A" "B" }
-"Generated from ActionDag"
+"Generated from EventGraph"
 
 p "" 1 1 "" { "Hidden(true)" "Hidden(false)" "Quit" } 0
 p "" 2 1 "" { "Hidden(true)" "Hidden(false)" "Quit" } 0

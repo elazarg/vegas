@@ -5,7 +5,7 @@ import vegas.RoleId
 import vegas.frontend.Exp as AstExpr
 import vegas.frontend.TypeExp as AstType
 import vegas.ir.*
-import vegas.ir.ActionDag.Companion.fromGraph
+import vegas.ir.EventGraph.Companion.fromGraph
 
 fun compileToIR(ast: GameAst): GameIR {
     val typeEnv = ast.types
@@ -16,13 +16,13 @@ fun compileToIR(ast: GameAst): GameIR {
     val payoffs = extractPayoffs(ast.game, typeEnv)
 
     val dag = actionDagFromPhases(phases)
-        ?: error("ActionDag construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
+        ?: error("EventGraph construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
 
     val ir = GameIR(
         name = ast.name,
         roles = roles,
         chanceRoles = chanceRoles,
-        dag = ActionDag.expandCommitReveal(dag),
+        dag = EventGraph.expandCommitReveal(dag),
         payoffs = payoffs,
     )
 
@@ -153,7 +153,7 @@ private fun findLatestWriter(
     field: FieldRef,
     beforePhase: Int,
     phases: List<Phase>,
-): ActionId? {
+): NodeId? {
     for (p in beforePhase - 1 downTo 0) {
         val sig = phases[p].actions[field.owner] ?: continue
         if (sig.parameters.any { it.name == field.param })
@@ -166,7 +166,7 @@ private fun findPriorCommit(
     field: FieldRef,
     beforePhase: Int,
     phases: List<Phase>,
-): ActionId? {
+): NodeId? {
     for (p in beforePhase - 1 downTo 0) {
         val sig = phases[p].actions[field.owner] ?: continue
         val param = sig.parameters.find { it.name == field.param }
@@ -177,7 +177,7 @@ private fun findPriorCommit(
 }
 
 /**
- * Build an [ActionDag] from a linear list of [Phase]s, without going
+ * Build an [EventGraph] from a linear list of [Phase]s, without going
  * through [GameIR].
  *
  * Returns null if:
@@ -185,9 +185,9 @@ private fun findPriorCommit(
  *  - commit/reveal ordering is illegal, or
  *  - guards read fields that are never visible beforehand.
  */
-fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
-    val nodes = mutableSetOf<ActionId>()
-    val deps = mutableMapOf<ActionId, MutableSet<ActionId>>()
+fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
+    val nodes = mutableSetOf<NodeId>()
+    val deps = mutableMapOf<NodeId, MutableSet<NodeId>>()
 
     // 1) Nodes
     phases.forEachIndexed { pIdx, phase ->
@@ -232,7 +232,7 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
     }
 
     // 3) Per-action payloads (spec + struct)
-    val payloads = mutableMapOf<ActionId, ActionMeta>()
+    val payloads = mutableMapOf<NodeId, NodeMeta>()
     phases.forEachIndexed { pIdx, phase ->
         phase.actions.forEach { (role, sig) ->
             val id = role to pIdx
@@ -242,22 +242,22 @@ fun actionDagFromPhases(phases: List<Phase>): ActionDag? {
 
             val visibility = buildVisibilityMap(role, pIdx, sig, phases)
 
-            val struct = ActionStruct(
+            val struct = NodeStruct(
                 owner = role,
                 writes = writes,
                 visibility = visibility,
                 guardReads = guardReads,
             )
 
-            val params = sig.parameters.map { ActionParam(it.name, it.type) }
+            val params = sig.parameters.map { NodeParam(it.name, it.type) }
 
-            val spec = ActionSpec(
+            val spec = NodeSpec(
                 params = params,
                 join = sig.join,
                 guardExpr = sig.requires.condition,
             )
 
-            payloads[id] = ActionMeta(id = id, spec = spec, struct = struct)
+            payloads[id] = NodeMeta(id = id, spec = spec, struct = struct)
         }
     }
 

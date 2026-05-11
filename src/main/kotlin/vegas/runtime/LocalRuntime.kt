@@ -1,7 +1,7 @@
 package vegas.runtime
 
 import vegas.RoleId
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 import vegas.ir.GameIR
 import vegas.ir.asInt
 import vegas.semantics.*
@@ -25,7 +25,7 @@ class LocalSession(private val game: GameIR) : GameSession {
     private var config = Configuration.initial(game)
 
     /** Track submitted zero-parameter actions (e.g., joins) in the current frontier. */
-    private val submittedZeroParam = mutableSetOf<ActionId>()
+    private val submittedZeroParam = mutableSetOf<NodeId>()
 
     override fun legalMoves(): List<GameMove> =
         MoveTranslator.legalMoves(semantics, config)

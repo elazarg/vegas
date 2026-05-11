@@ -6,13 +6,13 @@ import vegas.dag.before
 
 enum class Phase { COMMIT_EVENT, CHOICE, REVEAL_EVENT }
 
-data class PhaseNode(val action: ActionId, val phase: Phase)
+data class PhaseNode(val action: NodeId, val phase: Phase)
 
 class VisibilityDag private constructor(
     private val inner: Dag<PhaseNode>
 ) : Dag<PhaseNode> by inner {
     companion object {
-        fun build(base: ActionDag): VisibilityDag {
+        fun build(base: EventGraph): VisibilityDag {
             val dag: Dag<PhaseNode> = ExplicitDag.fromEdges(
                 edges = base.actions.flatMap { a -> chain(a) + deps(base, a) }.toSet(),
                 checkAcyclic = true
@@ -22,8 +22,8 @@ class VisibilityDag private constructor(
         }
 
         private fun deps(
-            base: ActionDag,
-            a: ActionId
+            base: EventGraph,
+            a: NodeId
         ): List<Pair<PhaseNode, PhaseNode>> = base.prerequisitesOf(a).map { y ->
             val srcPhase =
                 when (base.kind(y)) {
@@ -38,7 +38,7 @@ class VisibilityDag private constructor(
             PhaseNode(y, srcPhase) before PhaseNode(a, Phase.COMMIT_EVENT)
         }
 
-        private fun chain(a: ActionId): List<Pair<PhaseNode, PhaseNode>> {
+        private fun chain(a: NodeId): List<Pair<PhaseNode, PhaseNode>> {
             return listOf(
                 PhaseNode(a, Phase.COMMIT_EVENT) before PhaseNode(a, Phase.CHOICE),
                 PhaseNode(a, Phase.CHOICE) before PhaseNode(a, Phase.REVEAL_EVENT),

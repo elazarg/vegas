@@ -3,7 +3,7 @@ package vegas.backend.smt
 import vegas.FieldRef
 import vegas.RoleId
 import vegas.ir.GameIR
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.ir.Type
 import vegas.ir.Visibility
@@ -47,7 +47,7 @@ private class SmtGenerator(
     }
 
     // 3. Pre-calculate dependencies for Strategy mode
-    val actionDependencies: Map<ActionId, List<FieldRef>> = if (mode == SmtMode.STRATEGY) {
+    val actionDependencies: Map<NodeId, List<FieldRef>> = if (mode == SmtMode.STRATEGY) {
         dag.actions.associateWith { id ->
             val owner = dag.owner(id)
             val ancestors = dag.ancestorsOf(id)
@@ -67,7 +67,7 @@ private class SmtGenerator(
         emptyMap()
     }
 
-    val fieldWriter = mutableMapOf<FieldRef, ActionId>().apply {
+    val fieldWriter = mutableMapOf<FieldRef, NodeId>().apply {
         dag.actions.forEach { id ->
             dag.writes(id).forEach { field ->
                 val vis = dag.visibilityOf(id)[field]
@@ -193,7 +193,7 @@ private class SmtGenerator(
         return sb.toString()
     }
 
-    fun resolveField(field: FieldRef, contextId: ActionId?): String {
+    fun resolveField(field: FieldRef, contextId: NodeId?): String {
         if (mode == SmtMode.SATISFIABILITY) return fieldName(field)
 
         val writerId = fieldWriter[field] ?: error("Unknown writer for $field")
@@ -209,7 +209,7 @@ private class SmtGenerator(
         return if (args.isEmpty()) fieldName(field) else "(${fieldName(field)} $args)"
     }
 
-    fun resolveDone(field: FieldRef, contextId: ActionId?): String {
+    fun resolveDone(field: FieldRef, contextId: NodeId?): String {
          if (mode == SmtMode.SATISFIABILITY) return doneFieldName(field)
 
          val writerId = fieldWriter[field] ?: error("Unknown writer for $field")
@@ -225,7 +225,7 @@ private class SmtGenerator(
          return if (args.isEmpty()) doneFieldName(field) else "(${doneFieldName(field)} $args)"
     }
 
-    fun resolveActionDone(id: ActionId, contextId: ActionId?): String {
+    fun resolveActionDone(id: NodeId, contextId: NodeId?): String {
         if (mode == SmtMode.SATISFIABILITY) return actionDoneName(id)
 
         val owner = dag.owner(id)
@@ -312,6 +312,6 @@ private fun fieldName(field: FieldRef): String = "${field.owner}_${field.param}"
 
 private fun doneFieldName(field: FieldRef): String = "${fieldName(field)}_done"
 
-private fun actionDoneName(id: ActionId): String = "action_${id.first}_${id.second}_done"
+private fun actionDoneName(id: NodeId): String = "action_${id.first}_${id.second}_done"
 
 private fun outcomeName(role: RoleId): String = "${role}_outcome"

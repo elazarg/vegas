@@ -6,21 +6,21 @@ import io.kotest.matchers.shouldNotBe
 import vegas.ir.*
 
 /**
- * Core unit tests for ActionDag with synthetic test cases.
- * These tests verify ActionDag behavior in isolation, without IR dependencies.
+ * Core unit tests for EventGraph with synthetic test cases.
+ * These tests verify EventGraph behavior in isolation, without IR dependencies.
  */
-class ActionDagCoreTest : FreeSpec({
+class EventGraphCoreTest : FreeSpec({
 
-    "ActionDag.fromGraph with synthetic DAGs" - {
+    "EventGraph.fromGraph with synthetic DAGs" - {
 
         "should create simple chain A -> B -> C" {
             val roleA = RoleId("A")
             val roleB = RoleId("B")
             val roleC = RoleId("C")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 1
-            val c: ActionId = roleC to 2
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 1
+            val c: NodeId = roleC to 2
 
             val nodes = setOf(a, b, c)
             val deps = mapOf(
@@ -30,14 +30,14 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -46,7 +46,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             }
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)
 
             dag shouldNotBe null
             dag!!.nodes.size shouldBe 3
@@ -67,10 +67,10 @@ class ActionDagCoreTest : FreeSpec({
             val roleC = RoleId("C")
             val roleD = RoleId("D")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 1
-            val c: ActionId = roleC to 2
-            val d: ActionId = roleD to 3
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 1
+            val c: NodeId = roleC to 2
+            val d: NodeId = roleD to 3
 
             val nodes = setOf(a, b, c, d)
             val deps = mapOf(
@@ -81,14 +81,14 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -97,7 +97,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             }
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)
 
             dag shouldNotBe null
             dag!!.nodes.size shouldBe 4
@@ -116,8 +116,8 @@ class ActionDagCoreTest : FreeSpec({
             val roleA = RoleId("A")
             val roleB = RoleId("B")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 1
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 1
 
             val nodes = setOf(a, b)
             val deps = mapOf(
@@ -126,14 +126,14 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -145,7 +145,7 @@ class ActionDagCoreTest : FreeSpec({
             // Cyclic graph should throw an exception (from ExplicitDag.from)
             var exceptionThrown = false
             try {
-                ActionDag.fromGraph(nodes, deps, payloads)
+                EventGraph.fromGraph(nodes, deps, payloads)
             } catch (e: IllegalArgumentException) {
                 exceptionThrown = true
                 e.message shouldBe "Cycle detected"
@@ -159,26 +159,26 @@ class ActionDagCoreTest : FreeSpec({
             val roleB = RoleId("B")
             val roleC = RoleId("C")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 0
-            val c: ActionId = roleC to 0
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 0
+            val c: NodeId = roleC to 0
 
             val nodes = setOf(a, b, c)
             val deps = mapOf(
-                a to emptySet<ActionId>(),
+                a to emptySet<NodeId>(),
                 b to emptySet(),
                 c to emptySet()
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -187,7 +187,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             }
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)
 
             dag shouldNotBe null
             dag!!.nodes.size shouldBe 3
@@ -199,16 +199,16 @@ class ActionDagCoreTest : FreeSpec({
         }
     }
 
-    "ActionDag topological ordering" - {
+    "EventGraph topological ordering" - {
 
         "should order predecessors before dependents" {
             val roleA = RoleId("A")
             val roleB = RoleId("B")
             val roleC = RoleId("C")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 1
-            val c: ActionId = roleC to 2
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 1
+            val c: NodeId = roleC to 2
 
             val nodes = setOf(a, b, c)
             val deps = mapOf(
@@ -218,14 +218,14 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -234,7 +234,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             }
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)!!
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)!!
             val topo = dag.topo()
 
             // For every action, all its prerequisites should come earlier
@@ -248,16 +248,16 @@ class ActionDagCoreTest : FreeSpec({
         }
     }
 
-    "ActionDag concurrency" - {
+    "EventGraph concurrency" - {
 
         "canExecuteConcurrently should match reachability" {
             val roleA = RoleId("A")
             val roleB = RoleId("B")
             val roleC = RoleId("C")
 
-            val a: ActionId = roleA to 0
-            val b: ActionId = roleB to 1
-            val c: ActionId = roleC to 2
+            val a: NodeId = roleA to 0
+            val b: NodeId = roleB to 1
+            val c: NodeId = roleC to 2
 
             val nodes = setOf(a, b, c)
             val deps = mapOf(
@@ -267,14 +267,14 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = nodes.associateWith { id ->
-                ActionMeta(
+                NodeMeta(
                     id = id,
-                    spec = ActionSpec(
+                    spec = NodeSpec(
                         params = emptyList(),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = id.first,
                         writes = emptySet(),
                         visibility = emptyMap(),
@@ -283,7 +283,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             }
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)!!
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)!!
 
             // A and B are sequential (A -> B)
             dag.canExecuteConcurrently(a, b) shouldBe false
@@ -297,26 +297,26 @@ class ActionDagCoreTest : FreeSpec({
         }
     }
 
-    "ActionDag commit/reveal validation" - {
+    "EventGraph commit/reveal validation" - {
 
         "should reject reveal without prior commit" {
             val roleA = RoleId("A")
             val field = FieldRef(roleA, VarId("x"))
 
-            val a: ActionId = roleA to 0
+            val a: NodeId = roleA to 0
 
             val nodes = setOf(a)
-            val deps = mapOf(a to emptySet<ActionId>())
+            val deps = mapOf(a to emptySet<NodeId>())
 
             val payloads = mapOf(
-                a to ActionMeta(
+                a to NodeMeta(
                     id = a,
-                    spec = ActionSpec(
-                        params = listOf(ActionParam(VarId("x"), Type.IntType)),
+                    spec = NodeSpec(
+                        params = listOf(NodeParam(VarId("x"), Type.IntType)),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.REVEAL),  // Reveal without commit!
@@ -325,7 +325,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             )
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)
 
             // Should fail validation (reveal without commit)
             dag shouldBe null
@@ -335,8 +335,8 @@ class ActionDagCoreTest : FreeSpec({
             val roleA = RoleId("A")
             val field = FieldRef(roleA, VarId("x"))
 
-            val commit: ActionId = roleA to 0
-            val reveal: ActionId = roleA to 1
+            val commit: NodeId = roleA to 0
+            val reveal: NodeId = roleA to 1
 
             val nodes = setOf(commit, reveal)
             val deps = mapOf(
@@ -345,28 +345,28 @@ class ActionDagCoreTest : FreeSpec({
             )
 
             val payloads = mapOf(
-                commit to ActionMeta(
+                commit to NodeMeta(
                     id = commit,
-                    spec = ActionSpec(
-                        params = listOf(ActionParam(VarId("x"), Type.IntType)),
+                    spec = NodeSpec(
+                        params = listOf(NodeParam(VarId("x"), Type.IntType)),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.COMMIT),
                         guardReads = emptySet()
                     )
                 ),
-                reveal to ActionMeta(
+                reveal to NodeMeta(
                     id = reveal,
-                    spec = ActionSpec(
-                        params = listOf(ActionParam(VarId("x"), Type.IntType)),
+                    spec = NodeSpec(
+                        params = listOf(NodeParam(VarId("x"), Type.IntType)),
                         join = null,
                         guardExpr = Expr.Const.BoolVal(true)
                     ),
-                    struct = ActionStruct(
+                    struct = NodeStruct(
                         owner = roleA,
                         writes = setOf(field),
                         visibility = mapOf(field to Visibility.REVEAL),
@@ -375,7 +375,7 @@ class ActionDagCoreTest : FreeSpec({
                 )
             )
 
-            val dag = ActionDag.fromGraph(nodes, deps, payloads)
+            val dag = EventGraph.fromGraph(nodes, deps, payloads)
 
             // Should succeed (commit -> reveal)
             dag shouldNotBe null

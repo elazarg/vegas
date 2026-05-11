@@ -60,14 +60,14 @@ enum class LivenessPolicy {
     INDEPENDENT
 }
 
-class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPolicy) {
+class CoqDagEncoder(private val dag: EventGraph, private val policy: LivenessPolicy) {
 
-    private val sortedIds: List<ActionId> by lazy {
+    private val sortedIds: List<NodeId> by lazy {
         val adjacency = dag.actions.associateWith { dag.prerequisitesOf(it) }
         Algo.topo(dag.actions, adjacency)
     }
 
-    private val idToIndex: Map<ActionId, Int> by lazy {
+    private val idToIndex: Map<NodeId, Int> by lazy {
         sortedIds.withIndex().associate { it.value to it.index }
     }
 
@@ -222,7 +222,7 @@ class CoqDagEncoder(private val dag: ActionDag, private val policy: LivenessPoli
             ?: error("No commit ancestor for reveal field $field at action $currentIndex")
     }
 
-    private fun generateWitnessRecord(sb: StringBuilder, index: Int, meta: ActionMeta) {
+    private fun generateWitnessRecord(sb: StringBuilder, index: Int, meta: NodeMeta) {
         val myAncestors = ancestors[index] ?: emptyList()
         val myRole = meta.struct.owner
 

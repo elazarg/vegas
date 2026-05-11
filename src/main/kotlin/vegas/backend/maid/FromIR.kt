@@ -2,7 +2,7 @@
  * # MAID Backend: IR to MAID Conversion
  *
  * Converts Vegas GameIR to MAID format. The key insight is that Vegas's
- * ActionDag and VisibilityDag already encode MAID-like structures:
+ * EventGraph and VisibilityDag already encode MAID-like structures:
  *
  * - Roles → Agents
  * - Action parameters → Decision/Chance nodes
@@ -48,7 +48,7 @@ private class MaidConverter(private val ir: GameIR) {
     // For commit/reveal fields, this is the COMMIT action; for public fields, the public action.
     // Note: REVEAL actions make values visible but don't choose new values.
     // If griefing is encoded in the future, REVEAL would become a separate binary decision.
-    private val fieldToDecisionAction = mutableMapOf<FieldRef, vegas.ir.ActionId>()
+    private val fieldToDecisionAction = mutableMapOf<FieldRef, vegas.ir.NodeId>()
 
     // Track all utility node IDs for later edge creation
     private val utilityNodeIds = mutableMapOf<RoleId, String>()
@@ -90,7 +90,7 @@ private class MaidConverter(private val ir: GameIR) {
     }
 
     /**
-     * Create decision/chance nodes from ActionDag action parameters.
+     * Create decision/chance nodes from EventGraph action parameters.
      * Deduplicates nodes by (owner, param) to handle multiple actions per player.
      *
      * Also tracks the "decision action" for each field - the action where the value

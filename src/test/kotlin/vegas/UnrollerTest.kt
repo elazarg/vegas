@@ -305,7 +305,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -341,7 +341,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -373,7 +373,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -409,7 +409,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -445,7 +445,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -480,7 +480,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -508,7 +508,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -536,7 +536,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()
@@ -564,7 +564,7 @@ class UnrollerTest : FreeSpec({
             tree = pruneContinuations(tree)
             val newEfg = ExtensiveFormGame(
                 name = ir.name.ifEmpty { "Game" },
-                description = "Generated from ActionDag",
+                description = "Generated from EventGraph",
                 strategicPlayers = ir.roles,
                 tree = tree
             ).toEfg()

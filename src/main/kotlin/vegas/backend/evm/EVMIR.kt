@@ -2,7 +2,7 @@ package vegas.backend.evm
 
 import vegas.RoleId
 import vegas.VarId
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 
 /**
  * The "Game-Specific" EVM Intermediate Representation.
@@ -50,7 +50,7 @@ data class EvmContract(
  * them idiomatically (e.g. Modifiers vs. Asserts).
  */
 data class EvmAction(
-    val actionId: ActionId,
+    val actionId: NodeId,
     val name: String,
     val invokedBy: RoleId,
 
@@ -59,7 +59,7 @@ data class EvmAction(
     val payable: Boolean,              // True if this action accepts ETH (e.g. Join)
 
     // The State Machine Constraints (Declarative)
-    val dependencies: List<ActionId>,  // List of ActionIDs that must be DONE
+    val dependencies: List<NodeId>,  // List of ActionIDs that must be DONE
     val isTerminal: Boolean,           // If true, this action triggers the end-game check
 
     // The Imperative Logic

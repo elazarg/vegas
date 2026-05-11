@@ -2,8 +2,8 @@ package vegas.semantics
 
 import vegas.FieldRef
 import vegas.RoleId
-import vegas.ir.ActionDag
-import vegas.ir.ActionId
+import vegas.ir.EventGraph
+import vegas.ir.NodeId
 import vegas.ir.Expr
 
 /**
@@ -45,7 +45,7 @@ sealed class PlayTag {
      * Explicit action: role assigns parameters for this action.
      * @property actionId The action being executed
      */
-    data class Action(val actionId: ActionId) : PlayTag()
+    data class Action(val actionId: NodeId) : PlayTag()
 
     /**
      * Quit move: role abandons (sets all their parameters to Quit).
@@ -58,7 +58,7 @@ sealed class PlayTag {
  * Create a frontier slice where all parameters of the given actions are set to [Expr.Const.Quit].
  * This represents the "quit" choice where a strategic player opts out of all actions at a frontier.
  */
-fun allParametersQuit(dag: ActionDag, role: RoleId, actions: List<ActionId>): FrontierAssignmentSlice =
+fun allParametersQuit(dag: EventGraph, role: RoleId, actions: List<NodeId>): FrontierAssignmentSlice =
     actions.flatMap { actionId ->
         dag.params(actionId).map { FieldRef(role, it.name) to Expr.Const.Quit }
     }.toMap()

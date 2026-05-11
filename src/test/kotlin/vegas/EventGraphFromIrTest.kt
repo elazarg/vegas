@@ -11,11 +11,11 @@ import vegas.frontend.parseFile
 import vegas.ir.Visibility
 
 /**
- * Tests for building ActionDag from GameIR.
+ * Tests for building EventGraph from GameIR.
  */
-class ActionDagFromIrTest : FreeSpec({
+class EventGraphFromIrTest : FreeSpec({
 
-    "ActionDag.fromGameIR" - {
+    "EventGraph.fromGameIR" - {
 
         "should build DAG for Simple.vg" {
             val ast = parseFile("examples/Simple.vg")
@@ -134,7 +134,7 @@ class ActionDagFromIrTest : FreeSpec({
         }
     }
 
-    "ActionDag.fromGameIR validation" - {
+    "EventGraph.fromGameIR validation" - {
 
         "should validate all example games" {
             val examples = listOf(

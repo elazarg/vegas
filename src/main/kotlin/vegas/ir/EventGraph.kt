@@ -9,7 +9,7 @@ import vegas.dag.DagSlice
 import vegas.dag.Reachability
 import vegas.dag.computeReachability
 
-typealias ActionId = Pair<RoleId, Int>
+typealias NodeId = Pair<RoleId, Int>
 
 /**
  * Visibility of a write to a field:
@@ -31,9 +31,9 @@ enum class Visibility {
  * The reduced parameter info actually needed by backends.
  *
  * Structural visibility (commit / reveal / public) is *not* stored here;
- * it lives in [ActionStruct].
+ * it lives in [NodeStruct].
  */
-data class ActionParam(
+data class NodeParam(
     val name: VarId,
     val type: Type,
 )
@@ -46,8 +46,8 @@ data class ActionParam(
  *  - join      : deposit info (if any); non-null iff this is the join step
  *  - guardExpr : the logical "where" expression that must hold
  */
-data class ActionSpec(
-    val params: List<ActionParam>,
+data class NodeSpec(
+    val params: List<NodeParam>,
     val join: Join?,       // non-null iff this is the join step
     val guardExpr: Expr,
 )
@@ -61,7 +61,7 @@ data class ActionSpec(
  *
  * This is the canonical location of commit/reveal/public semantics.
  */
-data class ActionStruct(
+data class NodeStruct(
     val owner: RoleId,
     val writes: Set<FieldRef>,
     val visibility: Map<FieldRef, Visibility>,
@@ -91,10 +91,10 @@ data class ActionStruct(
  * @param struct structural metadata (owner, writes, visibility, guard reads)
  * @property kind derived from [spec] and [struct].
  */
-data class ActionMeta(
-    val id: ActionId,
-    val spec: ActionSpec,
-    val struct: ActionStruct,
+data class NodeMeta(
+    val id: NodeId,
+    val spec: NodeSpec,
+    val struct: NodeStruct,
 ) {
     val kind: Visibility by lazy { inferKind(struct) }
 }
@@ -112,42 +112,42 @@ data class ActionMeta(
  *
  * Reachability is precomputed for fast dependency and concurrency queries.
  */
-class ActionDag private constructor(
-    private val dag: Dag<ActionId>,
-    private val payloads: Map<ActionId, ActionMeta>,
-    val reach: Reachability<ActionId>,
-) : Dag<ActionId> by dag {
+class EventGraph private constructor(
+    private val dag: Dag<NodeId>,
+    private val payloads: Map<NodeId, NodeMeta>,
+    val reach: Reachability<NodeId>,
+) : Dag<NodeId> by dag {
 
     /** All actions present in this DAG. */
-    val actions: Set<ActionId> get() = payloads.keys
+    val actions: Set<NodeId> get() = payloads.keys
 
     /** All metadata objects, in no particular order. */
-    val metas: Collection<ActionMeta> get() = payloads.values
+    val metas: Collection<NodeMeta> get() = payloads.values
 
     /** Metadata for a given action (throws if missing). */
-    fun meta(id: ActionId): ActionMeta = payloads.getValue(id)
+    fun meta(id: NodeId): NodeMeta = payloads.getValue(id)
 
     /** Semantic shortcuts. */
-    fun spec(id: ActionId): ActionSpec = meta(id).spec
-    fun kind(id: ActionId): Visibility = meta(id).kind
-    fun params(id: ActionId): List<ActionParam> = meta(id).spec.params
+    fun spec(id: NodeId): NodeSpec = meta(id).spec
+    fun kind(id: NodeId): Visibility = meta(id).kind
+    fun params(id: NodeId): List<NodeParam> = meta(id).spec.params
 
     fun deposit(role: RoleId): Expr.Const.IntVal =
         actions.filter { it.first == role }.firstNotNullOf { spec(it).join }.deposit
 
     /** Structural shortcuts. */
-    private fun struct(id: ActionId): ActionStruct = meta(id).struct
-    fun owner(id: ActionId): RoleId = struct(id).owner
-    fun writes(id: ActionId): Set<FieldRef> = struct(id).writes
-    fun visibilityOf(id: ActionId): Map<FieldRef, Visibility> = struct(id).visibility
+    private fun struct(id: NodeId): NodeStruct = meta(id).struct
+    fun owner(id: NodeId): RoleId = struct(id).owner
+    fun writes(id: NodeId): Set<FieldRef> = struct(id).writes
+    fun visibilityOf(id: NodeId): Map<FieldRef, Visibility> = struct(id).visibility
 
     /** Reachability queries. */
-    fun reaches(from: ActionId, to: ActionId): Boolean =
+    fun reaches(from: NodeId, to: NodeId): Boolean =
         reach.reaches(from, to)
 
-    fun ancestorsOf(id: ActionId): Set<ActionId> = reach.ancestorsOf(id)
+    fun ancestorsOf(id: NodeId): Set<NodeId> = reach.ancestorsOf(id)
 
-    fun sinks(): Set<ActionId> {
+    fun sinks(): Set<NodeId> {
         val allDeps = actions.flatMap { prerequisitesOf(it) }.toSet()
         return actions.filter { it !in allDeps }.toSet()
     }
@@ -155,41 +155,41 @@ class ActionDag private constructor(
     /**
      * Concurrency test: two nodes can execute concurrently iff neither reaches the other.
      */
-    fun canExecuteConcurrently(a: ActionId, b: ActionId): Boolean =
+    fun canExecuteConcurrently(a: NodeId, b: NodeId): Boolean =
         !reach.comparable(a, b)
 
     companion object {
 
 
         fun fromGraph(
-            nodes: Set<ActionId>,
-            deps: Map<ActionId, Set<ActionId>>,
-            payloads: Map<ActionId, ActionMeta>,
-        ): ActionDag? {
+            nodes: Set<NodeId>,
+            deps: Map<NodeId, Set<NodeId>>,
+            payloads: Map<NodeId, NodeMeta>,
+        ): EventGraph? {
             val dag = ExplicitDag.from(
                 nodes,
                 prerequisitesOf = { n -> deps[n].orEmpty() },
                 checkAcyclic = true,
             ) ?: return null
 
-            val reach = computeReachability(dag.sliceFrom(nodes) as DagSlice<ActionId>)
+            val reach = computeReachability(dag.sliceFrom(nodes) as DagSlice<NodeId>)
 
             // Reuse the existing validators – they only depend on reach+payloads
             if (!validateCommitRevealOrdering(reach, payloads)) return null
             if (!validateVisibilityOnReads(reach, payloads)) return null
 
-            return ActionDag(dag = dag, payloads = payloads, reach = reach)
+            return EventGraph(dag = dag, payloads = payloads, reach = reach)
         }
 
-        fun expandCommitReveal(dag: ActionDag): ActionDag {
+        fun expandCommitReveal(dag: EventGraph): EventGraph {
             // 1. Identify pure-public actions
-            val purePublic: Set<ActionId> = dag.actions.filter { id ->
+            val purePublic: Set<NodeId> = dag.actions.filter { id ->
                 val s = dag.struct(id)
                 s.commitFields.isEmpty() && s.revealFields.isEmpty() && s.publicFields.isNotEmpty()
             }.toSet()
 
             // 2. Build Risk and Split sets
-            val riskPartners = mutableMapOf<ActionId, MutableSet<ActionId>>()
+            val riskPartners = mutableMapOf<NodeId, MutableSet<NodeId>>()
             for (a in purePublic) {
                 for (b in purePublic) {
                     if (a == b) continue
@@ -199,27 +199,27 @@ class ActionDag private constructor(
                 }
             }
 
-            val split: Set<ActionId> = riskPartners.filterValues { it.isNotEmpty() }.keys
+            val split: Set<NodeId> = riskPartners.filterValues { it.isNotEmpty() }.keys
 
             // Nothing concurrent, so nothing to do
             if (split.isEmpty()) return dag
 
             // 3. Allocate fresh ids for commit/reveal nodes
-            val commitId = mutableMapOf<ActionId, ActionId>()
-            val revealId = mutableMapOf<ActionId, ActionId>()
+            val commitId = mutableMapOf<NodeId, NodeId>()
+            val revealId = mutableMapOf<NodeId, NodeId>()
 
             // Simple strategy: keep role, use fresh integer index above current max
             val maxIndex = dag.actions.maxOf { it.second }
             var nextIndex = maxIndex + 1
 
-            fun freshCommitId(base: ActionId): ActionId {
-                val id: ActionId = base.first to nextIndex++
+            fun freshCommitId(base: NodeId): NodeId {
+                val id: NodeId = base.first to nextIndex++
                 commitId[base] = id
                 return id
             }
 
-            fun freshRevealId(base: ActionId): ActionId {
-                val id: ActionId = base.first to nextIndex++
+            fun freshRevealId(base: NodeId): NodeId {
+                val id: NodeId = base.first to nextIndex++
                 revealId[base] = id
                 return id
             }
@@ -231,11 +231,11 @@ class ActionDag private constructor(
             }
 
             // 4. New metadata and predecessor map
-            val newMetas = mutableMapOf<ActionId, ActionMeta>()
-            val newPreds = mutableMapOf<ActionId, MutableSet<ActionId>>()
+            val newMetas = mutableMapOf<NodeId, NodeMeta>()
+            val newPreds = mutableMapOf<NodeId, MutableSet<NodeId>>()
 
             // Helper: map a predecessor from old graph to new graph
-            fun mapPred(old: ActionId): ActionId =
+            fun mapPred(old: NodeId): NodeId =
                 if (old in split) revealId.getValue(old) else old
 
             // 4a. Copy non-split nodes
@@ -284,13 +284,13 @@ class ActionDag private constructor(
                     guardExpr = spec.guardExpr
                 )
 
-                val commitMeta = ActionMeta(
+                val commitMeta = NodeMeta(
                     id = cid,
                     spec = commitSpec,
                     struct = commitStruct
                 )
 
-                val revealMeta = ActionMeta(
+                val revealMeta = NodeMeta(
                     id = rid,
                     spec = revealSpec,
                     struct = revealStruct
@@ -300,7 +300,7 @@ class ActionDag private constructor(
                 val commitPreds = dag.prerequisitesOf(a).mapTo(mutableSetOf()) { p -> mapPred(p) }
 
                 // Reveal predecessors:
-                val revealPreds = mutableSetOf<ActionId>()
+                val revealPreds = mutableSetOf<NodeId>()
                 // original deps (through commit)
                 revealPreds.addAll(commitPreds)
                 // must commit itself
@@ -319,19 +319,19 @@ class ActionDag private constructor(
             }
 
             // 5. Build new underlying DAG and reachability
-            val newNodes: Set<ActionId> = newMetas.keys
+            val newNodes: Set<NodeId> = newMetas.keys
 
-            val newUnderlying: Dag<ActionId> =
+            val newUnderlying: Dag<NodeId> =
                 ExplicitDag.from(
                     newNodes,
                     prerequisitesOf = { n -> newPreds[n].orEmpty() },
                     checkAcyclic = true
                 ) ?: error("expandCommitReveal produced a cyclic graph")
 
-            val slice = newUnderlying.sliceFrom(newNodes) as DagSlice<ActionId>
+            val slice = newUnderlying.sliceFrom(newNodes) as DagSlice<NodeId>
             val newReach = computeReachability(slice)
 
-            return ActionDag(
+            return EventGraph(
                 dag = newUnderlying,
                 payloads = newMetas,
                 reach = newReach
@@ -345,7 +345,7 @@ class ActionDag private constructor(
 /* -------------------------------------------------------------------------- */
 
 private fun inferKind(
-    struct: ActionStruct,
+    struct: NodeStruct,
 ): Visibility {
     val hasCommit = struct.visibility.values.any { it == Visibility.COMMIT }
     val hasReveal = struct.visibility.values.any { it == Visibility.REVEAL }
@@ -363,11 +363,11 @@ private fun inferKind(
  * the same field on some path in the DAG.
  */
 private fun validateCommitRevealOrdering(
-    reach: Reachability<ActionId>,
-    payloads: Map<ActionId, ActionMeta>,
+    reach: Reachability<NodeId>,
+    payloads: Map<NodeId, NodeMeta>,
 ): Boolean {
-    val commitsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
-    val revealsByField = mutableMapOf<FieldRef, MutableList<ActionId>>()
+    val commitsByField = mutableMapOf<FieldRef, MutableList<NodeId>>()
+    val revealsByField = mutableMapOf<FieldRef, MutableList<NodeId>>()
 
     for ((id, meta) in payloads) {
         for ((f, vis) in meta.struct.visibility) {
@@ -398,7 +398,7 @@ private fun validateCommitRevealOrdering(
  * - It was written by the same owner (perfect recall), OR
  * - It was written with PUBLIC or REVEAL visibility before [targetAction]
  */
-fun ActionDag.observableFieldsAt(targetAction: ActionId): Set<FieldRef> {
+fun EventGraph.observableFieldsAt(targetAction: NodeId): Set<FieldRef> {
     val targetOwner = owner(targetAction)
     return actions
         .filter { src -> src != targetAction && reaches(src, targetAction) }
@@ -416,12 +416,12 @@ fun ActionDag.observableFieldsAt(targetAction: ActionId): Set<FieldRef> {
  * (PUBLIC or REVEAL) at or before that action.
  */
 private fun validateVisibilityOnReads(
-    reach: Reachability<ActionId>,
-    payloads: Map<ActionId, ActionMeta>,
+    reach: Reachability<NodeId>,
+    payloads: Map<NodeId, NodeMeta>,
 ): Boolean {
     // Points where each field becomes visible (PUBLIC or REVEAL)
-    val visPoints = mutableMapOf<FieldRef, MutableList<ActionId>>()
-    val commitPoints = mutableMapOf<FieldRef, MutableList<ActionId>>()
+    val visPoints = mutableMapOf<FieldRef, MutableList<NodeId>>()
+    val commitPoints = mutableMapOf<FieldRef, MutableList<NodeId>>()
     for ((id, meta) in payloads) {
         for ((field, vis) in meta.struct.visibility) {
             if (vis == Visibility.PUBLIC || vis == Visibility.REVEAL) {

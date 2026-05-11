@@ -2,8 +2,8 @@ package vegas.semantics
 
 import vegas.RoleId
 import vegas.dag.FrontierMachine
-import vegas.ir.ActionDag
-import vegas.ir.ActionId
+import vegas.ir.EventGraph
+import vegas.ir.NodeId
 import vegas.ir.GameIR
 
 /**
@@ -21,7 +21,7 @@ import vegas.ir.GameIR
  * @param partialFrontierAssignment Accumulated assignments for the current frontier (not yet committed)
  */
 data class Configuration(
-    val frontier: FrontierMachine<ActionId>,
+    val frontier: FrontierMachine<NodeId>,
     val history: History,
     val partialFrontierAssignment: FrontierAssignmentSlice = emptyMap()
 ) {
@@ -29,20 +29,20 @@ data class Configuration(
     fun isTerminal(): Boolean = frontier.isComplete()
 
     /** Get the set of currently enabled actions */
-    fun enabled(): Set<ActionId> = frontier.enabled()
+    fun enabled(): Set<NodeId> = frontier.enabled()
 
     /**
      * Group enabled actions by their owner role.
      * Used for enumerating moves per role.
      */
-    fun actionsByRole(dag: ActionDag): Map<RoleId, List<ActionId>> =
+    fun actionsByRole(dag: EventGraph): Map<RoleId, List<NodeId>> =
         enabled().groupBy { dag.owner(it) }
 
     /**
      * Roles that have parameters to assign in the current frontier.
      * A role with no parameters in this frontier doesn't need to "act".
      */
-    fun rolesWithParams(dag: ActionDag): Set<RoleId> =
+    fun rolesWithParams(dag: EventGraph): Set<RoleId> =
         actionsByRole(dag)
             .filterValues { actions -> actions.any { dag.params(it).isNotEmpty() } }
             .keys

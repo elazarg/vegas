@@ -2,7 +2,7 @@ package vegas.runtime
 
 import vegas.RoleId
 import vegas.VarId
-import vegas.ir.ActionId
+import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.ir.GameIR
 import vegas.ir.Visibility
@@ -16,7 +16,7 @@ import vegas.ir.Visibility
  * @property assignments Field values being submitted (param name -> value)
  */
 data class GameMove(
-    val actionId: ActionId,
+    val actionId: NodeId,
     val role: RoleId,
     val visibility: Visibility,
     val assignments: Map<VarId, Expr.Const>,

@@ -10,7 +10,7 @@ import vegas.backend.evm.EvmType.*
 
 /**
  * Main entry point: Compiles a GameIR into a generic EVM Contract Model.
- * Assumes the ActionDag has already been transformed (e.g. Commit-Reveal expansion).
+ * Assumes the EventGraph has already been transformed (e.g. Commit-Reveal expansion).
  */
 fun compileToEvm(game: GameIR): EvmContract {
     val dag = game.dag
@@ -46,9 +46,9 @@ fun compileToEvm(game: GameIR): EvmContract {
 // 1. Linearization & Naming
 // =========================================================================
 
-private fun linearizeDag(dag: ActionDag): Map<ActionId, Int> =
+private fun linearizeDag(dag: EventGraph): Map<NodeId, Int> =
     dag.topo()
-        .sortedWith(compareBy<ActionId> { it.second }.thenBy { it.first.name })
+        .sortedWith(compareBy<NodeId> { it.second }.thenBy { it.first.name })
         .mapIndexed { idx, id -> id to idx }
         .toMap()
 
@@ -80,8 +80,8 @@ fun inputParam(param: VarId, hidden: Boolean): String {
 
 private fun buildStorage(
     g: GameIR,
-    dag: ActionDag,
-    linearization: Map<ActionId, Int>
+    dag: EventGraph,
+    linearization: Map<NodeId, Int>
 ): List<EvmStorageSlot> = buildList {
 
     // Infrastructure
@@ -144,9 +144,9 @@ private fun buildRoleEnum(g: GameIR): EvmEnum {
 // =========================================================================
 
 private fun buildAction(
-    id: ActionId,
-    dag: ActionDag,
-    linearization: Map<ActionId, Int>
+    id: NodeId,
+    dag: EventGraph,
+    linearization: Map<NodeId, Int>
 ): EvmAction {
     val meta = dag.meta(id)
     val idx = linearization.getValue(id)
@@ -263,8 +263,8 @@ private fun buildAction(
 
 private fun buildWithdrawActions(
     game: GameIR,
-    sinks: Set<ActionId>,
-    dag: ActionDag
+    sinks: Set<NodeId>,
+    dag: EventGraph
 ): List<EvmAction> {
     // Compute max action ID per role to avoid collisions
     val maxIdPerRole = mutableMapOf<RoleId, Int>()
@@ -278,7 +278,7 @@ private fun buildWithdrawActions(
         // Use next available ID for this role (max + 1)
         val nextId = (maxIdPerRole[role] ?: 0) + 1
         maxIdPerRole[role] = nextId  // Update for potential multiple withdraws per role
-        val actionId: ActionId = role to nextId
+        val actionId: NodeId = role to nextId
         val claimedFlag = "claimed_${role.name}"
 
         val body = buildList {
@@ -316,7 +316,7 @@ private fun buildWithdrawActions(
     }
 }
 /** Generates 'require' statements for domain validation (e.g., `x in {0..2}`) */
-private fun translateDomainGuards(params: List<ActionParam>): List<EvmExpr> =
+private fun translateDomainGuards(params: List<NodeParam>): List<EvmExpr> =
     params.mapNotNull { p ->
         when (val t = p.type) {
             is Type.RangeType -> {
