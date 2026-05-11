@@ -377,7 +377,8 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     private VarDec vardec(VarDecContext ctx) {
         TypeExp type = type(ctx);
-        return new VarDec(var(ctx.varId()), type);
+        DistExp dist = ctx.dist == null ? null : distExp(ctx.dist);
+        return new VarDec(var(ctx.varId()), type, dist);
     }
 
     private TypeExp type(VarDecContext ctx) {
@@ -386,5 +387,37 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
             case "int" -> TypeExp.INT.INSTANCE;
             default -> withSpan(new TypeExp.TypeId(ctx.type.getText()), ctx.typeExp());
         };
+    }
+
+    /* ---------- Distribution expressions (Stage 3) ---------- */
+
+    private DistExp distExp(DistExpContext ctx) {
+        Ast node = ctx.accept(this);
+        if (node == null) throw new RuntimeException("Syntax error in dist expression at line " + ctx.getStart().getLine());
+        return (DistExp) withSpan(node, ctx);
+    }
+
+    @Override
+    public DistExp.Uniform visitUniformDistExp(UniformDistExpContext ctx) {
+        List<Exp.Const> values = ctx.vals.stream().map(this::distVal).collect(toList());
+        return new DistExp.Uniform(values);
+    }
+
+    @Override
+    public DistExp.Weighted visitWeightedDistExp(WeightedDistExpContext ctx) {
+        List<kotlin.Pair<Exp.Const, Integer>> items = ctx.items.stream()
+                .map(item -> new kotlin.Pair<>(distVal(item.value), Integer.parseInt(item.weight.getText())))
+                .collect(toList());
+        return new DistExp.Weighted(items);
+    }
+
+    private Exp.Const distVal(DistValContext ctx) {
+        if (ctx instanceof NumDistValContext nv) {
+            return new Exp.Const.Num(Integer.parseInt(nv.INT().getText()));
+        } else if (ctx instanceof BoolDistValContext bv) {
+            return new Exp.Const.Bool(bv.getText().equals("true"));
+        } else {
+            throw new AssertionError("Unknown distVal subtype: " + ctx.getClass());
+        }
     }
 }

@@ -1,6 +1,7 @@
 package vegas.frontend
 
 import vegas.FieldRef
+import vegas.Rational
 import vegas.RoleId
 import vegas.frontend.Exp as AstExpr
 import vegas.frontend.TypeExp as AstType
@@ -260,8 +261,9 @@ fun actionDagFromPhases(
             )
 
             val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {
+                val explicit = sig.parameters.singleOrNull()?.dist
                 SampleSpec(
-                    dist = inferUniformDist(params),
+                    dist = explicit ?: inferUniformDist(params),
                     source = EntropySource.RoleSubmit(role),
                 )
             } else null
@@ -274,13 +276,10 @@ fun actionDagFromPhases(
 }
 
 /**
- * Build a uniform prior over a single-parameter chance node's domain.
- *
- * Stage 1 scope: handle the common case (one parameter with a bounded type).
- * For 0-param nodes (impossible at this call site, but defensive), multi-param
- * nodes, or unbounded IntType, return null — backends fall back to their
- * legacy uniform-over-surviving-moves behavior, which is observably identical
- * for current chance roles.
+ * Build a uniform prior over a single-parameter sample node's domain.
+ * Returns null for multi-parameter samples and unbounded int types;
+ * backends fall back to uniform-over-surviving-moves in that case, which
+ * agrees with the explicit uniform path on bounded domains.
  */
 private fun inferUniformDist(params: List<NodeParam>): Dist? {
     if (params.size != 1) return null
@@ -348,7 +347,8 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
                 // Visibility is determined by command kind:
                 // - COMMIT: not visible (hidden commitment)
                 // - REVEAL, YIELD, JOIN: visible
-                visible = kind != Kind.COMMIT
+                visible = kind != Kind.COMMIT,
+                dist = vardec.dist?.let { lowerDist(it) },
             )
         },
         guard = Guard(
@@ -369,6 +369,23 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
             expr = lowerExpr(query.where, typeEnv)
         )
     )
+}
+
+// ========== Distribution Lowering ==========
+
+private fun lowerDist(distExp: DistExp): Dist = when (distExp) {
+    is DistExp.Uniform -> Dist.uniform(distExp.values.map { lowerDistConst(it) })
+    is DistExp.Weighted -> {
+        val total = distExp.items.sumOf { it.second }
+        require(total > 0) { "weighted dist total must be positive, got $total" }
+        Dist(distExp.items.map { (v, w) -> lowerDistConst(v) to Rational(w, total) })
+    }
+}
+
+private fun lowerDistConst(c: AstExpr.Const): Expr.Const = when (c) {
+    is AstExpr.Const.Num -> Expr.Const.IntVal(c.n)
+    is AstExpr.Const.Bool -> Expr.Const.BoolVal(c.truth)
+    else -> error("dist values must be integer or boolean literals, got $c")
 }
 
 // ========== Type Lowering ==========

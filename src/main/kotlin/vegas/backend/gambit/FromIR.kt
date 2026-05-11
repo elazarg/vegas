@@ -245,9 +245,9 @@ internal class TreeUnroller(
         var roleMoves = movesByRole[role]
 
         val actionsForRole = config.actionsByRole(ir.dag)[role].orEmpty()
-        // Per-node chance check (Stage 2): a role's decision at this frontier
-        // is a chance node iff every action it owns here is a sample node.
-        // The all-or-nothing invariant must hold and is asserted defensively.
+        // A role's decision at this frontier is a chance node iff every
+        // action it owns here is a sample node. Mixing is currently
+        // unrepresentable in the surface language and is asserted away.
         val sampleFlags = actionsForRole.map { ir.dag.isSampleNode(it) }
         val isChance: Boolean = when {
             sampleFlags.isEmpty() -> false
@@ -304,8 +304,8 @@ internal class TreeUnroller(
         val infoset = views.getValue(role)
         val infosetId = infosetManager.getHistoryNumber(role, infoset, isChance)
 
-        // Pre-compute per-move chance probabilities (renormalized over the
-        // guard-surviving support per reachable context).
+        // Per-move chance probabilities, renormalized over the guard-surviving
+        // support so they sum to 1 across this node's children.
         val chanceProbs: Map<Label.Play, Rational> =
             if (isChance) computeChanceProbabilities(roleMoves) else emptyMap()
 
@@ -362,16 +362,13 @@ internal class TreeUnroller(
 
     /**
      * Per-move chance probabilities at a single chance decision, renormalized
-     * over the guard-surviving moves (Codex review point 5).
+     * over the guard-surviving moves so they sum to 1.
      *
-     * If every Action move's underlying Sample node carries an explicit Dist,
-     * the prior weight of each move is its value's mass under the Dist; the
-     * returned probability is `prior / sum(priors)`. If any move lacks an
-     * explicit Dist (or the moves come from a multi-parameter chance node,
-     * which Stage 1 does not yet support per-parameter), we fall back to the
-     * legacy uniform-over-surviving-moves behavior. Quit moves get uniform
-     * weight as a safety net (chance roles cannot quit today, but we don't
-     * want to crash if that ever changes).
+     * If every Action move's Sample node carries an explicit Dist, each
+     * move's probability is `dist.weight(value) / sum(weights)`. If any
+     * move lacks an explicit Dist (multi-parameter chance node, unbounded
+     * domain), we fall back to uniform over surviving moves — the same
+     * answer the explicit path gives when the underlying dist is uniform.
      */
     private fun computeChanceProbabilities(
         roleMoves: List<Label.Play>,
@@ -404,8 +401,9 @@ internal class TreeUnroller(
         val actionId = (move.tag as? PlayTag.Action)?.actionId ?: return null
         val spec: SampleSpec = ir.dag.sampleSpec(actionId) ?: return null
         val dist = spec.dist ?: return null
-        // Stage 1: single-parameter chance nodes only. The delta entry for
-        // this action's owner gives the sampled value.
+        // Single-parameter sample only: the move's delta has one entry whose
+        // value is the sampled Const. Multi-parameter samples are rejected
+        // upstream (Dist is null when params != 1).
         val values: Collection<Expr.Const> = move.delta.values
         if (values.size != 1) return null
         return dist.weight(values.first())

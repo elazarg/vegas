@@ -79,7 +79,21 @@ exp
     | 'let!' dec=varDec '=' init=exp 'in' body=exp           # LetExp
     ;
 
-varDec : name=varId ':' type=typeExp;
+varDec : name=varId ':' type=typeExp ('~' dist=distExp)? ;
+
+distExp
+    : 'uniform'  '{' vals+=distVal       (',' vals+=distVal)*       '}' # UniformDistExp
+    | 'weighted' '{' items+=weightedItem (',' items+=weightedItem)* '}' # WeightedDistExp
+    ;
+
+distVal
+    : INT                  # NumDistVal
+    | ('true' | 'false')   # BoolDistVal
+    ;
+
+weightedItem
+    : value=distVal ':' weight=INT
+    ;
 
 typeId: LOWER_ID ;
 varId : LOWER_ID;

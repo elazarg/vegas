@@ -72,7 +72,21 @@ sealed class Outcome : Ast() {
     object Null : Outcome()
 }
 
-data class VarDec(val v: Exp.Var, val type: TypeExp)
+data class VarDec @JvmOverloads constructor(
+    val v: Exp.Var,
+    val type: TypeExp,
+    val dist: DistExp? = null,
+)
+
+/**
+ * Surface-syntax distribution expressions used to annotate parameters in
+ * chance-role actions. Weights on [Weighted] are integers; lowering
+ * normalizes by the integer sum to produce a canonical [vegas.ir.Dist].
+ */
+sealed class DistExp : Ast() {
+    data class Uniform(val values: List<Exp.Const>) : DistExp()
+    data class Weighted(val items: List<Pair<Exp.Const, Int>>) : DistExp()
+}
 
 data class MacroDec(
     val name: VarId,

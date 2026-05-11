@@ -2,6 +2,7 @@ package vegas
 
 import vegas.dag.Algo
 import vegas.frontend.Ast
+import vegas.frontend.DistExp
 import vegas.frontend.Exp
 import vegas.frontend.GameAst
 import vegas.frontend.Ext
@@ -620,6 +621,24 @@ internal class ProtocolTyper(
                         throw StaticError("$role is not a role", q.role)
                     }
 
+                    q.params.forEach { vd ->
+                        if (vd.dist != null) {
+                            if (role !in randomRoles2) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is only allowed on parameters of a 'random' role; '${role.name}' is strategic",
+                                    q,
+                                )
+                            }
+                            if (isJoin) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is not allowed on a join step",
+                                    q,
+                                )
+                            }
+                            validateDistSupport(vd.dist, vd.type, q)
+                        }
+                    }
+
                     val m = q.params.associate { (k, tRaw) ->
                         val fr = FieldRef(role, k.id)
                         // Nullable only if explicit `|| null` handler is used
@@ -806,6 +825,43 @@ internal class ProtocolTyper(
             // Split, Burn, and Null are terminal handlers with no inner expressions
             is Outcome.Split, is Outcome.Burn, is Outcome.Null -> { /* valid by construction */ }
         }
+    }
+
+    private fun validateDistSupport(dist: DistExp, declared: TypeExp, where: Ast) {
+        val values: List<Exp.Const> = when (dist) {
+            is DistExp.Uniform -> dist.values
+            is DistExp.Weighted -> dist.items.map { it.first }
+        }
+        if (values.isEmpty()) {
+            throw StaticError("Distribution must have non-empty support", where)
+        }
+        if (values.distinct().size != values.size) {
+            throw StaticError("Distribution has duplicate values: $values", where)
+        }
+        val resolved = universe.resolve(stripOpt(declared))
+        for (v in values) {
+            if (!fitsType(v, resolved)) {
+                throw StaticError("Distribution value $v is not in the parameter's type $declared", where)
+            }
+        }
+        if (dist is DistExp.Weighted) {
+            for ((_, w) in dist.items) {
+                if (w <= 0) {
+                    throw StaticError("Distribution weights must be strictly positive, got $w", where)
+                }
+            }
+        }
+    }
+
+    private fun fitsType(v: Exp.Const, t: TypeExp): Boolean = when (v) {
+        is Exp.Const.Num -> when (t) {
+            is TypeExp.INT -> true
+            is TypeExp.Range -> v.n in t.min.n..t.max.n
+            is TypeExp.Subset -> v in t.values
+            else -> false
+        }
+        is Exp.Const.Bool -> t is TypeExp.BOOL
+        else -> false
     }
 
     private fun stripOpt(t: TypeExp): TypeExp = if (t is Opt) t.type else t

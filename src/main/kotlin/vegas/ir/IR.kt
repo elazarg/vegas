@@ -124,17 +124,10 @@ data class Dist(val support: List<Pair<Expr.Const, Rational>>) {
 
 /**
  * Where the randomness for a Sample node physically comes from.
- *
  * Each source carries a distinct threat model (who can bias the draw).
- * Stage 1 supports only RoleSubmit, which is the legacy "random Role()"
- * semantics. EVM-native sources (prevrandao, vrf, drand, commit_reveal
- * aggregation) are reserved for later stages.
  */
 sealed class EntropySource {
-    /**
-     * A designated role submits the value. Trust assumption: that role.
-     * This is the back-compat representation of today's "random Role()".
-     */
+    /** A designated role submits the value. Trust assumption: that role. */
     data class RoleSubmit(val role: RoleId) : EntropySource()
 }
 
@@ -142,10 +135,10 @@ sealed class EntropySource {
  * Per-node classification of a Sample (chance) node.
  *
  * @property dist   Declared prior distribution at the source. May be null
- *                  when no explicit distribution is yet declared on the
- *                  surface (back-compat path): backends then fall back to
- *                  their legacy uniform-over-surviving-moves behavior.
- * @property source Physical entropy source. Stage 1: always RoleSubmit.
+ *                  when no explicit distribution applies (multi-parameter
+ *                  chance nodes, unbounded int domains, etc.); backends
+ *                  fall back to uniform over surviving moves.
+ * @property source Physical entropy source.
  */
 data class SampleSpec(
     val dist: Dist?,
@@ -162,11 +155,18 @@ sealed class Type {
  * A Parameter represents data provided when executing an action.
  *
  * "visible" means reveal if "invisible" was already declared. A second "invisible" might be "reconsidered", or malformed.
+ *
+ * [dist] is non-null when the surface form declares an explicit prior
+ * (the `~ uniform {...}` / `~ weighted {...}` annotation). It overrides
+ * the default uniform-over-domain inference for chance-role actions.
+ * Strategic-role parameters carry no semantic effect from [dist] (such
+ * a program is rejected by the typechecker).
  */
 data class Parameter(
     val name: VarId,
     val type: Type,
     val visible: Boolean,
+    val dist: Dist? = null,
 )
 
 /**
@@ -182,9 +182,9 @@ data class Signature(
  * A GameIR describes a multi-party interaction where roles perform actions
  * that may depend on each other, leading to payoffs for each role.
  *
- * [chanceRoles] is derived from the DAG's per-node sample metadata so the
- * two views cannot diverge. Per-node sample-ness ([EventGraph.isSampleNode])
- * is the source of truth; this set is the role-level projection.
+ * [chanceRoles] is derived from the DAG's per-node sample metadata; the
+ * source of truth is per-node ([EventGraph.isSampleNode]), and this set
+ * is the role-level projection.
  */
 data class GameIR(
     val name: String,

@@ -310,6 +310,40 @@ public interface VegasVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitVarDec(VegasParser.VarDecContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code UniformDistExp}
+	 * labeled alternative in {@link VegasParser#distExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitUniformDistExp(VegasParser.UniformDistExpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code WeightedDistExp}
+	 * labeled alternative in {@link VegasParser#distExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitWeightedDistExp(VegasParser.WeightedDistExpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code NumDistVal}
+	 * labeled alternative in {@link VegasParser#distVal}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitNumDistVal(VegasParser.NumDistValContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code BoolDistVal}
+	 * labeled alternative in {@link VegasParser#distVal}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitBoolDistVal(VegasParser.BoolDistValContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link VegasParser#weightedItem}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitWeightedItem(VegasParser.WeightedItemContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link VegasParser#typeId}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

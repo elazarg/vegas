@@ -89,9 +89,9 @@ data class NodeStruct(
  * @param id stable identifier within the DAG
  * @param spec semantic payload (params, join, guard)
  * @param struct structural metadata (owner, writes, visibility, guard reads)
- * @param sample non-null iff this node is a Sample (chance) draw. Stage 1:
- *   set for every node owned by a role in [GameIR.chanceRoles]; backends
- *   may treat sample==null as "strategic" and sample!=null as "chance".
+ * @param sample non-null iff this node is a Sample (chance) draw — i.e.
+ *   the action's writes are produced by a random source rather than chosen
+ *   strategically. Backends test sample-ness via [EventGraph.isSampleNode].
  * @property kind derived from [spec] and [struct].
  */
 data class NodeMeta(
@@ -151,9 +151,8 @@ class EventGraph private constructor(
 
     /**
      * Roles that own at least one sample (chance) node in this DAG.
-     *
-     * This is the per-node-truth source for [GameIR.chanceRoles]; the
-     * latter is derived from this set so the two views can never diverge.
+     * Derived from per-node sample metadata so this set and per-node
+     * [isSampleNode] cannot disagree.
      */
     val chanceRoles: Set<RoleId> by lazy {
         payloads.values

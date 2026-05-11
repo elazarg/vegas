@@ -5,20 +5,23 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.frontend.compileToIR
+import vegas.frontend.parseCode
 import vegas.frontend.parseFile
 import vegas.ir.Dist
 import vegas.ir.EntropySource
 import vegas.ir.Expr
 
 /**
- * Per-node SampleSpec wiring (Stage 1 of probabilistic-design).
+ * Per-node SampleSpec wiring and surface dist syntax.
  *
- * Pins down the additive refactor that moves chance from a per-role flag to
- * a per-node metadata carrier: every action owned by a chance role gets a
- * SampleSpec with a uniform prior over its parameter domain and a
- * RoleSubmit source. Multi-parameter / unbounded-int chance actions still
- * land with dist=null and backends fall back to legacy behavior.
+ * Every action owned by a chance role gets a SampleSpec; the prior is
+ * either an explicit `~ uniform/weighted { ... }` annotation lowered from
+ * the surface, or — failing that — an inferred uniform over the parameter
+ * domain. Multi-parameter / unbounded-int chance actions land with
+ * dist=null and backends fall back to uniform-over-surviving-moves.
  */
 class SampleSpecTest : FreeSpec({
 
@@ -133,6 +136,79 @@ class SampleSpecTest : FreeSpec({
 
             ir.dag.sampleSpec(hostJoin) shouldBe null
             ir.dag.isSampleNode(hostJoin) shouldBe false
+        }
+    }
+
+    "Surface `~ uniform/weighted` annotation" - {
+
+        "uniform overrides the inferred prior with the same values" {
+            val src = """
+                type door = {0, 1, 2}
+                game main() {
+                  random Host() ${'$'} 100;
+                  join Guest() ${'$'} 100;
+                  yield Host(car: door ~ uniform { 0, 1, 2 });
+                  yield Guest(d: door);
+                  withdraw { Host -> Guest.d == Host.car ? 0 : 200; Guest -> Guest.d == Host.car ? 200 : 0; }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val host = RoleId("Host")
+            val carNode = ir.dag.actions.single { ir.dag.owner(it) == host && ir.dag.spec(it).join == null }
+            val dist = ir.dag.sampleSpec(carNode)?.dist
+            dist.shouldNotBeNull()
+            for (v in dist.values) dist.weight(v) shouldBe Rational(1, 3)
+        }
+
+        "weighted produces a non-uniform prior that Gambit emits" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
+                  yield Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val coin = RoleId("Coin")
+            val sampleNode = ir.dag.actions.single { ir.dag.owner(it) == coin && ir.dag.spec(it).join == null }
+            val dist = ir.dag.sampleSpec(sampleNode)?.dist
+            dist.shouldNotBeNull()
+            dist.weight(Expr.Const.IntVal(0)) shouldBe Rational(3, 4)
+            dist.weight(Expr.Const.IntVal(1)) shouldBe Rational(1, 4)
+
+            val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
+            efg shouldContain "3/4"
+            efg shouldContain "1/4"
+        }
+
+        "rejects ~ on strategic role" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield A(x: face ~ uniform { 0, 1 });
+                  yield B(y: face);
+                  withdraw { A -> A.x == B.y ? 20 : 0; B -> A.x == B.y ? 0 : 20; }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "rejects values outside the parameter type" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join B() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1, 7 });
+                  yield B(call: face);
+                  withdraw { Coin -> 0; B -> B.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
         }
     }
 })
