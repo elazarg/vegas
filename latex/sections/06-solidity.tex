@@ -4,13 +4,11 @@
 The EVM backends translate the EventGraph into a deployable smart
 contract.  Both languages target the same compilation pass via a
 shared EVM intermediate representation (\TT{evm.EVMIR}); only the
-final pretty-printer differs.  This section walks through the
-Solidity output and notes the few divergences for Vyper.  We are
-careful to describe the actual generated code, not an idealised
-version of it: the bail-out mechanism in particular is simpler than
-the language-level story might suggest, and a few of its
-consequences belong in the open-questions list rather than the
-guarantees list.
+final pretty-printer differs.  This section describes the actual
+generated code rather than an idealised version: the bail-out
+mechanism in particular is simpler than the language-level story
+might suggest, and a few of its consequences belong in the
+open-questions list rather than the guarantees list.
 
 \subsection{Threat model}
 \label{sec:solidity:threats}
@@ -43,8 +41,9 @@ designed against:
 \end{itemize}
 
 The remainder of this section describes the construction; the
-``honestly imperfect'' parts of the design (especially the single
-global timeout window) are flagged inline.
+
+rougher edges of the design --- especially the single global
+timeout window --- are flagged inline as they come up.
 
 \subsection{Storage layout}
 
@@ -55,12 +54,15 @@ There are five families of slots.
 \TT{actionDone[role][actionId]} records, for each role and each
 node, whether the node has fired.  A symmetric mapping
 \TT{actionTimestamp[role][actionId]} stores the block timestamp at
-which it fired.  Node ids are integers assigned by a deterministic
-topological linearisation of the EventGraph; one
-\TT{uint256 constant ACTION\_\textit{Role}\_\textit{n}} is emitted
-per node.  The integer \TT{\textit{n}} is the node's source position
-(making the constant name human-readable), while the assigned
-constant \emph{value} is its topological index.
+which it fired.  Each node is assigned a deterministic
+topological index; one
+\TT{uint256 constant ACTION\_\textit{Role}\_\textit{src}} is
+emitted per node, where \textit{src} is the node's per-role source
+position (giving each constant a human-readable name) and the
+constant's \emph{value} is its topological index.  Per-action
+functions in the contract are then named
+\TT{move\_\textit{Role}\_\textit{topo}}, using the topological
+index for guaranteed uniqueness across the whole contract.
 
 \paragraph{Role registry.}  A mapping
 \TT{roles[address] => Role} associates EOAs with the roles they
@@ -90,12 +92,12 @@ contract's deployed address are folded into every commitment hash.
 \subsection{Modifiers and the depends pattern}
 \label{sec:solidity:depends}
 
-The contract has no global step counter.  Each per-node function is
-guarded by a \TT{depends} modifier per predecessor.  The modifier
-itself does two things: it advances the contract's
+The contract has no global step counter.  Each per-node function
+is guarded by a \TT{depends} modifier per predecessor.  The
+modifier does two things: it advances the contract's
 inactivity-timeout state (potentially marking some role
-\TT{bailed}), and it conditionally requires the predecessor to have
-completed.  Read top to bottom:
+\TT{bailed}), and it conditionally requires the predecessor to
+have completed.
 
 \begin{lstlisting}[style=sol]
 modifier depends(Role role, uint256 actionId) {
@@ -120,16 +122,16 @@ body, and updates \TT{actionTimestamp} and \TT{lastTs};
 \TT{by(role)} asserts that the calling EOA holds the given role
 and is not itself bailed.
 
-A typical per-node function looks like:
+A typical per-node function looks like (taken from the generated
+Monty Hall contract, where node 3 is Guest's public yield of the
+chosen door):
 
 \begin{lstlisting}[style=sol]
 function move_Guest_3(int256 _d)
-    external
+    public
     by(Role.Guest)
-    depends(Role.Host, ACTION_Host_0)
-    depends(Role.Guest, ACTION_Guest_1)
-    depends(Role.Host, ACTION_Host_2)
-    action(Role.Guest, ACTION_Guest_3)
+    action(Role.Guest, 3)
+    depends(Role.Host, 2)
 {
     require(_d >= 0 && _d <= 2, "domain");
     Guest_d = _d;
@@ -137,11 +139,11 @@ function move_Guest_3(int256 _d)
 }
 \end{lstlisting}
 
-Every emitted action is named \TT{move\_\textit{Role}\_\textit{n}}
-where \textit{n} is the source position.  The function's dependency
-list is exactly the predecessor set of the node in the EventGraph
-(after the commit-reveal expansion).  Concurrent nodes share the
-prefix of the chain up to the divergence point and are otherwise
+The function's \TT{depends} clauses list exactly the node's
+direct predecessors in the EventGraph (after the commit-reveal
+expansion); for the rest of the chain, the \TT{require} chains
+through transitive predecessors via their own modifiers.
+Concurrent nodes share their predecessor prefix and are otherwise
 free to be called in any order.
 
 \subsection{Commits and reveals}
@@ -185,34 +187,37 @@ generated bytecode is comparable.
 The timeout mechanism is simpler than the language-level story
 might suggest, and it is worth describing exactly.
 
-The contract maintains a single global \TT{lastTs} slot, updated to
-\TT{block.timestamp} on every successful action.  Whenever a
+The contract maintains a single global \TT{lastTs} slot, updated
+to \TT{block.timestamp} on every successful action.  Whenever a
 modifier is entered, \TT{\_check\_timestamp(role)} is called: if
-\TT{block.timestamp > lastTs + TIMEOUT}, the named role is marked
-\TT{bailed} \emph{and} \TT{lastTs} is reset to the current
-timestamp.  In effect, the contract has one sliding inactivity
-window shared across all participants: if no action has happened
-anywhere for \TT{TIMEOUT} seconds, the next caller can mark
-\emph{some} role as bailed and the window restarts.
+the role is not \TT{Role.None} and \TT{block.timestamp > lastTs +
+TIMEOUT}, the named role is marked \TT{bailed} and \TT{lastTs} is
+reset to the current timestamp.  The contract has one sliding
+inactivity window shared across all participants: if no action
+has happened anywhere for \TT{TIMEOUT} seconds, the next caller's
+modifier marks its named role as bailed and the window restarts.
 
-This has two non-obvious consequences worth flagging:
+Two consequences worth flagging:
 
 \begin{itemize}\itemsep1pt
-\item \emph{The role that gets marked is the role named in the
-  caller's modifier.}  \TT{depends(Role.Host, \ldots)} on a window
-  expiry marks \TT{Host} as bailed; \TT{by(Role.Guest)} on a window
-  expiry marks \TT{Guest}.  This is approximately right --- the
-  function call points at a role expected to have acted --- but it
-  is not the same thing as ``the unique unresponsive role''; the
-  attribution is structural rather than analytical.
-\item \emph{Bail is one-way.}  Once \TT{bailed[\textit{R}] = true},
-  the \TT{by(R)} modifier rejects any subsequent action from
-  \TT{R}.  A role that goes offline briefly and reconnects after
-  the window expires has lost the right to play.  The
-  language-level treatment of \TT{Quit} as a definitive move is the
-  source of this design; it is operationally simple, but it does
-  mean that a fair-playing role with a flaky connection is at risk
-  in long protocols.
+\item \emph{Attribution is by modifier, not by analysis.}  The
+  bailed role is the one named in the modifier of the call that
+  triggers the check, not the unique role that has failed to act.
+  \TT{depends(Role.Host, \ldots)} on a window expiry marks
+  \TT{Host}; \TT{by(Role.Guest)} on a window expiry marks
+  \TT{Guest}.  For most protocols the function called next does
+  point at a role that was expected to have acted, so the
+  attribution is close enough.  The \TT{Role.None} corner case is
+  handled separately: \TT{join} actions all use
+  \TT{by(Role.None)} and never mark anyone bailed.
+\item \emph{Bail is one-way.}  Once \TT{bailed[\textit{R}] =
+  true}, the \TT{by(R)} modifier rejects any subsequent action
+  from \TT{R}.  A role that goes offline briefly and reconnects
+  after the window expires has lost the right to play.  The
+  language-level treatment of \TT{Quit} as a definitive move is
+  the source of this design.  It is operationally simple, but it
+  does mean that a fair-playing role with a flaky connection is
+  at risk in long protocols.
 \end{itemize}
 
 When a dependent action runs against a bailed predecessor, the

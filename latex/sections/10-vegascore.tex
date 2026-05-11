@@ -128,10 +128,10 @@ The current state of the two-sided story is the following:
   of the lowering}: the lowering uses the same dependency
   inference and visibility discipline.  The IR-level invariants
   Vegas's constructor enforces are theorems in VegasCore.
-\item The various backends agree with Vegas's IR by construction:
+\item The various backends agree with Vegas's IR structurally:
   every backend reads the same EventGraph and lowers it
-  systematically.  This is closer to a code-review property
-  than to a formal one --- there is no compiler proof.
+  systematically.  This is closer to a code-review property than
+  to a formal one --- there is no compiler proof.
 \item There is no formal proof, today, that any specific
   backend's output (Solidity, Gambit, etc.) refines the
   EventGraph in any externally meaningful sense.  The
@@ -148,7 +148,7 @@ The current state of the two-sided story is the following:
   not redundant; they cover different audiences.
 \end{itemize}
 
-The honest summary: Vegas can be used today as a productive tool
+In summary: Vegas can be used today as a tool
 without VegasCore (the compiler stands alone), and VegasCore can
 be used today as a Lean library without Vegas (the calculus
 stands alone).  Connecting them with mechanically-checked

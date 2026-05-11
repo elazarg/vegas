@@ -5,8 +5,8 @@ Vegas treats the operational question of \emph{what happens when
 someone stops responding} as part of the surface syntax rather
 than as an implementation detail.  This section walks through the
 design: how the language exposes the choice to the programmer,
-how the compiler realises it on the EVM, and where the model is
-honest about its current limits.
+how the compiler realises it on the EVM, and what the current
+limits are.
 
 \subsection{Why liveness is in the language}
 
@@ -25,32 +25,24 @@ yield or split A(x: int);
 
 The handler describes what the contract does, and the
 game-theoretic analysis sees \TT{Quit} as a strategic move
-available to the actor.  The two views agree by construction.
+available to the actor; both views are derived from the same
+source.
 
-\subsection{The three group handlers}
+\subsection{Choosing a handler}
 
-A statement involving one or more roles in a single
-\TT{yield}/\TT{commit}/\TT{reveal} group carries one of three
-handlers.
-
-\paragraph{split} The quitter's deposit is split among the
-surviving roles (in a two-player game, the survivor gets it all).
-This is the default for adversarial games: nobody profits by
-walking out.
-
-\paragraph{burn} The quitter's deposit is sent to a designated
-burn address (or zero address, depending on chain conventions).
-Useful in games where giving the deposit to surviving roles would
-warp incentives --- voting schemes where a missing voter should
-not enrich the others, for instance.
-
-\paragraph{null} The missing field is treated as \TT{null} at the
-typing level (the field's type becomes \TT{opt T}), the node's
-\TT{done\_} flag is set by the contract, and the protocol
-proceeds.  The \TT{withdraw} clause is required to handle the
-optional case explicitly.  Useful for protocols where a
-non-response is itself strategically meaningful (a delegate
-failing to delegate).
+The three group handlers (\TT{split}, \TT{burn}, \TT{null}) are
+introduced in \S\ref{sec:language}.  The design choice for any
+given action is a real one: \TT{split} works for adversarial
+games where the deposit should not stay with the quitter;
+\TT{burn} is right when redistributing the deposit would warp the
+surviving roles' incentives (governance voting, for instance);
+\TT{null} is right when a non-response is strategically
+meaningful and downstream code wants to inspect it through the
+field's \TT{opt T} typing.  The example library carries
+explanatory notes on these choices, especially in
+\file{OddsEvens.vg}, which discusses the distinction between
+losing strategically (a payoff outcome) and quitting under
+duress (a non-strategic event).
 
 \subsection{Per-query payoff handlers}
 \label{sec:liveness:per-query}
@@ -67,29 +59,23 @@ The right-hand side of \TT{||} is an \emph{outcome}: a payoff
 allocation chosen from the same sublanguage that \TT{withdraw}
 clauses use (a brace-block payoff, or \TT{split}/\TT{burn}/\TT{null}).
 When the named role quits, the contract executes the handler's
-outcome \emph{instead of} the rest of the protocol; control does
+outcome instead of the rest of the protocol; control does
 not return.  No subgame or callable game block is involved ---
 the handler is a terminal allocation chosen at the bail point.
 
 \subsection{Operational realisation}
 
-The Solidity backend implements \TT{Quit} via a timeout-and-bail
-mechanism (\S\ref{sec:solidity:bail}).  The contract maintains one
-global inactivity window: if no action has happened anywhere for
-\TT{TIMEOUT} seconds (default 24 hours), the next caller's
-modifier marks the named role as \TT{bailed} and resets the
-window.  Once bailed, the role's actions are rejected by the
-\TT{by(Role)} modifier; the bail is one-way.
-
-This single-window design is operationally simple and
-implementable in a few lines of Solidity, but its attribution is
-structural rather than analytical: it marks ``the role pointed at
-by the modifier'' as bailed, not ``the role that was supposed to
-act next''.  In a long protocol with several outstanding actions
-in different roles, this attribution can be coarser than one would
-ideally want.  A per-action deadline scheme would address this at
-the cost of substantially more state; the current design is the
-simpler starting point.
+The Solidity backend implements \TT{Quit} via a sliding-window
+timeout described in detail in \S\ref{sec:solidity:bail}.  In
+short: a single global \TT{lastTs} slot advances on every action;
+when it falls behind \TT{block.timestamp} by more than
+\TT{TIMEOUT} seconds, the next modifier marks its named role as
+bailed and resets the window.  Bail is one-way and attribution is
+structural rather than analytical --- the role marked is the role
+named by the next modifier, not necessarily the unique role that
+failed to act.  A per-action deadline scheme would tighten the
+attribution at the cost of substantially more state; the current
+design is the simpler starting point.
 
 \subsection{Liveness in the game model}
 

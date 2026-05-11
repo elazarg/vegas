@@ -84,33 +84,34 @@ chance nodes, utility nodes, and the conditional probability
 distributions that wire them together.  Vegas can emit a MAID
 suitable for the Thrones game-theory workbench.
 
-A genuine limitation lives here.  In plain MAIDs, a decision
-node's action set is a single static domain; there is no place to
-express ``the legal action set depends on the parents' values''.
-A Vegas guard like \TT{where Host.goat != Guest.d} therefore has
-nowhere to go in a MAID: the encoding would silently drop the
-constraint and present the Host as being able to pick any door.
-The current MAID emitter refuses to emit for any game whose
-guards reference fields written by other nodes; it accepts
-self-only guards (a guard that only constrains the value being
-written) but does not yet narrow the resulting MAID node's domain.
-Both narrowing self-only guards and supporting context-dependent
-domains in some MAID extension are listed in the project's
-\file{TODO.txt}.
+The MAID backend has a real expressiveness limit.  In plain
+MAIDs, a decision node's action set is a single static domain;
+there is no place to say ``the legal action set depends on the
+parents' values''.  A Vegas guard like
+\TT{where Host.goat != Guest.d} has nowhere to go in such a
+MAID: the encoding would silently drop the constraint and present
+the Host as being able to pick any door.  The current MAID
+emitter therefore refuses to emit for any game whose guards
+reference fields written by other nodes; it accepts self-only
+guards (a guard that only constrains the value being written) but
+does not yet narrow the resulting MAID node's domain.  Both
+narrowing self-only guards and supporting context-dependent
+domains in some MAID extension are listed in \file{TODO.txt}.
 
-The honest reading is that MAID is a less expressive target than
-Gambit's EFG for Vegas's class of protocols.  Where it
-\emph{does} apply, the MAID view is more compact than the
-unfolded tree; for protocols that fit, the output is useful.
+Where MAID does apply --- protocols with trivial or self-only
+guards --- the MAID view is more compact than the unfolded
+extensive-form tree.  For the rest, Gambit's EFG is the more
+expressive target.
 
 \subsection{Coq / Lean: Diamond DAG witness records}
 \label{sec:other:diamond}
 
-The Gallina (Coq) and Lean~4 backends emit a deep embedding of the
-EventGraph as a dependently-typed family of records.  The shape of
-the encoding deserves a paragraph of its own, because it is
-slightly unusual and corresponds to an original Vegas-specific
-proof-game idea.
+The Gallina (Coq) and Lean~4 backends emit a deep embedding of
+the EventGraph as a dependently-typed family of records.  The
+shape of the encoding is worth describing in its own terms: it
+treats every move and every guard as a type-level proof
+obligation, and player strategies become functions on
+typed prior witnesses.
 
 For an EventGraph with $n$ nodes, the backend emits a chain of
 records $W_0, W_1, \dots, W_n$, where $W_i$ is the (typed) state
@@ -177,25 +178,17 @@ backend, emitting a Vegas program as an instance of VegasCore's
 \TT{WFProgram} type, is planned (and listed in
 \file{TODO.txt}) to bridge the two.
 
-The point of this encoding is two-fold.  First, it gives a
-self-contained Lean object that one can pass to a theorem prover
-without depending on any large semantics library; the encoding
-\emph{is} the semantics.  Second, since it is a function on the
-prior witnesses, it encodes the player's choice schedule as a
-strategy in the strict, type-theoretic sense: an inhabitant of
-the function space.  Players' move spaces are subtypes pinned by
-domain and where-clause proofs.  This view is somewhat closer to
-the IF-logic/CGT~\citep{HintikkaSandu1989,GhaniHedgesWinschel2018CGT}
-style of compositional game semantics than to the
-state-machine view that Gambit's tree presents.
-
-The Diamond DAG encoding is independent of the companion
-VegasCore Lean library described in \S\ref{sec:vegascore}.  The
-two coexist as different approaches to ``the same protocol viewed
-through Lean'': Diamond DAG ships a per-program standalone object,
-VegasCore is a reusable library.  A planned third backend (also in
-\file{TODO.txt}) emits a Vegas program as an instance of
-VegasCore's \TT{WFProgram} type, completing the picture.
+The encoding is interesting for two reasons.  It is
+self-contained: the Lean object can be passed to a theorem prover
+without depending on a large semantics library; the encoding
+\emph{is} the semantics.  And because each step is a function on
+prior witnesses, the player's choice schedule appears as a
+strategy in the strict type-theoretic sense --- an inhabitant of
+a function space whose codomain is pinned by domain and
+where-clause proofs.  This view is closer to the
+IF-logic and compositional-game-theory style of game
+semantics~\citep{HintikkaSandu1989,GhaniHedgesWinschel2018CGT}
+than to the state-machine view that Gambit's tree presents.
 
 \subsection{GraphViz}
 

@@ -107,19 +107,18 @@ backend in the test list; the other half exercise one or two
 backend-specific concerns and disable a single backend for a
 documented reason.
 
-\subsection{What we've learned}
+\subsection{What we have learned}
 
 A few patterns that the example library has surfaced.
 
 \paragraph{Distribution semantics changes the games.}  Many of
 the classical game-theory examples cannot be stated literally in
 Vegas: with a fixed pool, both-defect cannot be made worse than
-both-cooperate in absolute terms (the pool conserves).  The
-\file{Prisoners.vg} variant therefore shifts the outcome
-matrix while preserving the Nash structure.  This is not a
-weakness of the language --- it is a structural consequence of
-the conservation property the language enforces --- but it
-matters for translating textbook problems faithfully.
+both-cooperate in absolute terms.  The \file{Prisoners.vg}
+variant therefore shifts the outcome matrix while preserving the
+Nash structure.  This is not a weakness; it follows from the
+conservation property the language enforces.  It does matter,
+however, for translating textbook problems faithfully.
 
 \paragraph{Guards that look local are often contextual.}  The
 Monty Hall \TT{Host.goat != Guest.d} clause is the canonical

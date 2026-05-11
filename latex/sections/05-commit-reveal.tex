@@ -5,9 +5,9 @@ This section describes the EventGraph rewrite that protects
 simultaneous public moves from transaction-ordering adversaries.
 The pass is small but the property it secures is one of the most
 visible payoffs of using Vegas: a programmer who writes
-``two players \TT{yield} simultaneously'' gets, deployed to chain,
-the commit-reveal protocol that the textbook would have insisted
-on.
+``two players \TT{yield} simultaneously'' gets the commit-reveal
+protocol the textbook would have insisted on, deployed on chain
+with no further work.
 
 \subsection{The problem}
 \label{sec:cr:problem}
@@ -148,7 +148,7 @@ everywhere.
 
 \subsection{What the rewrite does \emph{not} do}
 
-A few honest caveats.
+A few caveats.
 
 \paragraph{Cryptographic strength is not the IR's concern.}  The
 rewrite stipulates \emph{that} a hidden value is committed before

@@ -13,17 +13,16 @@ Gambit, SMT, and witness-record backends provide views that
 would otherwise be done by hand and seldom done at all.  The
 test harness keeps the views consistent.
 
-The single thing the tool is designed to be good at is making
-the back and forth between ``the protocol I want to play'' and
-``the contract that will play it'' short, mechanical, and
-auditable.  The example library exercises this with forty
+The one thing the tool is designed for is shortening the loop
+between ``the protocol I want to play'' and ``the contract that
+will play it'' --- short, mechanical, auditable.  The example library exercises this with forty
 specifications spanning textbook game theory, mechanism design,
 and adversarial-pattern smart-contract scenarios.  The pipeline
 runs in fractions of a second per example.
 
 \subsection{What Vegas is not yet good at}
 
-Several limitations are honest enough to acknowledge in detail.
+Several limitations are worth acknowledging in detail.
 
 \paragraph{Expressive power.}  The language is, by design,
 limited to finite types and acyclic protocols.  Loops, dynamic
@@ -84,8 +83,9 @@ function on histories.
 
 The unifying theme of the limitations is intent rather than
 oversight.  Vegas was built with the explicit goal of staying
-small enough to be honest about: a finite-graph IR, finite-type
-moves, a fixed pool, deterministic guards, no external calls.
+small enough to describe completely: a finite-graph IR,
+finite-type moves, a fixed pool, deterministic guards, no
+external calls.
 This is a smaller language than its closest neighbours in the
 DSL space (Marlowe, Scilla, Move), and far smaller than
 general-purpose Solidity.  The smallness is what makes the
@@ -141,6 +141,5 @@ The most immediate work items are recorded in the project's
 
 The goal is not a finished tool today.  The goal is a
 foundation that grows in a disciplined way, where every
-extension has to keep the multi-backend story honest.  We hope
-the present description is a useful starting point for that
-conversation.
+extension has to keep the multi-backend story coherent.  The
+present description is intended as the starting point.
