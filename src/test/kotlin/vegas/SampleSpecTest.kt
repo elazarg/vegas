@@ -569,18 +569,32 @@ class SampleSpecTest : FreeSpec({
             shouldThrow<vegas.frontend.VegasParseError> { parseCode(src) }
         }
 
-        "Solidity emits no role gate on sample-owned actions" {
-            // Sample bindings have no actor; the generated Solidity must
-            // not include `by(Role.Sample)` (which would be uncallable),
-            // and must still emit role gates for strategic actions.
+        "Solidity emits no role gate, no actor slots, no withdraw for sample" {
+            // Sample bindings have no actor and no payout, so the generated
+            // Solidity must not include:
+            //   * by(Role.Sample) modifier (would be uncallable)
+            //   * address_Sample / done_Sample / claimed_Sample slots
+            //   * withdraw_Sample function
+            // Strategic role gates are still expected.
             val ir = compileToIR(parseFile("examples/Lottery.vg"))
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
-            check(!sol.contains("by(Role.Sample)")) {
-                "Solidity output contains by(Role.Sample); sample-owned actions would be uncallable"
+            for (forbidden in listOf(
+                "by(Role.Sample)",
+                "address_Sample",
+                "done_Sample ",
+                "done_Sample;",
+                "claimed_Sample",
+                "withdraw_Sample",
+            )) {
+                check(!sol.contains(forbidden)) { "Solidity contains '$forbidden':\n$sol" }
             }
             check(sol.contains("by(Role.P1)")) {
                 "Expected by(Role.P1) on strategic actions; got Solidity without it"
+            }
+            // The sampled field storage (Sample_w) is still required.
+            check(sol.contains("Sample_w")) {
+                "Expected sampled field Sample_w to be stored"
             }
         }
     }

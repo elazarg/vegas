@@ -859,7 +859,10 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
     val terminalOutcome = extractTerminalOutcome(ext)
     val phases = collectPhases(ext, typeEnv)
     val stakes = computeStakes(ext)
-    val allRoles = phases.flatMap { it.roles() }.toSet()
+    // Sample bindings live under SAMPLE_OWNER but the label has no actor
+    // and no payout. Excluding it here keeps it out of the split / burn
+    // synthesis (which iterates allRoles to compute survivor shares).
+    val allRoles = phases.flatMap { it.roles() }.toSet() - SAMPLE_OWNER
 
     // Check if there are any split/burn handlers (not null - null just makes fields optional)
     val hasSplitBurn = allHandlers.any { it.handler is Outcome.Split || it.handler is Outcome.Burn }

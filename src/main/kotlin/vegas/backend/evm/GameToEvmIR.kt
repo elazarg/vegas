@@ -7,6 +7,7 @@ import vegas.ir.*
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
+import vegas.frontend.SAMPLE_OWNER
 
 /**
  * Main entry point: Compiles a GameIR into a generic EVM Contract Model.
@@ -99,16 +100,18 @@ private fun buildStorage(
     val roleType = EnumType(roleEnumName)
     add(EvmStorageSlot(roleMap, Mapping(Address, roleType)))
 
-    // Player State
-    (g.roles + g.chanceRoles).forEach { role ->
+    // Player State. SAMPLE_OWNER has no actor (no join, no payout); the
+    // address / joined / claimed slots would be dead storage.
+    val actorRoles = (g.roles + g.chanceRoles).filter { it != SAMPLE_OWNER }
+    actorRoles.forEach { role ->
         add(EvmStorageSlot(roleAddr(role.name), Address))
     }
-    (g.roles + g.chanceRoles).forEach { role ->
+    actorRoles.forEach { role ->
         add(EvmStorageSlot(roleJoined(role.name), Bool)) // done_Role
     }
 
     // Per-role claimed flags (replaces payoffs_distributed)
-    (g.roles + g.chanceRoles).forEach { role ->
+    actorRoles.forEach { role ->
         add(EvmStorageSlot("claimed_${role.name}", Bool))
     }
 
