@@ -382,6 +382,66 @@ class SampleSpecTest : FreeSpec({
             }
         }
 
+        "Gambit honors partial-support priors instead of falling back to uniform" {
+            // The dist's declared support is {0, 1} but the type domain is
+            // {0, 1, 2}. Enumerating the full type would generate a phantom
+            // 2-branch with no prior weight, tripping the all-declared
+            // check and emitting uniform 1/3 instead of 3/4 / 1/4.
+            val src = """
+                type face = {0 .. 2}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
+                  yield Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
+            val chanceLines = efg.lines().filter { it.startsWith("c ") }
+            check(chanceLines.isNotEmpty()) { "no chance lines in EFG:\n$efg" }
+            // The chance node must enumerate only {0, 1}, not 2.
+            for (line in chanceLines) {
+                check(!Regex("""\b"?2"?\b""").containsMatchIn(line.substringAfter("{").substringBefore("}"))) {
+                    "chance enumerated value 2 outside dist support: $line"
+                }
+            }
+            efg shouldContain "3/4"
+            efg shouldContain "1/4"
+            check(!efg.contains("1/3")) {
+                "uniform 1/3 fallback was emitted despite explicit weighted prior:\n$efg"
+            }
+        }
+
+        "MAID emits a uniform CPD when a chance node has no explicit Dist" {
+            // A multi-parameter chance action produces dist = null at IR
+            // lowering (joint distributions are not yet supported), but the
+            // MAID nodes must still carry a probability table, or the
+            // resulting MAID is malformed. Fall back to uniform-over-domain.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Pair() ${'$'} 10;
+                  join B() ${'$'} 10;
+                  yield Pair(a: face, b: face);
+                  yield B(call: face);
+                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val maid = vegas.backend.maid.generateMaid(ir)
+            val chanceNodes = maid.nodes.filter { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
+            check(chanceNodes.size == 2) { "expected 2 chance nodes (a, b); got $chanceNodes" }
+            for (n in chanceNodes) {
+                val cpd = maid.cpds.single { it.node == n.id }
+                cpd.values.size shouldBe 2
+                for (row in cpd.values) {
+                    for (p in row) p shouldBe 0.5
+                }
+            }
+        }
+
         "Gambit rejects a chance node whose self-only guard is unsatisfiable" {
             // `where false` is a self-only guard that kills every value in
             // the prior support. The compiler must surface this as a static

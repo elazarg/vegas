@@ -186,6 +186,16 @@ private fun enumerateAssignmentsForAction(
     if (spec.params.isEmpty()) return listOf(emptyMap())
     if (history.quit(role)) return emptyList()
 
+    // For single-parameter sample nodes with an explicit Dist, the
+    // declared support IS the support: values outside dist.values have
+    // probability 0 and must not be enumerated as moves. Otherwise an
+    // explicit weighted/uniform that skips part of the type would
+    // produce phantom branches and a uniform fallback.
+    val sampleDistValues: List<Expr.Const>? = run {
+        val dist = dag.sampleSpec(actionId)?.dist ?: return@run null
+        if (spec.params.size != 1) null else dist.values
+    }
+
     // ========== Build Domain for Each Parameter ==========
     val lists: List<List<Pair<VarId, Expr.Const>>> = spec.params.map { param ->
         val fieldRef = FieldRef(role, param.name)
@@ -200,16 +210,17 @@ private fun enumerateAssignmentsForAction(
                 }
 
             Visibility.PUBLIC, Visibility.COMMIT ->
-                when (param.type) {
-                    is Type.BoolType ->
-                        listOf(Expr.Const.BoolVal(true), Expr.Const.BoolVal(false))
+                sampleDistValues
+                    ?: when (param.type) {
+                        is Type.BoolType ->
+                            listOf(Expr.Const.BoolVal(true), Expr.Const.BoolVal(false))
 
-                    is Type.RangeType ->
-                        (param.type.min..param.type.max).map { v -> Expr.Const.IntVal(v) }
+                        is Type.RangeType ->
+                            (param.type.min..param.type.max).map { v -> Expr.Const.IntVal(v) }
 
-                    is Type.IntType ->
-                        throw StaticError("Cannot enumerate IntType; use RangeType or BoolType")
-                }
+                        is Type.IntType ->
+                            throw StaticError("Cannot enumerate IntType; use RangeType or BoolType")
+                    }
         }
 
         // The packet we STORE in the frontier must respect visibility (Hidden)

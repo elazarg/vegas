@@ -343,15 +343,17 @@ private class MaidConverter(private val ir: GameIR) {
      * identically through commit/reveal expansion.
      */
     private fun createChanceCPDs() {
-        data class ChanceGroup(val field: FieldRef, val dist: Dist, val metas: MutableList<NodeMeta>)
+        data class ChanceGroup(val field: FieldRef, val dist: Dist?, val metas: MutableList<NodeMeta>)
         val groups = mutableMapOf<String, ChanceGroup>()
 
         for (meta in ir.dag.metas) {
-            val dist = meta.sample?.dist ?: continue
+            if (meta.sample == null) continue
             for (param in meta.spec.params) {
                 val fieldRef = FieldRef(meta.struct.owner, param.name)
                 val nodeId = fieldToNodeId[fieldRef] ?: continue
-                val group = groups.getOrPut(nodeId) { ChanceGroup(fieldRef, dist, mutableListOf()) }
+                val group = groups.getOrPut(nodeId) {
+                    ChanceGroup(fieldRef, meta.sample.dist, mutableListOf())
+                }
                 group.metas.add(meta)
             }
         }
@@ -363,18 +365,24 @@ private class MaidConverter(private val ir: GameIR) {
                 val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
                 acc * sz
             }
-            // After commit-reveal expansion, the commit node's guardExpr is
-            // rewritten to `true` and the reveal node retains the original
-            // guard. Pick the meta whose guard is non-trivial so the dist
-            // gets projected through the real constraint.
-            val guardingMeta = group.metas.firstOrNull { !isTrivialTrue(it.spec.guardExpr) }
-                ?: group.metas.first()
-            val effective = projectDistThroughSelfGuard(guardingMeta, group.field, group.dist) ?: group.dist
-            val rowProbs = node.domain.map { dv ->
-                val const = domainValToConst(dv)
-                val w = effective.weight(const)
-                if (w == null) 0.0
-                else w.numerator.toDouble() / w.denominator.toDouble()
+            // When the sample has an explicit Dist, project it through the
+            // node's self-only guard (the non-trivial one after commit-
+            // reveal expansion). Without an explicit Dist, fall back to a
+            // uniform CPD over the MAID node's domain so the CHANCE node
+            // is well-formed; this matches the Gambit-side fallback for
+            // null-dist sample nodes.
+            val rowProbs: List<Double> = if (group.dist != null) {
+                val guardingMeta = group.metas.firstOrNull { !isTrivialTrue(it.spec.guardExpr) }
+                    ?: group.metas.first()
+                val effective = projectDistThroughSelfGuard(guardingMeta, group.field, group.dist) ?: group.dist
+                node.domain.map { dv ->
+                    val w = effective.weight(domainValToConst(dv))
+                    if (w == null) 0.0
+                    else w.numerator.toDouble() / w.denominator.toDouble()
+                }
+            } else {
+                val uniform = if (node.domain.isEmpty()) 0.0 else 1.0 / node.domain.size
+                node.domain.map { uniform }
             }
             val cpdValues = rowProbs.map { p -> List(numCols) { p } }
             cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
