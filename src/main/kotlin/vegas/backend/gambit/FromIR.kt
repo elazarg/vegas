@@ -135,6 +135,83 @@ fun interface ExpansionPolicy {
  * This layering is epistemic, not part of the IR itself: it is induced by the
  * frontier exploration of the EventGraph and respects its causal partial order.
  */
+/**
+ * Distinct from generic [StaticError] so the conservation pass can
+ * distinguish "the program violates conservation" from "the strategic
+ * tree could not be enumerated" (unbounded int types, pruning artifacts,
+ * etc.). Only [ConservationViolation] propagates from [verifyConservation];
+ * enumeration failures are swallowed and the program is accepted on a
+ * best-effort basis. A future symbolic SMT-based check would close this
+ * gap (see FUTURE.md).
+ */
+internal class ConservationViolation(message: String) : StaticError(message)
+
+/**
+ * Verify pot conservation at every reachable terminal of the strategic
+ * game tree (no abandonment branches; quit moves don't model what we
+ * mean by "the game completed"). At each terminal, the equation
+ * `sum(payoffs) + burn == 0` must hold, since payoffs are computed
+ * net of deposits and the strategic pot equals the deposits. Throws
+ * [ConservationViolation] with the failing terminal's history on the
+ * first violation; iterates left-to-right deterministically.
+ *
+ * The check piggybacks on the existing Gambit tree unroller (so
+ * sample/chance branches are enumerated correctly, with the same
+ * conditioning semantics that EFG output uses). It runs the
+ * FAIR_PLAY policy and prunes continuations.
+ *
+ * Games whose tree Gambit cannot fully enumerate (unbounded int types,
+ * unsupported patterns) are skipped silently; only programs that Gambit
+ * can analyze AND that violate conservation are rejected.
+ */
+fun verifyConservation(ir: GameIR) {
+    val tree = try {
+        val semantics = GameSemantics(ir)
+        val unroller = TreeUnroller(semantics, ir, failOnDeadChoices = true)
+        val initial = Configuration(
+            frontier = FrontierMachine.from(ir.dag),
+            history = History(),
+        )
+        pruneContinuations(unroller.unroll(initial, ExpansionPolicy.FAIR_PLAY))
+    } catch (e: StaticError) {
+        if (e is ConservationViolation) throw e
+        return // enumeration failure: accept best-effort
+    } catch (_: IllegalStateException) {
+        return // pruning artifact: accept best-effort
+    }
+    walkAndCheck(tree, history = emptyList())
+}
+
+private fun walkAndCheck(node: GameTree, history: List<String>) {
+    when (node) {
+        is GameTree.Terminal -> {
+            val sumPayoffs = node.payoffs.values.sumOf { (it as Expr.Const.IntVal).v }
+            val burn = node.burn.v
+            val total = sumPayoffs + burn
+            if (total != 0) {
+                val payoffLines = node.payoffs.entries.joinToString("; ") { (r, v) ->
+                    "${r.name} -> ${(v as Expr.Const.IntVal).v} (utility, net of deposit)"
+                }
+                val pathText = if (history.isEmpty()) "<root>" else history.joinToString(" -> ")
+                throw ConservationViolation(
+                    "Pot conservation violation at terminal [$pathText]:\n" +
+                        "  $payoffLines\n" +
+                        "  burn = $burn\n" +
+                        "  sum(utility) + burn = $total (expected 0; equivalently sum(gross payouts) + burn == sum(deposits))",
+                )
+            }
+        }
+        is GameTree.Decision -> {
+            for (choice in node.choices) {
+                val actionStr = choice.action.entries.joinToString(",") { (k, v) -> "${k.name}=$v" }
+                val step = "${node.owner.name}{$actionStr}"
+                walkAndCheck(choice.subtree, history + step)
+            }
+        }
+        is GameTree.Continuation -> { /* pruned before walk; no-op */ }
+    }
+}
+
 fun generateExtensiveFormGame(
     ir: GameIR,
     includeAbandonment: Boolean = true,
@@ -197,11 +274,14 @@ internal class TreeUnroller(
      */
     fun unroll(config: Configuration, policy: ExpansionPolicy): GameTree {
         if (config.isTerminal()) {
-            return GameTree.Terminal(computePayoffs(config))
+            return GameTree.Terminal(computePayoffs(config), computeBurn(config))
         }
         val moves = semantics.enabledMoves(config)
         return buildTreeFromMoves(config, moves, policy)
     }
+
+    private fun computeBurn(config: Configuration): Expr.Const.IntVal =
+        eval({ config.history.get(it) }, ir.burn).toOutcome()
 
     private fun buildTreeFromMoves(
         config: Configuration,

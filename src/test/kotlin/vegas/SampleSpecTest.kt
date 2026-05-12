@@ -577,6 +577,93 @@ class SampleSpecTest : FreeSpec({
         }
     }
 
+    "Pot conservation" - {
+
+        "conservative game passes verifyConservation" {
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw P.g ? { P -> 10 } : { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            vegas.backend.gambit.verifyConservation(ir)
+        }
+
+        "non-conservative game fails with a ConservationViolation" {
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw { P -> 20 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            shouldThrow<vegas.backend.gambit.ConservationViolation> {
+                vegas.backend.gambit.verifyConservation(ir)
+            }
+        }
+
+        "underpaying game fails with a ConservationViolation" {
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw { P -> 0 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            shouldThrow<vegas.backend.gambit.ConservationViolation> {
+                vegas.backend.gambit.verifyConservation(ir)
+            }
+        }
+
+        "MontyHallChance conserves" {
+            val ir = typedCompileFile("examples/MontyHallChance.vg")
+            vegas.backend.gambit.verifyConservation(ir)
+        }
+    }
+
+    "PrevRandao entropy for anonymous sample (EVM)" - {
+
+        "Sample action takes no caller input and reads block.prevrandao" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  join P() ${'$'} 10;
+                  sample (w: face);
+                  yield P(g: face);
+                  withdraw (P.g == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            val contract = vegas.backend.evm.compileToEvm(ir)
+            val sol = vegas.backend.evm.generateSolidity(contract)
+            // The sample action body reads prevrandao with domain
+            // separation and selects from the dist support via modulo.
+            sol shouldContain "block.prevrandao"
+            sol shouldContain "keccak256(abi.encode(block.prevrandao"
+            sol shouldContain "% 2"
+            // No caller-submitted value parameter on the sample function.
+            check(!Regex("""function move_Sample_\d+\(int256""").containsMatchIn(sol)) {
+                "Sample function should take no caller input parameter"
+            }
+        }
+
+        "random Role keeps RoleSubmit (no prevrandao read in its actions)" {
+            // The Host actor still submits via msg.sender. Only anonymous
+            // `sample (...)` bindings use the chain-derived entropy.
+            val ir = typedCompileFile("examples/MontyHallChance.vg")
+            val contract = vegas.backend.evm.compileToEvm(ir)
+            val sol = vegas.backend.evm.generateSolidity(contract)
+            check(!sol.contains("block.prevrandao")) {
+                "MontyHallChance has no anonymous sample; Solidity should not read prevrandao"
+            }
+            sol shouldContain "by(Role.Host)"
+        }
+    }
+
     "Anonymous public sample and burn" - {
 
         "sample binds a field under the synthetic Sample owner" {

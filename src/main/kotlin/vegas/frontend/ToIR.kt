@@ -264,9 +264,14 @@ fun actionDagFromPhases(
 
             val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {
                 val explicit = sig.parameters.singleOrNull()?.dist
+                // Anonymous `sample (...)` bindings use the configured
+                // chain-derived source; `random Role` keeps the legacy
+                // submitter-trust source bound to the role's address.
+                val source = if (role == SAMPLE_OWNER) DEFAULT_SAMPLE_SOURCE
+                             else EntropySource.RoleSubmit(role)
                 SampleSpec(
                     dist = explicit ?: inferUniformDist(params),
-                    source = EntropySource.RoleSubmit(role),
+                    source = source,
                 )
             } else null
 

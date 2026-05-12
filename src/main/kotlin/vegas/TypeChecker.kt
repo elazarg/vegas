@@ -23,7 +23,7 @@ import vegas.frontend.inlineMacros
 /* Errors & Utilities                                                        */
 /* -------------------------------------------------------------------------- */
 
-internal class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
+internal open class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
     fun span(): Span? = node?.let { SourceLoc.get(it) }
 }
 
@@ -80,6 +80,13 @@ fun typeCheck(program: GameAst) {
     // Pass D: IR Structural Validation
     val inlined = inlineMacros(program)
     compileToIR(inlined)
+
+    // NOTE: pot-conservation (Pass E) lives in [verifyConservation] and is
+    // invoked separately by real-game entry points (the CLI's `compileToIR`
+    // wrapper and the examples test). Keeping it out of typeCheck means
+    // unit tests can construct programs that are well-formed structurally
+    // but not economically (e.g. `{ P -> 42 }` with no deposit) without
+    // tripping the check.
 }
 
 /* ============================================================

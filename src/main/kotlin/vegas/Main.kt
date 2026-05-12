@@ -117,6 +117,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     doTypecheck(program)  // Type check the surface syntax (with macros)
     val inlined = inlineMacros(program)  // Inline macros (desugar)
     val ir = compileToIR(inlined)  // Compile inlined program to IR
+    vegas.backend.gambit.verifyConservation(ir)  // Pot-conservation check (Pass E)
 
     if (outputs.play) {
         val client = GameClient.localClient(ir)

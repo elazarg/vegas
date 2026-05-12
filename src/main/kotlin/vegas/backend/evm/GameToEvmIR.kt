@@ -157,22 +157,45 @@ private fun buildAction(
     val kind = meta.kind // PUBLIC, COMMIT, or REVEAL
     val hidden = kind == Visibility.COMMIT
 
-    // 3a. Inputs
-    val inputs = buildList {
-        // Standard params
-        spec.params.forEach { p ->
-            val type = if (hidden) Bytes32 else translateType(p.type)
-            val varName = VarId(inputParam(p.name, hidden))
-            add(EvmParam(varName, type))
+    // Sample nodes whose entropy comes from `block.prevrandao` are
+    // chain-derived: the value is computed inside the function body, not
+    // submitted by a caller. Verify the dist is supported (uniform with
+    // declared values; non-uniform priors need rejection sampling which
+    // is not yet implemented) and reject otherwise.
+    val prevRandao = meta.sample?.source as? EntropySource.PrevRandao
+    if (prevRandao != null) {
+        val dist = meta.sample.dist
+            ?: error("EVM emission for sample requires an explicit Dist; got null for ${meta.id}. Multi-parameter samples are not supported with chain-derived entropy.")
+        val firstWeight = dist.support.first().second
+        val nonUniform = dist.support.any { it.second != firstWeight }
+        if (nonUniform) {
+            error("EVM emission with PrevRandao source supports only uniform priors; got non-uniform dist on ${meta.id}. Rejection sampling for non-uniform priors is not yet implemented.")
         }
-        // Reveals need a salt
-        if (kind == Visibility.REVEAL) {
-            add(EvmParam(VarId("salt"), Uint256))
+        if (spec.params.size != 1) {
+            error("EVM emission with PrevRandao source supports only single-parameter samples; got ${spec.params.size} params on ${meta.id}.")
         }
     }
 
-    // 3c. Guards - `where` expressions
-    val guards = if (!hidden) {
+    // 3a. Inputs. PrevRandao samples take no caller input - the value is
+    // computed inside the body. All other actions take their params.
+    val inputs = buildList {
+        if (prevRandao == null) {
+            spec.params.forEach { p ->
+                val type = if (hidden) Bytes32 else translateType(p.type)
+                val varName = VarId(inputParam(p.name, hidden))
+                add(EvmParam(varName, type))
+            }
+            // Reveals need a salt
+            if (kind == Visibility.REVEAL) {
+                add(EvmParam(VarId("salt"), Uint256))
+            }
+        }
+    }
+
+    // 3c. Guards - `where` expressions. PrevRandao samples skip both type
+    // and support guards since the value is computed inside the body (the
+    // modulo construction inherently lands in the declared support).
+    val guards = if (!hidden && prevRandao == null) {
         translateDomainGuards(spec.params) +
             translateSampleSupportGuards(meta) +
             if (spec.guardExpr != Expr.Const.BoolVal(true)) {
@@ -236,14 +259,58 @@ private fun buildAction(
             }
         }
 
-        // State Updates (Writing to Storage)
-        spec.params.forEach { p ->
-            val targetName = storageName(meta.struct.owner, p.name, hidden)
-            val flagName = doneFlagName(meta.struct.owner, p.name, hidden)
-            val varName = VarId(inputParam(p.name, hidden))
+        // State Updates (Writing to Storage).
+        if (prevRandao != null) {
+            // Chain-derived entropy. Compute:
+            //   entropy = uint256(keccak256(abi.encode(block.prevrandao,
+            //                                          address(this), idx)))
+            //   r       = entropy % supportSize
+            //   field   = support[r]
+            // The action-index literal domain-separates draws within the
+            // same block / contract, so concurrent samples don't collide.
+            val dist = meta.sample.dist!!
+            val support = dist.support.map { it.first }
+            val supportSize = support.size
+            val p = spec.params.single()
+            val targetName = storageName(meta.struct.owner, p.name, false)
+            val flagName = doneFlagName(meta.struct.owner, p.name, false)
 
-            add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
+            val seed = AbiEncodeRaw(listOf(
+                BuiltIn.PrevRandao,
+                BuiltIn.Self,
+                IntLit(idx),
+            ))
+            val entropy = Call("uint256", listOf(Keccak256(seed)))
+            val r = Binary(BinaryOp.MOD, entropy, IntLit(supportSize))
+            val rVar = Var(VarId("r"))
+
+            // Var ref renderer prefixes names with "_" (an input-param
+            // convention); align the local-declaration name so it matches.
+            add(VarDecl("_r", Uint256, r))
+            // Map r to support[r] via nested ternary: avoids emitting a
+            // memory array literal (which Solidity does not allow for
+            // int256 fixed-size arrays as inline literals in all cases).
+            val picked = support.indices.toList().foldRight<Int, EvmExpr>(
+                literalOfConst(support.last())
+            ) { i, acc ->
+                if (i == support.lastIndex) acc
+                else Ternary(
+                    Binary(BinaryOp.EQ, rVar, IntLit(i)),
+                    literalOfConst(support[i]),
+                    acc,
+                )
+            }
+            add(Assign(Member(BuiltIn.Self, targetName), picked))
             add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
+        } else {
+            spec.params.forEach { p ->
+                val targetName = storageName(meta.struct.owner, p.name, hidden)
+                val flagName = doneFlagName(meta.struct.owner, p.name, hidden)
+                val varName = VarId(inputParam(p.name, hidden))
+
+                add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
+                add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
+            }
         }
     }
 
@@ -320,6 +387,13 @@ private fun buildWithdrawActions(
         )
     }
 }
+/** Lift an IR Const literal into an EVM IR expression literal. */
+private fun literalOfConst(c: Expr.Const): EvmExpr = when (c) {
+    is Expr.Const.IntVal -> IntLit(c.v)
+    is Expr.Const.BoolVal -> BoolLit(c.v)
+    else -> error("Unsupported const in sample support: $c")
+}
+
 /** Generates 'require' statements for domain validation (e.g., `x in {0..2}`) */
 private fun translateDomainGuards(params: List<NodeParam>): List<EvmExpr> =
     params.mapNotNull { p ->

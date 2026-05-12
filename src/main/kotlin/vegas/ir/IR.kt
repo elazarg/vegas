@@ -131,7 +131,24 @@ data class Dist(val support: List<Pair<Expr.Const, Rational>>) {
 sealed class EntropySource {
     /** A designated role submits the value. Trust assumption: that role. */
     data class RoleSubmit(val role: RoleId) : EntropySource()
+
+    /**
+     * EVM-native randomness derived from `block.prevrandao`, optionally
+     * sampled at a future block (`futureBlocks` >= 1 mitigates the
+     * proposer-bias attack at the cost of latency). Trust assumption:
+     * the block proposer cannot withhold blocks (or, with futureBlocks
+     * >= 1, cannot bias values at future blocks the proposer does not
+     * yet know they will be proposing).
+     */
+    data class PrevRandao(val futureBlocks: Int) : EntropySource()
 }
+
+/**
+ * Default entropy source for anonymous `sample (...)` bindings. Hardcoded
+ * for now; a future CLI flag will override it. Strategic-role chance
+ * samples (`random Host`) keep [EntropySource.RoleSubmit].
+ */
+val DEFAULT_SAMPLE_SOURCE: EntropySource = EntropySource.PrevRandao(0)
 
 /**
  * Per-node classification of a Sample (chance) node.

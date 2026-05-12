@@ -31,9 +31,27 @@ class ExamplesValidationTest : FreeSpec({
         "MontyHallChance"
     )
 
+    // Examples known to fail the pot-conservation check (Pass E in typeCheck).
+    // Either some branch underpays (funds get stuck in the contract) or overpays
+    // (contract reverts at runtime). Listed here so they continue to parse and
+    // compile to IR; rewriting them to be conservative is tracked in
+    // docs/FUTURE.md. Lottery is the canonical case and is on the active TODO.
+    val knownNonConservative = setOf(
+        "ClaimFraud",
+        "CommitteeVoting",
+        "GasPriceAuction",
+        "HiddenReserve",
+        "Lottery",
+        "StakingSlashing",
+        "TwoRobotCorridor",
+        "VickreyAuction",
+    )
+
     val examples = exampleFiles
         .map { it.nameWithoutExtension }
         .filter { it !in knownLanguageLimitations }
+
+    val typeCheckableExamples = examples.filter { it !in knownNonConservative }
 
     "All examples should parse successfully" - {
         withData(examples) { exampleName ->
@@ -43,7 +61,7 @@ class ExamplesValidationTest : FreeSpec({
     }
 
     "All examples should typecheck successfully" - {
-        withData(examples) { exampleName ->
+        withData(typeCheckableExamples) { exampleName ->
             val ast = try {
                 parseFile("examples/$exampleName.vg")
             } catch (e: Exception) {
@@ -62,6 +80,39 @@ class ExamplesValidationTest : FreeSpec({
                 inlineMacros(ast)
             } catch (e: Exception) {
                 throw AssertionError("Failed to inline macros in $exampleName.vg", e)
+            }
+
+            // Pass E: pot conservation. Run on every typecheckable
+            // example; the known-non-conservative ones are validated
+            // separately below.
+            val inlined = inlineMacros(ast)
+            val ir = compileToIR(inlined)
+            try {
+                vegas.backend.gambit.verifyConservation(ir)
+            } catch (e: vegas.backend.gambit.ConservationViolation) {
+                throw AssertionError(
+                    "$exampleName.vg fails the pot-conservation check (Pass E):\n${e.message}\n" +
+                        "Either rewrite to conserve, or add to knownNonConservative."
+                )
+            }
+        }
+    }
+
+    "Known-non-conservative examples fail the conservation check (Pass E)" - {
+        withData(knownNonConservative) { exampleName ->
+            val ast = parseFile("examples/$exampleName.vg")
+            // Earlier passes must succeed - the conservation failure is
+            // the only one we accept.
+            typeCheck(ast)
+            val ir = compileToIR(inlineMacros(ast))
+            try {
+                vegas.backend.gambit.verifyConservation(ir)
+                throw AssertionError(
+                    "$exampleName.vg is listed as known-non-conservative but now passes Pass E. " +
+                        "Remove it from knownNonConservative."
+                )
+            } catch (_: vegas.backend.gambit.ConservationViolation) {
+                // Expected.
             }
         }
     }

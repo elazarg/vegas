@@ -287,6 +287,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     is BuiltIn.MsgValue -> "msg.value"
     is BuiltIn.Timestamp -> "block.timestamp"
     is BuiltIn.Self -> "self"
+    is BuiltIn.PrevRandao -> "block.prevrandao"
 
     // Special
     is Keccak256 -> "keccak256(${renderExpr(e.data)})"
@@ -303,6 +304,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
             "_abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
         }
     }
+    is AbiEncodeRaw -> "_abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
     is EnumValue -> "${e.enumName}.${e.value}"
 }
 
