@@ -90,8 +90,6 @@ to be conservative (multi-winner split arithmetic, burn-on-no-winner,
 etc.) or formally accepted as non-conservative with a runtime-deposit
 adjustment policy:
 
-- `Lottery.vg` (the canonical case; an attempted rewrite is the active
-  TODO).
 - `ClaimFraud.vg`
 - `CommitteeVoting.vg`
 - `GasPriceAuction.vg`

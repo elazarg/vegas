@@ -13,7 +13,7 @@ TODO:
 # * Reveal-failure slash policy (commit/reveal `or burn N` handler).
 # * Symbolic / SMT-based pot conservation check (replace the
 #   Gambit-enumeration-based one in verifyConservation).
-# * Rewrite known-non-conservative examples (Lottery is the active item).
+# * Rewrite known-non-conservative examples (Lottery done; seven remain).
 
 
 # Alignment with VegasCore

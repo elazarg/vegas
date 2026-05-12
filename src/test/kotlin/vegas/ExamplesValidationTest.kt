@@ -41,7 +41,6 @@ class ExamplesValidationTest : FreeSpec({
         "CommitteeVoting",
         "GasPriceAuction",
         "HiddenReserve",
-        "Lottery",
         "StakingSlashing",
         "TwoRobotCorridor",
         "VickreyAuction",
