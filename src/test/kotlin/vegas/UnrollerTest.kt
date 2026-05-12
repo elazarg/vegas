@@ -176,7 +176,7 @@ class UnrollerTest : FreeSpec({
 
         "handles chance nodes correctly" {
             val code = """
-                random Nature() $ 0;
+                random Nature;
                 join Alice() $ 100;
                 yield Nature(coin: bool);
                 yield Alice(bet: bool);
@@ -383,7 +383,7 @@ class UnrollerTest : FreeSpec({
 
         "produces identical EFG for chance games" {
             val code = """
-                random Nature() $ 0;
+                random Nature;
                 join Alice() $ 100;
                 yield Nature(coin: bool);
                 yield Alice(bet: bool);

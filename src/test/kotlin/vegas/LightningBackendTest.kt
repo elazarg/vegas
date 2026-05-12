@@ -87,7 +87,7 @@ class LightningBackendTest : FreeSpec({
 
         "Rejects: Randomness (Chance moves)" {
             val code = """
-                random Coin() $ 0;
+                random Coin;
                 join Alice() $ 10;
                 join Bob() $ 10;
                 yield Coin(flip: bool);

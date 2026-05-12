@@ -4,6 +4,7 @@ import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
+import vegas.frontend.SAMPLE_OWNER
 
 /**
  * Render the EVM IR to Vyper source code.
@@ -107,12 +108,16 @@ private fun StringBuilder.renderAction(a: EvmAction) {
 
     indent {
         // 1. Synthesize Assertions (Replacements for Modifiers)
-        // Role Check (inline 'by' modifier)
-        val roleCheck = "self.$roleMap[msg.sender] == ${roleEnumMember(a.invokedBy.name)}"
-        appendLine("assert $roleCheck, \"bad role\"")
+        // Role Check (inline 'by' modifier). Sample-owned actions have no
+        // actor; emit no role gate so the function is callable.
+        val isSample = a.invokedBy == SAMPLE_OWNER
+        if (!isSample) {
+            val roleCheck = "self.$roleMap[msg.sender] == ${roleEnumMember(a.invokedBy.name)}"
+            appendLine("assert $roleCheck, \"bad role\"")
 
-        // Bail check (inline from 'by' modifier) - bail attribution happens in 'depends'
-        appendLine("assert not self.bailed[${roleEnumMember(a.invokedBy.name)}], \"you bailed\"")
+            // Bail check (inline from 'by' modifier) - bail attribution happens in 'depends'
+            appendLine("assert not self.bailed[${roleEnumMember(a.invokedBy.name)}], \"you bailed\"")
+        }
 
         // Not Done Check (inline 'action' modifier)
         val actionRole = roleEnumMember(a.actionId.first.name)

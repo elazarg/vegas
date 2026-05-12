@@ -145,7 +145,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type door = {0, 1, 2}
                 game main() {
-                  random Host() ${'$'} 100;
+                  random Host;
                   join Guest() ${'$'} 100;
                   yield Host(car: door ~ uniform { 0, 1, 2 });
                   yield Guest(d: door);
@@ -551,6 +551,37 @@ class SampleSpecTest : FreeSpec({
                 }
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "parser rejects deposits on random (no silent recovery)" {
+            // `random Coin() $ 10;` used to be silently accepted via ANTLR
+            // error recovery (the `$ 10` was skipped). The strict parser
+            // now reports the extraneous input as a hard error.
+            val src = """
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join P() ${'$'} 10;
+                  yield Coin(side: int);
+                  yield P(call: int);
+                  withdraw { P -> 10 }
+                }
+            """.trimIndent()
+            shouldThrow<vegas.frontend.VegasParseError> { parseCode(src) }
+        }
+
+        "Solidity emits no role gate on sample-owned actions" {
+            // Sample bindings have no actor; the generated Solidity must
+            // not include `by(Role.Sample)` (which would be uncallable),
+            // and must still emit role gates for strategic actions.
+            val ir = compileToIR(parseFile("examples/Lottery.vg"))
+            val contract = vegas.backend.evm.compileToEvm(ir)
+            val sol = vegas.backend.evm.generateSolidity(contract)
+            check(!sol.contains("by(Role.Sample)")) {
+                "Solidity output contains by(Role.Sample); sample-owned actions would be uncallable"
+            }
+            check(sol.contains("by(Role.P1)")) {
+                "Expected by(Role.P1) on strategic actions; got Solidity without it"
+            }
         }
     }
 })
