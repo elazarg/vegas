@@ -89,12 +89,16 @@ data class NodeStruct(
  * @param id stable identifier within the DAG
  * @param spec semantic payload (params, join, guard)
  * @param struct structural metadata (owner, writes, visibility, guard reads)
+ * @param sample non-null iff this node is a Sample (chance) draw: the
+ *   action's writes are produced by a random source rather than chosen
+ *   strategically. Backends test sample-ness via [EventGraph.isSampleNode].
  * @property kind derived from [spec] and [struct].
  */
 data class NodeMeta(
     val id: NodeId,
     val spec: NodeSpec,
     val struct: NodeStruct,
+    val sample: SampleSpec? = null,
 ) {
     val kind: Visibility by lazy { inferKind(struct) }
 }
@@ -140,6 +144,22 @@ class EventGraph private constructor(
     fun owner(id: NodeId): RoleId = struct(id).owner
     fun writes(id: NodeId): Set<FieldRef> = struct(id).writes
     fun visibilityOf(id: NodeId): Map<FieldRef, Visibility> = struct(id).visibility
+
+    /** Sample shortcuts. */
+    fun sampleSpec(id: NodeId): SampleSpec? = meta(id).sample
+    fun isSampleNode(id: NodeId): Boolean = meta(id).sample != null
+
+    /**
+     * Roles that own at least one sample (chance) node in this DAG.
+     * Derived from per-node sample metadata so this set and per-node
+     * [isSampleNode] cannot disagree.
+     */
+    val chanceRoles: Set<RoleId> by lazy {
+        payloads.values
+            .filter { it.sample != null }
+            .map { it.struct.owner }
+            .toSet()
+    }
 
     /** Reachability queries. */
     fun reaches(from: NodeId, to: NodeId): Boolean =
@@ -268,32 +288,46 @@ class EventGraph private constructor(
                 }
                 val revealStruct = struct.copy(visibility = revealVis)
 
-                // Commit spec:
-                //  - KEEP join (deposit happens at commit time)
-                //  - trivial guard (always allowed to commit)
+                // For sample (chance) nodes with a self-only guard, the
+                // value is drawn at commit time, so the guard binds there:
+                // an illegal value cannot be unilaterally chosen and revealed
+                // later. Keep the guard on the commit and trivialize the
+                // reveal so any consumer sees a single guarded chance
+                // decision. This includes BoolVal(false) (unsatisfiable
+                // sample), which a backend can then surface as a dead-
+                // choice error rather than crashing downstream. For
+                // strategic actions the original split holds: the player
+                // commits freely and the reveal-time check enforces the
+                // constraint on the revealed value.
+                val sampleSelfGuard = meta.sample != null && struct.guardReads.isEmpty()
+
+                val commitGuard = if (sampleSelfGuard) spec.guardExpr else Expr.Const.BoolVal(true)
+                val revealGuard = if (sampleSelfGuard) Expr.Const.BoolVal(true) else spec.guardExpr
+
+                // Commit spec: KEEP join (deposit happens at commit time).
                 val commitSpec = spec.copy(
                     join = spec.join,
-                    guardExpr = Expr.Const.BoolVal(true)
+                    guardExpr = commitGuard,
                 )
 
-                // Reveal spec:
-                //  - original guard
-                //  - NO join (deposit already done)
+                // Reveal spec: NO join (deposit already done).
                 val revealSpec = spec.copy(
                     join = null,
-                    guardExpr = spec.guardExpr
+                    guardExpr = revealGuard,
                 )
 
                 val commitMeta = NodeMeta(
                     id = cid,
                     spec = commitSpec,
-                    struct = commitStruct
+                    struct = commitStruct,
+                    sample = meta.sample,
                 )
 
                 val revealMeta = NodeMeta(
                     id = rid,
                     spec = revealSpec,
-                    struct = revealStruct
+                    struct = revealStruct,
+                    sample = meta.sample,
                 )
 
                 // Commit predecessors: mapped original preds

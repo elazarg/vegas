@@ -34,6 +34,7 @@ import vegas.dag.FrontierMachine
 import vegas.ir.NodeId
 import vegas.ir.Expr
 import vegas.ir.GameIR
+import vegas.ir.SampleSpec
 import vegas.ir.toOutcome
 import vegas.semantics.Configuration
 import vegas.semantics.FrontierAssignmentSlice
@@ -134,6 +135,83 @@ fun interface ExpansionPolicy {
  * This layering is epistemic, not part of the IR itself: it is induced by the
  * frontier exploration of the EventGraph and respects its causal partial order.
  */
+/**
+ * Distinct from generic [StaticError] so the conservation pass can
+ * distinguish "the program violates conservation" from "the strategic
+ * tree could not be enumerated" (unbounded int types, pruning artifacts,
+ * etc.). Only [ConservationViolation] propagates from [verifyConservation];
+ * enumeration failures are swallowed and the program is accepted on a
+ * best-effort basis. A future symbolic SMT-based check would close this
+ * gap (see FUTURE.md).
+ */
+internal class ConservationViolation(message: String) : StaticError(message)
+
+/**
+ * Verify pot conservation at every reachable terminal of the strategic
+ * game tree (no abandonment branches; quit moves don't model what we
+ * mean by "the game completed"). At each terminal, the equation
+ * `sum(payoffs) + burn == 0` must hold, since payoffs are computed
+ * net of deposits and the strategic pot equals the deposits. Throws
+ * [ConservationViolation] with the failing terminal's history on the
+ * first violation; iterates left-to-right deterministically.
+ *
+ * The check piggybacks on the existing Gambit tree unroller (so
+ * sample/chance branches are enumerated correctly, with the same
+ * conditioning semantics that EFG output uses). It runs the
+ * FAIR_PLAY policy and prunes continuations.
+ *
+ * Games whose tree Gambit cannot fully enumerate (unbounded int types,
+ * unsupported patterns) are skipped silently; only programs that Gambit
+ * can analyze AND that violate conservation are rejected.
+ */
+fun verifyConservation(ir: GameIR) {
+    val tree = try {
+        val semantics = GameSemantics(ir)
+        val unroller = TreeUnroller(semantics, ir, failOnDeadChoices = true)
+        val initial = Configuration(
+            frontier = FrontierMachine.from(ir.dag),
+            history = History(),
+        )
+        pruneContinuations(unroller.unroll(initial, ExpansionPolicy.FAIR_PLAY))
+    } catch (e: StaticError) {
+        if (e is ConservationViolation) throw e
+        return // enumeration failure: accept best-effort
+    } catch (_: IllegalStateException) {
+        return // pruning artifact: accept best-effort
+    }
+    walkAndCheck(tree, history = emptyList())
+}
+
+private fun walkAndCheck(node: GameTree, history: List<String>) {
+    when (node) {
+        is GameTree.Terminal -> {
+            val sumPayoffs = node.payoffs.values.sumOf { (it as Expr.Const.IntVal).v }
+            val burn = node.burn.v
+            val total = sumPayoffs + burn
+            if (total != 0) {
+                val payoffLines = node.payoffs.entries.joinToString("; ") { (r, v) ->
+                    "${r.name} -> ${(v as Expr.Const.IntVal).v} (utility, net of deposit)"
+                }
+                val pathText = if (history.isEmpty()) "<root>" else history.joinToString(" -> ")
+                throw ConservationViolation(
+                    "Pot conservation violation at terminal [$pathText]:\n" +
+                        "  $payoffLines\n" +
+                        "  burn = $burn\n" +
+                        "  sum(utility) + burn = $total (expected 0; equivalently sum(gross payouts) + burn == sum(deposits))",
+                )
+            }
+        }
+        is GameTree.Decision -> {
+            for (choice in node.choices) {
+                val actionStr = choice.action.entries.joinToString(",") { (k, v) -> "${k.name}=$v" }
+                val step = "${node.owner.name}{$actionStr}"
+                walkAndCheck(choice.subtree, history + step)
+            }
+        }
+        is GameTree.Continuation -> { /* pruned before walk; no-op */ }
+    }
+}
+
 fun generateExtensiveFormGame(
     ir: GameIR,
     includeAbandonment: Boolean = true,
@@ -196,11 +274,14 @@ internal class TreeUnroller(
      */
     fun unroll(config: Configuration, policy: ExpansionPolicy): GameTree {
         if (config.isTerminal()) {
-            return GameTree.Terminal(computePayoffs(config))
+            return GameTree.Terminal(computePayoffs(config), computeBurn(config))
         }
         val moves = semantics.enabledMoves(config)
         return buildTreeFromMoves(config, moves, policy)
     }
+
+    private fun computeBurn(config: Configuration): Expr.Const.IntVal =
+        eval({ config.history.get(it) }, ir.burn).toOutcome()
 
     private fun buildTreeFromMoves(
         config: Configuration,
@@ -212,7 +293,18 @@ internal class TreeUnroller(
 
         // Group by role, maintaining canonical order
         val movesByRole = playMoves.groupBy({ it.role }, { it })
-        val rolesInOrder = movesByRole.keys.sortedBy { it.name }
+
+        // Chance roles with actions but no surviving moves never appear in
+        // movesByRole because enabledMoves does not synthesize a quit move
+        // for them. Without visiting them, the dead-choice check cannot
+        // fire and an unsatisfiable sample guard falls through to the
+        // internal FinalizeFrontier error.
+        val actionsByRole = config.actionsByRole(ir.dag)
+        val deadChanceRoles = actionsByRole.keys.filter { role ->
+            role !in movesByRole &&
+                actionsByRole.getValue(role).any { ir.dag.isSampleNode(it) && ir.dag.params(it).isNotEmpty() }
+        }
+        val rolesInOrder = (movesByRole.keys + deadChanceRoles).sortedBy { it.name }
 
         // Build tree by iterating through roles, creating decision nodes
         return buildRoleDecisions(
@@ -242,17 +334,27 @@ internal class TreeUnroller(
 
         val role = roles[roleIndex]
         var roleMoves = movesByRole[role]
-        val isChance = role in ir.chanceRoles
 
         val actionsForRole = config.actionsByRole(ir.dag)[role].orEmpty()
+        // A role's decision at this frontier is a chance node iff every
+        // action it owns here is a sample node. Mixing is currently
+        // unrepresentable in the surface language and is asserted away.
+        val sampleFlags = actionsForRole.map { ir.dag.isSampleNode(it) }
+        val isChance: Boolean = when {
+            sampleFlags.isEmpty() -> false
+            sampleFlags.all { it } -> true
+            sampleFlags.none { it } -> false
+            else -> error("Mixed sample/strategic actions for role ${role.name} at the current frontier")
+        }
         val allParams = actionsForRole.flatMap { ir.dag.params(it) }
         val hasQuit = config.history.quit(role)
 
         // If the role has parameterized actions "in scope" but no enabled moves,
-        // we treat it as a static error (unsatisfiable where/guards), unless role already quit.
+        // we treat it as a static error (unsatisfiable where/guards), unless role
+        // already quit. This applies to chance roles too: a Sample whose guard
+        // kills every value in its dist support is malformed, not a fallback.
         if (
             failOnDeadChoices &&
-            !isChance &&
             !hasQuit &&
             actionsForRole.isNotEmpty() &&
             allParams.isNotEmpty() &&
@@ -294,6 +396,11 @@ internal class TreeUnroller(
         val infoset = views.getValue(role)
         val infosetId = infosetManager.getHistoryNumber(role, infoset, isChance)
 
+        // Per-move chance probabilities, renormalized over the guard-surviving
+        // support so they sum to 1 across this node's children.
+        val chanceProbs: Map<Label.Play, Rational> =
+            if (isChance) computeChanceProbabilities(roleMoves) else emptyMap()
+
         // Build choices for this role
         val choices = roleMoves.map { playMove ->
             val shouldExpand = when (playMove.tag) {
@@ -324,7 +431,7 @@ internal class TreeUnroller(
             GameTree.Choice(
                 action = extractActionLabel(playMove.delta, role),
                 subtree = subtree,
-                probability = if (isChance) Rational(1, roleMoves.size) else null
+                probability = if (isChance) chanceProbs.getValue(playMove) else null
             )
         }
 
@@ -337,12 +444,74 @@ internal class TreeUnroller(
     }
 
     private fun computePayoffs(config: Configuration): Map<RoleId, Expr.Const> {
-        fun computeUtility(role: RoleId, expr: Expr): Expr.Const.IntVal {
+        // Compute utilities for every strategic role, not just those
+        // mentioned in `ir.payoffs`. A role that joined (depositing) but
+        // does not appear in the `withdraw` clause has gross payout 0
+        // and net utility -deposit; conservation must see that loss,
+        // otherwise an omitted depositor is invisible to the check.
+        fun computeUtility(role: RoleId, expr: Expr?): Expr.Const.IntVal {
             val deposit: Expr.Const.IntVal = ir.dag.deposit(role)
-            val outcome: Expr.Const.IntVal = eval({ config.history.get(it) }, expr).toOutcome()
+            val outcome: Expr.Const.IntVal = if (expr != null) {
+                eval({ config.history.get(it) }, expr).toOutcome()
+            } else {
+                Expr.Const.IntVal(0)
+            }
             return Expr.Const.IntVal(outcome.v - deposit.v)
         }
-        return ir.payoffs.mapValues { (role, expr) -> computeUtility(role, expr) }
+        return ir.roles.associateWith { role -> computeUtility(role, ir.payoffs[role]) }
+    }
+
+    /**
+     * Per-move chance probabilities at a single chance decision, renormalized
+     * over the guard-surviving moves so they sum to 1.
+     *
+     * If every Action move's Sample node carries an explicit Dist, each
+     * move's probability is `dist.weight(value) / sum(weights)`. If any
+     * move lacks an explicit Dist (multi-parameter chance node, unbounded
+     * domain), we fall back to uniform over surviving moves, which is the
+     * same answer the explicit path gives when the underlying dist is uniform.
+     */
+    private fun computeChanceProbabilities(
+        roleMoves: List<Label.Play>,
+    ): Map<Label.Play, Rational> {
+        if (roleMoves.isEmpty()) return emptyMap()
+
+        val priors: List<Rational?> = roleMoves.map { move -> priorWeight(move) }
+        val allDeclared = priors.all { it != null }
+
+        if (!allDeclared) {
+            val uniform = Rational(1, roleMoves.size)
+            return roleMoves.associateWith { uniform }
+        }
+
+        val total = priors.filterNotNull().reduce { a, b -> a + b }
+        if (total == Rational(0)) {
+            val uniform = Rational(1, roleMoves.size)
+            return roleMoves.associateWith { uniform }
+        }
+        return roleMoves.zip(priors).associate { (move, w) ->
+            move to (w!! / total)
+        }
+    }
+
+    /**
+     * Prior weight of a single chance move under its Sample node's declared
+     * distribution, or null if no explicit distribution applies.
+     */
+    private fun priorWeight(move: Label.Play): Rational? {
+        val actionId = (move.tag as? PlayTag.Action)?.actionId ?: return null
+        val spec: SampleSpec = ir.dag.sampleSpec(actionId) ?: return null
+        val dist = spec.dist ?: return null
+        // Single-parameter sample only: the move's delta has one entry whose
+        // value is the sampled Const. Multi-parameter samples are rejected
+        // upstream (Dist is null when params != 1).
+        val values: Collection<Expr.Const> = move.delta.values
+        if (values.size != 1) return null
+        // Commit moves wrap the sampled value in Hidden; the Dist is keyed by
+        // the underlying value, so unwrap before lookup.
+        val raw = values.first()
+        val sampled = if (raw is Expr.Const.Hidden) raw.inner else raw
+        return dist.weight(sampled)
     }
 }
 

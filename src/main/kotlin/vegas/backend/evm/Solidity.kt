@@ -4,6 +4,7 @@ import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
+import vegas.frontend.SAMPLE_OWNER
 
 /**
  * Renders the EVM IR directly to Solidity source code.
@@ -133,9 +134,15 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     val visibility = "public" // Actions are always public entry points
     val mutability = if (a.payable) " payable" else ""
 
-    // Synthesize Modifiers from Declarative Constraints
+    // Synthesize Modifiers from Declarative Constraints.
+    // Sample-owned actions have no actor (no `join` ever assigns the Sample
+    // label to an address), so emitting `by(Role.Sample)` would make the
+    // function uncallable. Drop the role gate; anyone can call. The
+    // entropy source layer (prevrandao / vrf / drand) will eventually
+    // replace this open access with source-specific scaffolding.
+    val isSample = a.invokedBy == SAMPLE_OWNER
     val modifiers = buildList {
-        add("by(${roleEnumName}.${a.invokedBy})")
+        if (!isSample) add("by(${roleEnumName}.${a.invokedBy})")
         add("action(Role.${a.actionId.first}, ${a.actionId.second})")
         a.dependencies.forEach { dep -> add("depends(Role.${dep.first}, ${dep.second})") }
     }.joinToString(" ")
@@ -270,12 +277,17 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     is BuiltIn.MsgValue -> "msg.value"
     is BuiltIn.Timestamp -> "block.timestamp"
     is BuiltIn.Self -> "address(this)"
+    is BuiltIn.PrevRandao -> "block.prevrandao"
 
     // Special
     is Keccak256 -> "keccak256(${renderExpr(e.data)})"
     is AbiEncode -> {
         val args = e.args.joinToString(", ") { renderExpr(it) }
         if (e.isPacked) "abi.encodePacked($args)" else "abi.encode($args)"
+    }
+    is AbiEncodeRaw -> {
+        val args = e.args.joinToString(", ") { renderExpr(it) }
+        "abi.encode($args)"
     }
     is EnumValue -> "${e.enumName}.${e.value}"
 }

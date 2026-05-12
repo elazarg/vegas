@@ -108,11 +108,16 @@ common reasons:
 \end{itemize}
 
 Each example has a small declaration listing the backends to
-disable; the harness uses this list when iterating.  Today
-roughly half of the examples are accepted by every applicable
-backend in the test list; the other half exercise one or two
-backend-specific concerns and disable a single backend for a
-documented reason.
+disable; the golden-master harness uses this list to skip an
+example for a backend it cannot accept.  Byte-equal golden
+masters are pinned for a representative subset of programs
+covering every backend exercised by the harness (MontyHall,
+OddsEvensShort, Prisoners, TicTacToe, VickreyAuction; the latter
+two carry a backend-disable annotation for game-theoretic and
+Lightning targets respectively).  The full example library is
+exercised by the language-level passes --- parse, typecheck,
+conservation enumeration, and IR construction --- on every
+program.
 
 \subsection{What we have learned}
 

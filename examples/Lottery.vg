@@ -1,21 +1,24 @@
-// Lottery: three players choose tickets; public RNG picks winning ticket.
-// Distribution semantics: winner gets full pot (400 wei), losers get 0
+// Lottery: three players concurrently pick tickets; public sample picks the winning ticket.
+// Conservative distribution: the strategic pot (300 wei) is split equally among players who
+// picked the winning ticket. If nobody picks it, the pot is burned.
 
 type ticket = {0, 1, 2}
 
 game main() {
   join P1() $ 100 P2() $ 100 P3() $ 100;
-  random RNG() $ 100;
 
   yield or split P1(t: ticket) P2(t: ticket) P3(t: ticket);
 
-  yield RNG(w: ticket);
+  sample (w: ticket);
 
-  // Winner gets full pot, losers get 0
-  withdraw {
-      P1 -> (P1.t == RNG.w ? 400 : 0);
-      P2 -> (P2.t == RNG.w ? 400 : 0);
-      P3 -> (P3.t == RNG.w ? 400 : 0);
-      RNG -> 0;
-  }
+  withdraw
+    let winners: int = (P1.t == Sample.w ? 1 : 0)
+                     + (P2.t == Sample.w ? 1 : 0)
+                     + (P3.t == Sample.w ? 1 : 0)
+    in {
+      P1 -> (P1.t == Sample.w ? 300 / winners : 0);
+      P2 -> (P2.t == Sample.w ? 300 / winners : 0);
+      P3 -> (P3.t == Sample.w ? 300 / winners : 0);
+      burn (winners == 0 ? 300 : 0);
+    }
 }

@@ -23,16 +23,19 @@
  * This backend therefore gates on `NodeStruct.guardReads`: if any node's
  * guard references a field written by a different node, MAID emission is
  * refused with an [UnsupportedMaidGuardException]. Self-only guards remain
- * accepted (their domain restriction is currently still discarded — a TODO
+ * accepted (their domain restriction is currently still discarded; a TODO
  * for the self-only encoding pass).
  */
 package vegas.backend.maid
 
 import vegas.FieldRef
 import vegas.RoleId
+import vegas.ir.Dist
 import vegas.ir.Expr
 import vegas.ir.GameIR
+import vegas.ir.NodeMeta
 import vegas.ir.Type
+import vegas.ir.asBool
 import vegas.ir.asInt
 import vegas.ir.observableFieldsAt
 import vegas.semantics.eval
@@ -115,6 +118,12 @@ private class MaidConverter(private val ir: GameIR) {
         // 5. Create CPDs for utility nodes
         createUtilityCPDs()
 
+        // 6. Create CPDs for chance nodes from per-node Sample distributions.
+        //    A Sample's prior is independent of parents (it's the source of
+        //    randomness, not a function of upstream choices), so each parent
+        //    column carries the same marginal distribution.
+        createChanceCPDs()
+
         // Deduplicate edges
         val uniqueEdges = edges.distinctBy { it.source to it.target }
 
@@ -143,7 +152,9 @@ private class MaidConverter(private val ir: GameIR) {
 
         for (meta in ir.dag.metas) {
             val owner = meta.struct.owner
-            val isChance = owner in ir.chanceRoles
+            // A node is a chance node iff it carries a Sample spec; join
+            // steps of chance roles are participants but not random draws.
+            val isChance = meta.sample != null
             val nodeType = if (isChance) MaidNodeType.CHANCE else MaidNodeType.DECISION
 
             for (param in meta.spec.params) {
@@ -177,18 +188,21 @@ private class MaidConverter(private val ir: GameIR) {
     }
 
     /**
-     * Create utility nodes from payoff expressions.
+     * Create utility nodes from payoff expressions. Iterate strategic
+     * roles (not `ir.payoffs` keys) so that a depositor omitted from
+     * `withdraw` still gets a modeled utility (preference for getting
+     * back their deposit), matching the conservation-check semantics
+     * that already counts their net loss.
      */
     private fun createUtilityNodes() {
-        for ((role, expr) in ir.payoffs) {
-            // Skip chance roles - they don't have utility
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
 
             val utilId = "U_${role.name}"
             utilityNodeIds[role] = utilId
 
-            // Extract domain from payoff expression
-            val domain = extractPayoffDomain(expr)
+            val expr = ir.payoffs[role]
+            val domain = if (expr != null) extractPayoffDomain(expr) else listOf<Any>(0)
 
             nodes.add(MaidNode(
                 id = utilId,
@@ -227,9 +241,12 @@ private class MaidConverter(private val ir: GameIR) {
             }
         }
 
-        // Edges to utility nodes (based on payoff dependencies)
-        for ((role, expr) in ir.payoffs) {
+        // Edges to utility nodes (based on payoff dependencies). For
+        // roles omitted from `ir.payoffs` the utility is a constant
+        // (-deposit), so there are no parents.
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
+            val expr = ir.payoffs[role] ?: continue
             val utilNodeId = utilityNodeIds[role] ?: continue
             val dependencies = extractFieldRefs(expr)
             for (dep in dependencies) {
@@ -248,10 +265,21 @@ private class MaidConverter(private val ir: GameIR) {
      * - Values are probabilities (1.0 for the actual payoff, 0.0 otherwise)
      */
     private fun createUtilityCPDs() {
-        for ((role, expr) in ir.payoffs) {
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
-
             val utilNodeId = utilityNodeIds[role] ?: continue
+
+            // A role omitted from `ir.payoffs` has gross payout 0 by
+            // default; emit a constant-0 CPD so the MAID has a complete
+            // utility table for every strategic agent.
+            val expr = ir.payoffs[role] ?: run {
+                val utilNode = nodes.find { it.id == utilNodeId } ?: continue
+                val cpdValues = utilNode.domain.map { domainVal ->
+                    listOf(if (toInt(domainVal) == 0) 1.0 else 0.0)
+                }
+                cpds.add(TabularCPD(node = utilNodeId, parents = emptyList(), values = cpdValues))
+                continue
+            }
             val dependencies = extractFieldRefs(expr).distinct()
 
             // Get the utility node to access its domain
@@ -320,6 +348,116 @@ private class MaidConverter(private val ir: GameIR) {
                 values = cpdValues
             ))
         }
+    }
+
+    /**
+     * Emit a CPD for each chance node carrying an explicit [vegas.ir.Dist].
+     *
+     * MAID nodes are deduplicated by (owner, param); a single chance node
+     * may correspond to multiple actions (e.g. a commit / reveal pair).
+     * We emit one CPD per chance node, using the Dist on any backing
+     * action: they all agree because Sample metadata is propagated
+     * identically through commit/reveal expansion.
+     */
+    private fun createChanceCPDs() {
+        data class ChanceGroup(val field: FieldRef, val dist: Dist?, val metas: MutableList<NodeMeta>)
+        val groups = mutableMapOf<String, ChanceGroup>()
+
+        for (meta in ir.dag.metas) {
+            if (meta.sample == null) continue
+            for (param in meta.spec.params) {
+                val fieldRef = FieldRef(meta.struct.owner, param.name)
+                val nodeId = fieldToNodeId[fieldRef] ?: continue
+                val group = groups.getOrPut(nodeId) {
+                    ChanceGroup(fieldRef, meta.sample.dist, mutableListOf())
+                }
+                group.metas.add(meta)
+            }
+        }
+
+        for ((nodeId, group) in groups) {
+            val node = nodes.firstOrNull { it.id == nodeId && it.type == MaidNodeType.CHANCE } ?: continue
+            val parents = edges.filter { it.target == nodeId }.map { it.source }.distinct()
+            val numCols = parents.fold(1) { acc, p ->
+                val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
+                acc * sz
+            }
+            // When the sample has an explicit Dist, project it through the
+            // node's self-only guard (the non-trivial one after commit-
+            // reveal expansion). Without an explicit Dist, fall back to a
+            // uniform CPD over the MAID node's domain so the CHANCE node
+            // is well-formed; this matches the Gambit-side fallback for
+            // null-dist sample nodes.
+            val rowProbs: List<Double> = if (group.dist != null) {
+                // After expandCommitReveal moves a sample's self-only
+                // guard onto the commit, exactly one of {commit, reveal}
+                // carries a non-trivial guard. Picking firstOrNull here
+                // is deterministic because actionDagFromPhases inserts
+                // metas in phase-index order and that order is preserved
+                // through expansion.
+                val guardingMeta = group.metas.firstOrNull { !isTrivialTrue(it.spec.guardExpr) }
+                    ?: group.metas.first()
+                val effective = projectDistThroughSelfGuard(guardingMeta, group.field, group.dist) ?: group.dist
+                node.domain.map { dv ->
+                    val w = effective.weight(domainValToConst(dv))
+                    if (w == null) 0.0
+                    else w.numerator.toDouble() / w.denominator.toDouble()
+                }
+            } else {
+                val uniform = if (node.domain.isEmpty()) 0.0 else 1.0 / node.domain.size
+                node.domain.map { uniform }
+            }
+            val cpdValues = rowProbs.map { p -> List(numCols) { p } }
+            cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
+        }
+    }
+
+    private fun isTrivialTrue(e: Expr): Boolean = e is Expr.Const.BoolVal && e.v
+
+    /**
+     * For a single-parameter sample node with a self-only guard, restrict the
+     * prior to guard-surviving values and renormalize. Returns null if the
+     * guard cannot be evaluated locally (contextual reads, already rejected
+     * upstream, or unsupported expression shapes). Throws if the guard
+     * leaves no value in the support: an unsatisfiable chance node is a
+     * malformed program, not a fallback case.
+     */
+    private fun projectDistThroughSelfGuard(
+        meta: NodeMeta,
+        field: FieldRef,
+        dist: Dist,
+    ): Dist? {
+        if (meta.struct.guardReads.isNotEmpty()) return null
+        val guard = meta.spec.guardExpr
+        if (isTrivialTrue(guard)) return dist
+        val survivors = mutableListOf<Pair<Expr.Const, vegas.Rational>>()
+        for ((v, w) in dist.support) {
+            val ok = try {
+                val read: (FieldRef) -> Expr.Const = { f ->
+                    if (f == field) v else error("guard reads unexpected field $f")
+                }
+                eval(read, guard).asBool()
+            } catch (_: Exception) {
+                return null
+            }
+            if (ok) survivors.add(v to w)
+        }
+        if (survivors.isEmpty()) {
+            throw IllegalStateException(
+                "Chance node ${field.owner.name}.${field.param.name}: " +
+                "self-only guard eliminates every value in the prior support: " +
+                "the sample is unsatisfiable. Widen the distribution or the guard."
+            )
+        }
+        val total = survivors.map { it.second }.reduce { a, b -> a + b }
+        return Dist(survivors.map { (v, w) -> v to (w / total) })
+    }
+
+    private fun domainValToConst(dv: Any): Expr.Const = when (dv) {
+        is Boolean -> Expr.Const.BoolVal(dv)
+        is Int -> Expr.Const.IntVal(dv)
+        is Long -> Expr.Const.IntVal(dv.toInt())
+        else -> Expr.Const.IntVal(toInt(dv))
     }
 
     /**

@@ -2,6 +2,7 @@ package vegas
 
 import vegas.dag.Algo
 import vegas.frontend.Ast
+import vegas.frontend.DistExp
 import vegas.frontend.Exp
 import vegas.frontend.GameAst
 import vegas.frontend.Ext
@@ -9,6 +10,7 @@ import vegas.frontend.Kind
 import vegas.frontend.MacroDec
 import vegas.frontend.Outcome
 import vegas.frontend.Query
+import vegas.frontend.SAMPLE_OWNER
 import vegas.frontend.TypeExp
 import vegas.frontend.TypeExp.*
 import vegas.frontend.SourceLoc
@@ -21,7 +23,7 @@ import vegas.frontend.inlineMacros
 /* Errors & Utilities                                                        */
 /* -------------------------------------------------------------------------- */
 
-internal class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
+internal open class StaticError(reason: String, val node: Ast? = null) : RuntimeException(reason) {
     fun span(): Span? = node?.let { SourceLoc.get(it) }
 }
 
@@ -78,6 +80,13 @@ fun typeCheck(program: GameAst) {
     // Pass D: IR Structural Validation
     val inlined = inlineMacros(program)
     compileToIR(inlined)
+
+    // NOTE: pot-conservation (Pass E) lives in [verifyConservation] and is
+    // invoked separately by real-game entry points (the CLI's `compileToIR`
+    // wrapper and the examples test). Keeping it out of typeCheck means
+    // unit tests can construct programs that are well-formed structurally
+    // but not economically (e.g. `{ P -> 42 }` with no deposit) without
+    // tripping the check.
 }
 
 /* ============================================================
@@ -285,7 +294,8 @@ internal data class View(
     val fields: Map<FieldRef, TypeExp>,
     val vars: Map<VarId, TypeExp>,
     val whereOwner: RoleId? = null,
-    val facts: Facts = Facts.empty()
+    val facts: Facts = Facts.empty(),
+    val randomRoles: Set<RoleId> = emptySet(),
 )
 
 internal class ExprTyper(
@@ -349,7 +359,9 @@ internal class ExprTyper(
     /* ---------- Field access + contextual unhide ---------- */
 
     private fun fieldType(f: FieldRef, view: View, node: Ast): TypeExp {
-        if (f.owner !in view.roles) throw StaticError("${f.owner} is not a role", node)
+        if (f.owner !in view.roles && f.owner !in view.randomRoles) {
+            throw StaticError("${f.owner} is not a role", node)
+        }
         val raw = view.fields[f] ?: throw StaticError("Field '$f' is undefined", node)
 
         // 1) Contextual unhide (ONLY in where(owner))
@@ -584,7 +596,12 @@ internal class ProtocolTyper(
                     throw StaticError("Commit of '$field' has no corresponding reveal", node)
                 }
                 // Pass View to Outcome to allow var scoping
-                val view = View(roles = st.roles, fields = st.fields, vars = emptyMap())
+                val view = View(
+                    roles = st.roles,
+                    fields = st.fields,
+                    vars = emptyMap(),
+                    randomRoles = st.randomRoles,
+                )
                 typeOutcome(ext.outcome, view)
             }
             is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.handler, ext.ext), st)
@@ -613,11 +630,48 @@ internal class ProtocolTyper(
                     val isReveal = ext.kind == Kind.REVEAL
                     val isCommit = ext.kind == Kind.COMMIT
 
+                    if (isJoin && role == SAMPLE_OWNER) {
+                        throw StaticError(
+                            "'${SAMPLE_OWNER.name}' is a reserved label for anonymous public samples; pick a different role name",
+                            q.role,
+                        )
+                    }
+
                     if (isJoin) {
                         roles2 += role
                         if (isRandom) randomRoles2 += role
                     } else if (role !in roles2) {
                         throw StaticError("$role is not a role", q.role)
+                    }
+
+                    q.params.forEach { vd ->
+                        if (vd.dist != null) {
+                            if (role !in randomRoles2) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is only allowed on parameters of a 'random' role; '${role.name}' is strategic",
+                                    q,
+                                )
+                            }
+                            if (isJoin) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is not allowed on a join step",
+                                    q,
+                                )
+                            }
+                            if (isReveal) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is not allowed on a reveal step; place it on the originating commit instead",
+                                    q,
+                                )
+                            }
+                            validateDistSupport(vd.dist, vd.type, q)
+                        }
+                    }
+                    if (q.params.any { it.dist != null } && q.params.size != 1) {
+                        throw StaticError(
+                            "Distribution annotations '~ ...' are currently only supported on single-parameter sample actions; joint distributions are not yet supported",
+                            q,
+                        )
                     }
 
                     val m = q.params.associate { (k, tRaw) ->
@@ -655,8 +709,21 @@ internal class ProtocolTyper(
                     checkWhere(q, st.copy(roles = roles2, randomRoles = randomRoles2), m)
 
                     // Handler Policy B: Handlers can read all currently visible fields
-                    // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal
-                    if (!isJoin && !isReveal) checkHandler(q, roles2, st.fields)
+                    // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal.
+                    // Quit handlers allocate the strategic pot among the surviving
+                    // strategic roles; random / sample roles are absent from
+                    // withdraw and so absent from handler allocation too. But
+                    // the payout expressions may still reference random roles'
+                    // already-visible fields, so the typing view sees all roles.
+                    if (!isJoin && !isReveal) {
+                        checkHandler(
+                            q = q,
+                            allocRoles = roles2 - randomRoles2,
+                            visibleRoles = roles2,
+                            visibleRandomRoles = randomRoles2,
+                            visibleFields = st.fields,
+                        )
+                    }
 
                     deltaMaps += m
                 }
@@ -677,6 +744,35 @@ internal class ProtocolTyper(
                 }
 
                 typeExt(ext.ext, State(roles = roles2, randomRoles = randomRoles2, fields = newFields, unrevealedCommits = newUnrevealed))
+            }
+            is Ext.Sample -> {
+                // Anonymous public samples bind fields under the synthetic
+                // SAMPLE_OWNER. No deposit, no actor, no guard. Each binding
+                // optionally carries an analysis dist (~ D). Reject sample
+                // bindings that collide with strategic roles' field names
+                // by SAMPLE_OWNER scoping.
+                val newFields = st.fields.toMutableMap()
+                for (vd in ext.bindings) {
+                    // Validate the declared type the same way query params do
+                    // (universe.validateDefined surfaces unknown type aliases
+                    // as a StaticError with source context, not an IR-time
+                    // panic from universe.resolve).
+                    universe.validateDefined(vd.type, ext)
+                    if (vd.dist != null) {
+                        validateDistSupport(vd.dist, vd.type, ext)
+                    }
+                    val fr = FieldRef(SAMPLE_OWNER, vd.v.id)
+                    if (fr in newFields) {
+                        throw StaticError("Sample binding '${vd.v.id.name}' shadows an earlier sample binding", ext)
+                    }
+                    newFields[fr] = universe.resolve(vd.type)
+                }
+                // Add SAMPLE_OWNER to randomRoles so downstream guard / quit
+                // logic does not try to insert quit moves for samples.
+                typeExt(ext.ext, st.copy(
+                    randomRoles = st.randomRoles + SAMPLE_OWNER,
+                    fields = newFields,
+                ))
             }
         }
     }
@@ -713,7 +809,8 @@ internal class ProtocolTyper(
             fields = st.fields + localFields,
             vars = emptyMap(),
             whereOwner = q.role.id,
-            facts = Facts(nonNull = locallyDefinedByActor)
+            facts = Facts(nonNull = locallyDefinedByActor),
+            randomRoles = st.randomRoles,
         )
 
         val t = expr.type(q.where, view)
@@ -728,7 +825,21 @@ internal class ProtocolTyper(
         }
     }
 
-    private fun checkHandler(q: Query, roles: Set<RoleId>, visibleFields: Map<FieldRef, TypeExp>) {
+    /**
+     * @param allocRoles strategic roles eligible to receive payouts in the
+     *   handler (random / sample owners are excluded - they have no claim
+     *   on the strategic pot).
+     * @param visibleRoles all roles whose fields may be referenced in the
+     *   handler's payout expressions. Includes random / sample owners
+     *   when their fields are already visible (PUBLIC / REVEAL).
+     */
+    private fun checkHandler(
+        q: Query,
+        allocRoles: Set<RoleId>,
+        visibleRoles: Set<RoleId>,
+        visibleRandomRoles: Set<RoleId>,
+        visibleFields: Map<FieldRef, TypeExp>,
+    ) {
         val h = q.handler ?: return
 
         // Split, Burn, and Null are valid for single-query handlers
@@ -738,15 +849,27 @@ internal class ProtocolTyper(
 
         if (h !is Outcome.Value) throw StaticError("Quit handler must be a simple withdraw outcome, split, burn, or null", h)
 
-        val expected = roles - q.role.id
+        val expected = allocRoles - q.role.id
         val got = h.ts.keys.map { it.id }.toSet()
         if (got != expected) throw StaticError("Quit handler must allocate to exactly other roles (size ${expected.size})", h)
 
+        // Handlers allow reading visible fields, including random
+        // roles' visible writes (e.g. `Coin.side` after the coin has
+        // yielded), even though random roles do not appear in the
+        // allocation map.
+        val view = View(
+            roles = visibleRoles,
+            fields = visibleFields,
+            vars = emptyMap(),
+            randomRoles = visibleRandomRoles,
+        )
         for ((_, e) in h.ts) {
-            // Handlers allow reading visible fields
-            val view = View(roles = roles, fields = visibleFields, vars = emptyMap())
             val t = expr.type(e, view)
             if (!expr.isSubtype(t, INT)) throw StaticError("Handler payout must be int", e)
+        }
+        h.burn?.let {
+            val t = expr.type(it, view)
+            if (!expr.isSubtype(t, INT)) throw StaticError("Handler 'burn' amount must be int", it)
         }
     }
 
@@ -776,9 +899,19 @@ internal class ProtocolTyper(
         when (o) {
             is Outcome.Value -> {
                 for ((role, e) in o.ts) {
+                    if (role.id in view.randomRoles) {
+                        throw StaticError(
+                            "Role '${role.id.name}' is declared as 'random' and cannot appear in 'withdraw'; use 'burn' to account for funds that leave the strategic pot",
+                            role,
+                        )
+                    }
                     if (role.id !in view.roles) throw StaticError("${role.id} is not a role", role)
                     val t = expr.type(e, view)
                     if (!expr.isSubtype(t, INT)) throw StaticError("Outcome value must be int", e)
+                }
+                o.burn?.let {
+                    val t = expr.type(it, view)
+                    if (!expr.isSubtype(t, INT)) throw StaticError("'burn' amount must be int", it)
                 }
             }
             is Outcome.Cond -> {
@@ -806,6 +939,43 @@ internal class ProtocolTyper(
             // Split, Burn, and Null are terminal handlers with no inner expressions
             is Outcome.Split, is Outcome.Burn, is Outcome.Null -> { /* valid by construction */ }
         }
+    }
+
+    private fun validateDistSupport(dist: DistExp, declared: TypeExp, where: Ast) {
+        val values: List<Exp.Const> = when (dist) {
+            is DistExp.Uniform -> dist.values
+            is DistExp.Weighted -> dist.items.map { it.first }
+        }
+        if (values.isEmpty()) {
+            throw StaticError("Distribution must have non-empty support", where)
+        }
+        if (values.distinct().size != values.size) {
+            throw StaticError("Distribution has duplicate values: $values", where)
+        }
+        val resolved = universe.resolve(stripOpt(declared))
+        for (v in values) {
+            if (!fitsType(v, resolved)) {
+                throw StaticError("Distribution value $v is not in the parameter's type $declared", where)
+            }
+        }
+        if (dist is DistExp.Weighted) {
+            for ((_, w) in dist.items) {
+                if (w <= 0) {
+                    throw StaticError("Distribution weights must be strictly positive, got $w", where)
+                }
+            }
+        }
+    }
+
+    private fun fitsType(v: Exp.Const, t: TypeExp): Boolean = when (v) {
+        is Exp.Const.Num -> when (t) {
+            is TypeExp.INT -> true
+            is TypeExp.Range -> v.n in t.min.n..t.max.n
+            is TypeExp.Subset -> v in t.values
+            else -> false
+        }
+        is Exp.Const.Bool -> t is TypeExp.BOOL
+        else -> false
     }
 
     private fun stripOpt(t: TypeExp): TypeExp = if (t is Opt) t.type else t

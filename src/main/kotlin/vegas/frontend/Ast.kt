@@ -21,8 +21,22 @@ data class Role(val id: RoleId) : Ast() {
 sealed class Ext : Ast() {
     data class Bind(val kind: Kind, val qs: List<Query>, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
     data class BindSingle(val kind: Kind, val q: Query, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
+    /**
+     * Anonymous public sample: each binding declares a value drawn at this
+     * point from the compiler-configured entropy source. No actor identity,
+     * no deposit, no payoff. Bindings live under the reserved synthetic
+     * owner [SAMPLE_OWNER] at the IR layer.
+     */
+    data class Sample(val bindings: List<VarDec>, val ext: Ext) : Ext(), Step
     data class Value(val outcome: Outcome) : Ext()
 }
+
+/**
+ * Reserved owner under which anonymous sample bindings live at the IR
+ * layer. Sampled values are referenced in expressions as `Sample.name`.
+ * Users cannot declare a role with this name (the typechecker rejects it).
+ */
+val SAMPLE_OWNER: RoleId = RoleId("Sample")
 
 data class Query(val role: Role, val params: List<VarDec>, val deposit: Exp.Const.Num, val where: Exp, val handler: Outcome? = null) : Ast()
 
@@ -63,7 +77,18 @@ sealed class Outcome : Ast() {
     // (the trivial case where RoleSet is a singleton van have Var -> Exp as a syntactic sugar)
     // This sounds like dependent types, but no complex type checking is involved.
 
-    data class Value(val ts: Map<Role, Exp>) : Outcome()
+    /**
+     * Per-role payouts ([ts]) and an optional [burn] amount. Burn represents
+     * funds that leave the strategic pot without going to any role; it is
+     * the principled counterpart to `random` roles having no payout (they
+     * are actors that do not care about money, so losing money in a branch
+     * must be accounted for either by a strategic counterparty's gain or by
+     * an explicit burn).
+     */
+    data class Value @JvmOverloads constructor(
+        val ts: Map<Role, Exp>,
+        val burn: Exp? = null,
+    ) : Outcome()
     data class Let(val dec: VarDec, val init: Exp, val outcome: Outcome) : Outcome()
 
     // Group failure handlers for simultaneous steps
@@ -72,7 +97,21 @@ sealed class Outcome : Ast() {
     object Null : Outcome()
 }
 
-data class VarDec(val v: Exp.Var, val type: TypeExp)
+data class VarDec @JvmOverloads constructor(
+    val v: Exp.Var,
+    val type: TypeExp,
+    val dist: DistExp? = null,
+)
+
+/**
+ * Surface-syntax distribution expressions used to annotate parameters in
+ * chance-role actions. Weights on [Weighted] are integers; lowering
+ * normalizes by the integer sum to produce a canonical [vegas.ir.Dist].
+ */
+sealed class DistExp : Ast() {
+    data class Uniform(val values: List<Exp.Const>) : DistExp()
+    data class Weighted(val items: List<Pair<Exp.Const, Int>>) : DistExp()
+}
 
 data class MacroDec(
     val name: VarId,
@@ -118,6 +157,7 @@ data class GameAst(
 internal fun findRoleIds(ext: Ext): Set<RoleId> = when (ext) {
     is Ext.Bind -> (if (ext.kind == Kind.JOIN) ext.qs.map { it.role.id }.toSet() else setOf()) + findRoleIds(ext.ext)
     is Ext.BindSingle -> (if (ext.kind == Kind.JOIN) setOf(ext.q.role.id) else setOf()) + findRoleIds(ext.ext)
+    is Ext.Sample -> findRoleIds(ext.ext)
     is Ext.Value -> setOf()
 }
 
@@ -130,7 +170,15 @@ internal fun findChanceRoleIds(ext: Ext): Set<RoleId> = when (ext) {
         ext.ext
     )
 
+    is Ext.Sample -> findChanceRoleIds(ext.ext)
     is Ext.Value -> setOf()
+}
+
+internal fun hasSampleBinding(ext: Ext): Boolean = when (ext) {
+    is Ext.Bind -> hasSampleBinding(ext.ext)
+    is Ext.BindSingle -> hasSampleBinding(ext.ext)
+    is Ext.Sample -> true
+    is Ext.Value -> false
 }
 
 // Free *names* in an Exp, given a set of bound variables.

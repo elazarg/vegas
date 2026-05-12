@@ -171,6 +171,7 @@ sealed class EvmExpr {
         object MsgValue : BuiltIn()       // msg.value
         object Timestamp : BuiltIn()      // block.timestamp
         object Self : BuiltIn()           // address(this) or self
+        object PrevRandao : BuiltIn()     // block.prevrandao
     }
 
     // --- Special EVM Operations ---
@@ -180,6 +181,15 @@ sealed class EvmExpr {
         val args: List<Var>,
         val isPacked: Boolean = false // packed for Sol, separate/raw for Vyper
     ) : EvmExpr()
+
+    /**
+     * abi.encode of arbitrary expressions (not just Vars). Used for
+     * entropy-source seed construction (block.prevrandao, address(this),
+     * node-id literal). Solidity renders as `abi.encode(a, b, c)`; Vyper
+     * renders as concat-like equivalent. Distinct from [AbiEncode] which
+     * is wired to a specific commit-reveal payload pattern.
+     */
+    data class AbiEncodeRaw(val args: List<EvmExpr>) : EvmExpr()
 
     data class EnumValue(val enumName: String, val value: String) : EvmExpr()
 }

@@ -269,13 +269,15 @@ state (including \TT{done\_} flag inspection for optional fields)
 and transfers the resulting amount to the role's stored address
 using a low-level \TT{call} with the computed value.
 
-Conservation --- that all role payouts sum to the pool --- is
-a design invariant of the language (\S\ref{sec:language}), but
-the current compiler does not statically verify it across
-arbitrary payoff expressions.  A static check (symbolic or, for
-the finite-type case, by exhaustive enumeration) is on the TODO
-list; until it lands, the property rests on per-program
-inspection of the \TT{withdraw} clause.
+Conservation --- that role payouts plus burn sum to the pool on
+every reachable branch --- is enforced statically at compile
+time by exhaustive enumeration of the strategic tree
+(\S\ref{sec:language}); any under- or over-payment is reported
+before code generation.  A symbolic SMT-based replacement that
+does not depend on Gambit-side enumeration is the natural next
+step for games whose state space the enumerator cannot cover
+(unbounded \TT{int} parameters, very deep trees); the current
+check is best-effort on those and tracked in \file{TODO.txt}.
 
 \subsection{Things the backend deliberately leaves alone}
 

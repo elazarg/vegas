@@ -4,10 +4,6 @@
 **Scope:** How Vegas uses DAGs, values, and properties to define protocol semantics and backends (Solidity, Gambit, SMT).
 **Assumption:** Vegas remains a research codebase; we optimize for clarity and evolvability, not backward compatibility.
 
-**Related Documents:**
-- `DAG_INTEGRATION_PLAN.md` - ADR documenting the witness/property semantic model and architectural decisions
-- This document (DESIGN.md) - Detailed implementation specification and testing strategy
-
 ---
 
 ## 0. Alignment with VegasCore

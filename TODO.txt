@@ -1,5 +1,21 @@
 TODO:
 
+# Deferred from probabilistic-design branch (see docs/FUTURE.md):
+#
+# * PRISM-games backend (#50): consume per-node
+#   SampleSpec.dist to answer expected-utility / probability-of-winning
+#   queries that Gambit answers awkwardly. IR is ready.
+# * Real entropy-source taxonomy: PrevRandao(k>=1) lock/consume,
+#   Chainlink VRF, drand. Single override point exists at
+#   DEFAULT_SAMPLE_SOURCE in IR.kt; needs CLI surface + emission.
+# * Rejection sampling for non-uniform `~ weighted { ... }` priors on EVM.
+# * Contextual `~ D given <expr>` analysis priors.
+# * Reveal-failure slash policy (commit/reveal `or burn N` handler).
+# * Symbolic / SMT-based pot conservation check (replace the
+#   Gambit-enumeration-based one in verifyConservation).
+# * Rewrite known-non-conservative examples (Lottery done; seven remain).
+
+
 # Alignment with VegasCore
 
 * Verified compiled artifacts: emit a new backend that imports Vegas.Core.Program

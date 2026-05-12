@@ -84,6 +84,7 @@ private object B {
             when (e) {
                 is Ext.Bind -> e.copy(ext = acc)
                 is Ext.BindSingle -> e.copy(ext = acc)
+                is Ext.Sample -> e.copy(ext = acc)
                 is Ext.Value -> error("Value belongs in 'value' param")
             }
         }

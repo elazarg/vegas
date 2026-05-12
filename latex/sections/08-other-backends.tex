@@ -59,22 +59,20 @@ types from the global protocol.
 
 \subsection{Bitcoin / Lightning (sketch)}
 
-A proof-of-concept backend (\file{backend/bitcoin/}) targets the
-two-party Lightning channel for the subset of Vegas games with
-exactly two strategic roles.  Each EventGraph node is mapped to
-a state in a per-game state machine; the backend emits a
-textual listing of the Lightning protocol moves and transitions
-needed to realise the game (states, the role active at each
-state, and the legal transitions between states).  No Bitcoin
-script is generated --- the encoding to actual on-chain
-opcodes, the integration with a Lightning node, and the
-deployment work generally are all out-of-band.
+A backend (\file{backend/bitcoin/}) targets the two-party
+Lightning channel for the subset of Vegas games with exactly
+two strategic roles.  Each EventGraph node maps to a state in a
+per-game state machine; the backend emits the full protocol
+state machine, the role active at each state, the legal
+transitions, and the per-state abort balances --- ready to drive
+a Lightning runtime.  The two pieces still out-of-band are the
+on-chain Bitcoin script emission and the Lightning-node
+adapter; a two-party Vegas game compiles to a deployable
+state-machine artifact today, modulo that adapter.
 
-The value of this backend in the present work is as an
-existence sketch: the EventGraph abstraction can in principle
-lift to a non-EVM execution layer with completely different
-cryptographic primitives.  A proper Bitcoin/Lightning backend
-is on the future-work list.
+This backend also serves as an existence proof that the
+EventGraph abstraction can lift to a non-EVM execution layer
+with completely different cryptographic primitives.
 
 \subsection{MAID}
 
@@ -84,19 +82,27 @@ chance nodes, utility nodes, and the conditional probability
 distributions that wire them together.  Vegas can emit a MAID
 suitable for the Thrones game-theory workbench.
 
-The MAID backend has a real expressiveness limit.  In plain
-MAIDs, a decision node's action set is a single static domain;
-there is no place to say ``the legal action set depends on the
-parents' values''.  A Vegas guard like
-\TT{where Host.goat != Guest.d} has nowhere to go in such a
-MAID: the encoding would silently drop the constraint and present
-the Host as being able to pick any door.  The current MAID
-emitter therefore refuses to emit for any game whose guards
-reference fields written by other nodes; it accepts self-only
-guards (a guard that only constrains the value being written) but
-does not yet narrow the resulting MAID node's domain.  Both
-narrowing self-only guards and supporting context-dependent
-domains in some MAID extension are listed in \file{TODO.txt}.
+Chance nodes in the emitted MAID consume the same per-node
+distribution metadata as the Gambit backend.  A chance node with
+an explicit \TT{$\sim$ uniform/weighted} annotation lands in the
+MAID's CPD verbatim; a chance node without an explicit dist falls
+back to a uniform CPD over the parameter's domain.  Self-only
+guards are projected statically into a renormalised CPD: a
+\TT{where} that excludes some support values yields a CPD whose
+mass is concentrated on the surviving values.  An unsatisfiable
+self-only guard (no surviving values) is reported as a static
+error.
+
+The MAID backend has a real expressiveness limit on
+\emph{contextual} guards.  In plain MAIDs, a decision node's
+action set is a single static domain; there is no place to say
+``the legal action set depends on the parents' values''.  A
+Vegas guard like \TT{where Host.goat != Guest.d} has nowhere to
+go in such a MAID: the encoding would silently drop the
+constraint.  The MAID emitter therefore refuses to emit for any
+game whose guards reference fields written by other nodes.
+Supporting context-dependent domains in some MAID extension is
+listed in \file{TODO.txt}.
 
 Where MAID does apply --- protocols with trivial or self-only
 guards --- the MAID view is more compact than the unfolded

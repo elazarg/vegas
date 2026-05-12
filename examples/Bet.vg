@@ -1,12 +1,12 @@
 // Betting game: Gambler bets on race outcome
-// Distribution semantics: winner gets full pot (200 wei)
+// Distribution semantics: Gambler stakes 10; wins 10 back on correct guess, otherwise the stake is burned.
+
 type options = {1, 2, 3}
 
 game main() {
-  random Race() $ 10;
   join Gambler(bet: options) $ 10;
-  yield Race(winner: options) || { Gambler -> 20 };
-  withdraw (Race.winner == Gambler.bet)
-      ? { Race -> 0; Gambler -> 20 }     // Gambler wins
-      : { Race -> 20; Gambler -> 0 }     // Gambler loses
+  sample (winner: options);
+  withdraw (Sample.winner == Gambler.bet)
+      ? { Gambler -> 10 }
+      : { Gambler -> 0; burn 10 }
 }

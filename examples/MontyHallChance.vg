@@ -1,15 +1,20 @@
-// Monty Hall with random car placement
-// Distribution semantics: 20 wei transfers from loser to winner
+// Monty Hall with random car placement (private chance via commit/reveal).
+// Host is a `random` actor: has an actor identity (the car commit is private),
+// but does not care about money: no deposit, no payout. The strategic pot is
+// Guest's 100 wei; if Guest plays correctly the deposit is returned, otherwise
+// it is burned.
 
 type door = {0, 1, 2}
 
 game main() {
-  random Host() $ 100;
+  random Host;
   join Guest() $ 100;
-  commit Host(car: door);
+  commit Host(car: door ~ uniform { 0, 1, 2 });
   yield or split Guest(d: door);
   yield Host(goat: door) where Host.goat != Guest.d && Host.goat != Host.car;
   yield or split Guest(switch: bool);
   reveal Host(car: door);
-  withdraw { Guest -> ((Guest.d != Host.car) <-> Guest.switch) ? 120 : 80;  Host -> ((Guest.d != Host.car) <-> Guest.switch) ? 80 : 120 }
+  withdraw ((Guest.d != Host.car) <-> Guest.switch)
+      ? { Guest -> 100; burn 0 }
+      : { Guest -> 0;   burn 100 }
 }

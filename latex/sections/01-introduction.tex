@@ -81,7 +81,11 @@ are:
 \item bounded types (booleans, finite ranges, enumerations);
 \item deterministic guards (\TT{where} clauses) over prior public
   values and over the value being written;
-\item public randomness via an explicit \texttt{random} construct;
+\item finite-support randomness via two explicit constructs ---
+  \texttt{random} for a privately-committed draw by a designated
+  actor, and \texttt{sample} for a public draw read from on-chain
+  entropy --- with optional analysis-time distribution
+  annotations;
 \item commit-reveal patterns, with automatic insertion when the
   compiler detects simultaneous public moves that would otherwise be
   front-runnable;
@@ -100,7 +104,9 @@ Deliberately out of scope:
 \item interactions with arbitrary other contracts (the protocol
   is a closed system; cross-contract MEV is parameterised, not
   modelled);
-\item private randomness from outside oracles;
+\item randomness from outside oracles, beyond \TT{block.prevrandao}
+  (Chainlink VRF, drand, multi-party commit-reveal aggregation are
+  natural extensions, not implemented);
 \item dynamic player counts (the role set is fixed at compile time).
 \end{itemize}
 

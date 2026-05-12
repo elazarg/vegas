@@ -39,6 +39,10 @@ private fun inlineMacrosInExt(ext: Ext, macroEnv: Map<VarId, MacroDec>): Ext = w
         ext = inlineMacrosInExt(ext.ext, macroEnv)
     )
 
+    is Ext.Sample -> ext.copy(
+        ext = inlineMacrosInExt(ext.ext, macroEnv)
+    )
+
     is Ext.Value -> ext.copy(
         outcome = inlineMacrosInOutcome(ext.outcome, macroEnv)
     )
@@ -55,7 +59,8 @@ private fun inlineMacrosInOutcome(outcome: Outcome, macroEnv: Map<VarId, MacroDe
     is Outcome.Value -> outcome.copy(
         ts = outcome.ts.mapValues { (_, exp) ->
             inlineMacrosInExp(exp, macroEnv)
-        }
+        },
+        burn = outcome.burn?.let { inlineMacrosInExp(it, macroEnv) }
     )
 
     is Outcome.Let -> outcome.copy(

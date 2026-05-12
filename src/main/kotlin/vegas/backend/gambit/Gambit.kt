@@ -58,9 +58,16 @@ internal sealed class GameTree {
 
     /**
      * A terminal node with payoffs.
+     *
+     * @property payoffs Per-role utility (gross payout minus deposit).
+     * @property burn Funds that leave the strategic pot without going to
+     *   any role. Conservation at this terminal is `sum(payoffs) + burn == 0`
+     *   (since payoffs are net of deposits, the strategic pot sums to the
+     *   total deposits, and the gross payouts plus burn must equal that).
      */
     data class Terminal(
-        val payoffs: Map<RoleId, Const>
+        val payoffs: Map<RoleId, Const>,
+        val burn: Const.IntVal = Const.IntVal(0),
     ) : GameTree()
 
     /**

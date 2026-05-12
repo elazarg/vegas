@@ -57,6 +57,68 @@ action on concurrent public moves --- into the language: the
 mitigation is a structural property of the generated contract,
 not a discipline applied by humans.
 
+\subsection{Probabilistic programming languages}
+\label{sec:related:ppl}
+
+Probabilistic programming languages such as
+Church~\citep{Goodman2008Church},
+Anglican~\citep{wood2014anglican},
+WebPPL~\citep{Goodman2014WebPPL},
+Pyro~\citep{Bingham2019Pyro}, and
+Gen~\citep{cusumano2019gen}
+make distributions first-class and let the programmer write
+generative models that the runtime then runs inference over.  The
+languages share two primitives that Vegas's randomness story
+inherits.  First, \texttt{sample}: drawing a value from a
+named distribution, with the program semantics being a measure
+over execution traces.  Second, \texttt{observe} (or
+\texttt{assume}): conditioning the trace on a logical
+proposition holding at the sample site.  Together these give
+the equation \(\TT{sample}\ x\sim D;\ \TT{observe}\ \varphi(x)
+\equiv\ x\sim (D \mid \varphi)\), which is the standard
+PPL view of Bayesian conditioning.
+
+Vegas adopts this view at the surface and in the IR.  A binding
+of the form \TT{(x: T $\sim$ D) where $\varphi(x)$} denotes
+\(x \sim (D \mid \varphi)\): the analysis backends project
+self-only guards into a renormalised prior (MAID) or condition
+per-trace by filtering surviving values during enumeration
+(Gambit).  The two operational realisations of the same
+conditioning math correspond to the static (MAID CPD) and
+dynamic (Gambit trace) styles of inference in the PPL
+literature.  At the IR layer, distributions are recorded
+per-node (\texttt{SampleSpec}: a finite-support PMF together
+with an entropy source), so a backend that wants to compute
+posterior probabilities reads the same metadata used to draw
+moves.
+
+There is a stylistic parallel with Vegas's commit-then-guard
+pattern.  A commit fixes a value privately; a later guard or
+reveal constrains it.  When the value is committed with a
+distribution annotation, the pair behaves like
+\(\TT{sample}\ x; \TT{assume}\ \varphi(x)\) under PPL
+semantics: the value is drawn from $D$ and constrained at the
+reveal site.  The mechanism is cryptographic (a hash binds the
+committed value) where a PPL would be denotational (the
+posterior is computed by the inference engine), but the
+declarative shape is the same.
+
+What Vegas does not take from the PPL line of work is at least
+as instructive.  Vegas has no continuous distributions: every
+random variable lives in a bounded finite type, so distributions
+are list-of-pairs PMFs with rational weights.  It has no
+inference engine: posterior computation is done by the analysis
+backends (Gambit, MAID) on finite trees, not by a general-purpose
+sampler over arbitrary programs.  It has no soft conditioning
+(\texttt{factor}, weighted observe): guards are hard predicates
+and an unsatisfiable guard is a static error, not a low-weight
+trace.  It has no recursive samplers or stochastic loops: the
+event graph is finite by language design.  These restrictions
+let the analysis backends terminate by exhaustive enumeration
+rather than approximating with sampling; the PPL community
+generally relaxes them and pays for it with Monte Carlo
+inference.
+
 \subsection{Multi-agent influence diagrams and game representations}
 
 MAID~\citep{koller2003multi} provides a factored representation

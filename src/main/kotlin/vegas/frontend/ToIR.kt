@@ -1,6 +1,7 @@
 package vegas.frontend
 
 import vegas.FieldRef
+import vegas.Rational
 import vegas.RoleId
 import vegas.frontend.Exp as AstExpr
 import vegas.frontend.TypeExp as AstType
@@ -10,20 +11,21 @@ import vegas.ir.EventGraph.Companion.fromGraph
 fun compileToIR(ast: GameAst): GameIR {
     val typeEnv = ast.types
     val roles = findRoleIds(ast.game)
-    val chanceRoles = findChanceRoleIds(ast.game)
+    val chanceRoles = findChanceRoleIds(ast.game) +
+        (if (hasSampleBinding(ast.game)) setOf(SAMPLE_OWNER) else emptySet())
 
     val phases = collectPhases(ast.game, typeEnv)
-    val payoffs = extractPayoffs(ast.game, typeEnv)
+    val payoffs = extractPayoffs(ast.game, typeEnv, chanceRoles)
 
-    val dag = actionDagFromPhases(phases)
+    val dag = actionDagFromPhases(phases, chanceRoles)
         ?: error("EventGraph construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
 
     val ir = GameIR(
         name = ast.name,
         roles = roles,
-        chanceRoles = chanceRoles,
         dag = EventGraph.expandCommitReveal(dag),
-        payoffs = payoffs,
+        payoffs = payoffs.payoffs,
+        burn = payoffs.burn,
     )
 
     // IMPORTANT: Verify that IR contains no frontend Exp.Let nodes
@@ -185,7 +187,10 @@ private fun findPriorCommit(
  *  - commit/reveal ordering is illegal, or
  *  - guards read fields that are never visible beforehand.
  */
-fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
+fun actionDagFromPhases(
+    phases: List<Phase>,
+    chanceRoles: Set<RoleId> = emptySet(),
+): EventGraph? {
     val nodes = mutableSetOf<NodeId>()
     val deps = mutableMapOf<NodeId, MutableSet<NodeId>>()
 
@@ -257,11 +262,41 @@ fun actionDagFromPhases(phases: List<Phase>): EventGraph? {
                 guardExpr = sig.guard.expr,
             )
 
-            payloads[id] = NodeMeta(id = id, spec = spec, struct = struct)
+            val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {
+                val explicit = sig.parameters.singleOrNull()?.dist
+                // Anonymous `sample (...)` bindings use the configured
+                // chain-derived source; `random Role` keeps the legacy
+                // submitter-trust source bound to the role's address.
+                val source = if (role == SAMPLE_OWNER) DEFAULT_SAMPLE_SOURCE
+                             else EntropySource.RoleSubmit(role)
+                SampleSpec(
+                    dist = explicit ?: inferUniformDist(params),
+                    source = source,
+                )
+            } else null
+
+            payloads[id] = NodeMeta(id = id, spec = spec, struct = struct, sample = sample)
         }
     }
 
     return fromGraph(nodes, deps, payloads)
+}
+
+/**
+ * Build a uniform prior over a single-parameter sample node's domain.
+ * Returns null for multi-parameter samples and unbounded int types;
+ * backends fall back to uniform-over-surviving-moves in that case, which
+ * agrees with the explicit uniform path on bounded domains.
+ */
+private fun inferUniformDist(params: List<NodeParam>): Dist? {
+    if (params.size != 1) return null
+    val p = params.single()
+    val values: List<Expr.Const> = when (val t = p.type) {
+        is Type.BoolType -> listOf(Expr.Const.BoolVal(false), Expr.Const.BoolVal(true))
+        is Type.RangeType -> (t.min..t.max).map { Expr.Const.IntVal(it) }
+        is Type.IntType -> return null
+    }
+    return Dist.uniform(values)
 }
 
 private fun buildVisibilityMap(
@@ -301,6 +336,25 @@ private fun collectPhases(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): List
             listOf(Phase(phase)) + collectPhases(ext.ext, typeEnv)
         }
 
+        is Ext.Sample -> {
+            // Each binding becomes its own independent phase, owned by the
+            // synthetic sample owner. No deposit, no guard, public visibility.
+            val samplePhases = ext.bindings.map { vd ->
+                val sig = Signature(
+                    join = null,
+                    parameters = listOf(Parameter(
+                        name = vd.v.id,
+                        type = lowerType(vd.type, typeEnv),
+                        visible = true,
+                        dist = vd.dist?.let { lowerDist(it) },
+                    )),
+                    guard = Guard(emptySet(), Expr.Const.BoolVal(true)),
+                )
+                Phase(mapOf(SAMPLE_OWNER to sig))
+            }
+            samplePhases + collectPhases(ext.ext, typeEnv)
+        }
+
         is Ext.Value -> emptyList() // Terminal: no more phases
     }
 }
@@ -319,7 +373,8 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
                 // Visibility is determined by command kind:
                 // - COMMIT: not visible (hidden commitment)
                 // - REVEAL, YIELD, JOIN: visible
-                visible = kind != Kind.COMMIT
+                visible = kind != Kind.COMMIT,
+                dist = vardec.dist?.let { lowerDist(it) },
             )
         },
         guard = Guard(
@@ -340,6 +395,23 @@ private fun lowerQuery(query: Query, kind: Kind, typeEnv: Map<AstType.TypeId, As
             expr = lowerExpr(query.where, typeEnv)
         )
     )
+}
+
+// ========== Distribution Lowering ==========
+
+private fun lowerDist(distExp: DistExp): Dist = when (distExp) {
+    is DistExp.Uniform -> Dist.uniform(distExp.values.map { lowerDistConst(it) })
+    is DistExp.Weighted -> {
+        val total = distExp.items.sumOf { it.second }
+        require(total > 0) { "weighted dist total must be positive, got $total" }
+        Dist(distExp.items.map { (v, w) -> lowerDistConst(v) to Rational(w, total) })
+    }
+}
+
+private fun lowerDistConst(c: AstExpr.Const): Expr.Const = when (c) {
+    is AstExpr.Const.Num -> Expr.Const.IntVal(c.n)
+    is AstExpr.Const.Bool -> Expr.Const.BoolVal(c.truth)
+    else -> error("dist values must be integer or boolean literals, got $c")
 }
 
 // ========== Type Lowering ==========
@@ -610,6 +682,7 @@ private fun collectAllHandlers(ext: Ext): List<HandlerInfo> {
 
                 result + go(ext.ext, phaseIndex + 1)
             }
+            is Ext.Sample -> go(ext.ext, phaseIndex + ext.bindings.size)
             is Ext.Value -> emptyList()
         }
     }
@@ -634,6 +707,7 @@ private fun collectHandlers(ext: Ext): List<Pair<Query, Outcome>> {
                 ?: emptyList()
             handler + collectHandlers(ext.ext)
         }
+        is Ext.Sample -> collectHandlers(ext.ext)
         is Ext.Value -> emptyList()
     }
 }
@@ -659,6 +733,7 @@ private fun computeStakes(ext: Ext): Map<RoleId, Int> {
                 }
                 collect(e.ext)
             }
+            is Ext.Sample -> collect(e.ext)
             is Ext.Value -> {}
         }
     }
@@ -667,7 +742,7 @@ private fun computeStakes(ext: Ext): Map<RoleId, Int> {
 }
 
 /**
- * Compute alive(r) — global predicate: has role NOT timed out anywhere?
+ * Compute alive(r): global predicate of whether the role timed out anywhere.
  *
  * For split/burn handlers, a role is "alive" if all their params (including hidden commits)
  * have been submitted. This differs from the original reveal-requirement semantics.
@@ -781,15 +856,26 @@ private fun mergeHandlersIntoOutcome(
 private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
     is Ext.Bind -> extractTerminalOutcome(ext.ext)
     is Ext.BindSingle -> extractTerminalOutcome(ext.ext)
+    is Ext.Sample -> extractTerminalOutcome(ext.ext)
     is Ext.Value -> ext.outcome
 }
 
-private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+private data class DesugaredOutcome(val payoffs: Map<RoleId, Expr>, val burn: Expr)
+
+private fun extractPayoffs(
+    ext: Ext,
+    typeEnv: Map<AstType.TypeId, AstType>,
+    chanceRoles: Set<RoleId>,
+): DesugaredOutcome {
     val allHandlers = collectAllHandlers(ext)
     val terminalOutcome = extractTerminalOutcome(ext)
     val phases = collectPhases(ext, typeEnv)
     val stakes = computeStakes(ext)
-    val allRoles = phases.flatMap { it.roles() }.toSet()
+    // Split / burn synthesis allocates the strategic pot among the
+    // surviving *strategic* roles. Chance roles (random / sample) are
+    // not depositors-with-payout: they have no claim on the pot, so
+    // they must not appear in synthesized handler payoffs.
+    val allRoles = phases.flatMap { it.roles() }.toSet() - chanceRoles
 
     // Check if there are any split/burn handlers (not null - null just makes fields optional)
     val hasSplitBurn = allHandlers.any { it.handler is Outcome.Split || it.handler is Outcome.Burn }
@@ -809,7 +895,7 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
 
     // With split/burn handlers, we need to build payoffs with proper failure conditions
     // Start with terminal outcome payoffs
-    var currentPayoffs = desugarOutcome(terminalOutcome, typeEnv)
+    var current = desugarOutcome(terminalOutcome, typeEnv)
 
     // Process handlers in reverse order (innermost first, then wrap with outer conditions)
     // Use effectiveHandlers which excludes null handlers (they don't affect payoffs)
@@ -823,10 +909,16 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
         // This ensures alive(r) only checks params from phases that have been reached
         val relevantPhases = phases.take(phaseIndex + 1)
 
-        val handlerPayoffs: Map<RoleId, Expr> = when (handler) {
+        val handlerDesugared: DesugaredOutcome = when (handler) {
             is Outcome.Split, is Outcome.Burn -> {
-                // Use alive(r) computed from phases up to this handler's phase
-                generateSplitBurnPayoffs(handler, allRoles, stakes, relevantPhases)
+                // Use alive(r) computed from phases up to this handler's phase.
+                // Synthesized split/burn payoffs leave the strategic-pot
+                // burn at 0 (the surface `burn N` item only appears in
+                // explicit Outcome.Value forms).
+                DesugaredOutcome(
+                    payoffs = generateSplitBurnPayoffs(handler, allRoles, stakes, relevantPhases),
+                    burn = Expr.Const.IntVal(0),
+                )
             }
 
             is Outcome.Value -> {
@@ -840,25 +932,29 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
             }
         }
 
-        // Wrap: if stepFailed then handlerPayoffs else currentPayoffs
-        currentPayoffs = allRoles.associateWith { role ->
+        // Wrap: if stepFailed then handlerDesugared else current
+        val mergedPayoffs = allRoles.associateWith { role ->
             Expr.Ite(
                 stepFailed,
-                handlerPayoffs[role] ?: Expr.Const.IntVal(0),
-                currentPayoffs[role] ?: Expr.Const.IntVal(0)
+                handlerDesugared.payoffs[role] ?: Expr.Const.IntVal(0),
+                current.payoffs[role] ?: Expr.Const.IntVal(0)
             )
         }
+        val mergedBurn = Expr.Ite(stepFailed, handlerDesugared.burn, current.burn)
+        current = DesugaredOutcome(mergedPayoffs, mergedBurn)
     }
 
-    return currentPayoffs
+    return current
 }
 
-private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): DesugaredOutcome {
     return when (outcome) {
         // Base case: direct value mapping
         is Outcome.Value -> {
-            outcome.ts.mapKeys { it.key.id }
+            val payoffs = outcome.ts.mapKeys { it.key.id }
                 .mapValues { lowerExpr(it.value, typeEnv) }
+            val burn = outcome.burn?.let { lowerExpr(it, typeEnv) } ?: Expr.Const.IntVal(0)
+            DesugaredOutcome(payoffs, burn)
         }
 
         // Conditional outcome
@@ -868,12 +964,14 @@ private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstTyp
             val cond = lowerExpr(outcome.cond, typeEnv)
 
             // Merge: for each role, create ite expression
-            val allRoles = ifTrue.keys + ifFalse.keys
-            allRoles.associateWith { role ->
-                val t = ifTrue[role] ?: Expr.Const.IntVal(0) // Default to 0 if role not in branch
-                val f = ifFalse[role] ?: Expr.Const.IntVal(0)
+            val allRoles = ifTrue.payoffs.keys + ifFalse.payoffs.keys
+            val mergedPayoffs = allRoles.associateWith { role ->
+                val t = ifTrue.payoffs[role] ?: Expr.Const.IntVal(0)
+                val f = ifFalse.payoffs[role] ?: Expr.Const.IntVal(0)
                 Expr.Ite(cond, t, f)
             }
+            val mergedBurn = Expr.Ite(cond, ifTrue.burn, ifFalse.burn)
+            DesugaredOutcome(mergedPayoffs, mergedBurn)
         }
 
         // Let in outcome (desugar by substitution)

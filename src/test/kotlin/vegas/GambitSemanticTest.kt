@@ -44,7 +44,7 @@ const val CHANCE_NO_BAIL = """
 // Test 1.3: Chance roles cannot quit
 // Nature (random role) should not have "Quit" option
 
-random Nature() $ 0;
+random Nature;
 join Alice() $ 100;
 
 // Nature chooses randomly - should only have {true, false}, no "Quit"

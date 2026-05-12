@@ -44,15 +44,16 @@ the route to a mechanical guarantee here, and the
 Solidity-to-EventGraph refinement proof is the central
 fellowship-funded continuation of this work.
 
-\paragraph{Fair-play liveness is not statically guaranteed.}  A
-contextual guard can become unsatisfiable for fair-playing
-participants depending on prior moves.  The language treats this
-the same as a strategic quit, which is sometimes the right thing
-(if the guard's domain genuinely shrunk) and sometimes too
-permissive (if a fair-playing actor was forced out).  A static
-satisfiability check over bounded types would address the
-common case; it is on the TODO list under the working name
-\emph{fair-play liveness}.
+\paragraph{Fair-play liveness on unbounded state.}  The
+conservation-enumeration pass (\S\ref{sec:liveness}) already
+catches the bounded case --- a contextual guard that becomes
+unsatisfiable in some reachable configuration is reported
+statically.  What it does not cover is games whose state space
+the enumerator cannot exhaustively explore (unbounded \TT{int}
+parameters, very deep trees); an SMT-call fallback that types
+the affected field as \TT{opt T} when satisfiability cannot be
+established is the open piece, under the name \emph{fair-play
+liveness}.
 
 \paragraph{Gas costs are not in the model.}  Vegas's Gambit
 output ignores gas; equilibrium analyses do not see action
@@ -63,12 +64,13 @@ Bounded per-action upper bounds derivable by tools like
 GASTAP~\citep{Albert2020Gastap} could be folded in as
 action-cost annotations; this is a planned extension.
 
-\paragraph{MAID is gated, not fixed.}  As detailed in
-\S\ref{sec:other-backends}, the MAID encoding silently dropped
-context-dependent guards.  The current emitter refuses such
-inputs.  A self-only-guard narrowing pass, or a switch to a
-constrained-MAID extension, would broaden the MAID backend's
-applicability.
+\paragraph{MAID contextual guards.}  The MAID emitter handles
+self-only guards (\S\ref{sec:other-backends}) by projecting them
+statically into a renormalised CPD.  Contextual guards --- whose
+legal action set depends on prior nodes' writes --- cannot be
+encoded in a plain MAID's static-domain model, so the emitter
+refuses them.  A constrained-MAID extension is the long-term
+route to lifting that restriction.
 
 \paragraph{The Diamond DAG idea is interesting but
 underexplored.}  The Coq/Lean witness-record encoding

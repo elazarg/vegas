@@ -84,6 +84,70 @@ reveal Bob(y: int);
 
 Specifies the terminal payouts. This runs once all necessary actions are complete or players have timed out.
 
+A `withdraw` outcome may contain `burn N` items alongside `Role -> Exp`
+items. `burn` represents funds that leave the strategic pot without
+going to any role: the principled accounting for branches where the
+role payouts do not total the deposits.
+
+```vegas
+withdraw P.guess == Sample.w
+  ? { P -> 100 }
+  : { P -> 0; burn 100 }
+```
+
+The compiler verifies pot conservation at every reachable terminal of
+the strategic game tree (Pass E): `sum(role payouts) + burn` must
+equal `sum(deposits)`. Branches that underpay (funds stuck) or overpay
+(contract reverts) are rejected with a `ConservationViolation`.
+
+#### `random` (Nature actor)
+
+A `random Role;` declaration introduces a Nature-modeled participant.
+Concrete trust model:
+
+- The role has an actor identity (an EVM address) so it can perform
+  private actions (`commit` / `reveal`). Whoever first calls
+  `join_Role()` claims the role.
+- Every `commit` / `yield` / `reveal` by the role is sample-modeled
+  (analysis treats the value as a draw from the declared distribution,
+  defaulting to uniform over the parameter type if no `~ D` is given).
+- The role does not appear in `withdraw` payouts. `~ D` is an
+  *analysis assumption*, not a contract-level enforcement: the actor
+  is **trusted** to follow the stated distribution. The on-chain
+  contract emits standard commit/reveal scaffolding bound by
+  `msg.sender` checks; it does not police whether the submitted
+  values look uniform.
+- `random` actors cannot quit, are not penalized on misbehavior, and
+  have no automatic recourse if a reveal fails the declared support.
+  A real-world deployment is expected to assign the actor's address
+  to a trusted oracle, an off-chain MPC committee, or similar.
+
+#### `sample` (anonymous public draw)
+
+A `sample (x: T ~ D);` binding introduces an anonymous public draw
+under the reserved label `Sample`. Concrete trust model:
+
+- No actor identity; the value is computed on-chain from
+  `block.prevrandao` (the chain's RANDAO beacon). Anyone may call the
+  generated function; the value depends on the proposer's beacon, not
+  the caller.
+- `~ D` is allowed but currently only `uniform` priors are
+  implementable at the EVM level (rejection sampling for non-uniform
+  is future work). Non-uniform priors compile for analysis (Gambit,
+  MAID) but EVM emission rejects them.
+- References use `Sample.x` in expressions.
+
+#### Distribution annotation `~ D` on strategic actions
+
+A `commit P1(x: int ~ uniform { 0, 1, 2 })` on a *strategic* role is
+an **analysis assumption**: the analysis treats the action as a chance
+draw from D, and assumes the actor plays through (commit followed by
+reveal, no quit). It has no operational effect; the EVM contract still
+gates by `msg.sender` and accepts any value within the declared support.
+The annotation tells Gambit / MAID / PRISM how to model the actor for
+analysis, and `where` clauses are interpreted as standard probabilistic
+conditioning (`D | phi`).
+
 ### Types
 
 - `int`: Unbounded integer (mapped to `int256`).

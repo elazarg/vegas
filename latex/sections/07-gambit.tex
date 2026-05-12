@@ -112,9 +112,17 @@ has an or-handler.  This is the right thing
 game-theoretically (it captures the strategic option of timing
 out), but it does inflate the tree.
 
-\paragraph{Chance nodes.}  Actions owned by a role declared
-with \TT{random} (\S\ref{sec:language}) are emitted as Gambit
-chance moves with a uniform distribution over the action's
-domain --- the current source language has no syntax for
-non-uniform distributions.  Each chance event is a node of its
-own, with the same simultaneity treatment as a player move.
+\paragraph{Chance nodes.}  Actions owned by a chance label ---
+a \TT{random} role or a \TT{sample} binding --- are emitted as
+Gambit chance moves.  Each parameter carries a per-node
+distribution: either the explicit \TT{$\sim$ uniform/weighted}
+annotation declared at the parameter, or the inferred uniform
+over the parameter's bounded domain when no annotation is
+present.  A self-only guard on the chance action is interpreted
+as standard probabilistic conditioning: the guard-surviving
+support is renormalised so that probabilities sum to one on the
+children of the chance node.  Contextual guards (referring to
+prior fields) are conditioned per trace, with a fresh
+renormalisation at each reached context.  Each chance event is
+a node of its own, with the same simultaneity treatment as a
+player move.
