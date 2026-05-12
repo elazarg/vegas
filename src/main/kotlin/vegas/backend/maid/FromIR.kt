@@ -115,6 +115,12 @@ private class MaidConverter(private val ir: GameIR) {
         // 5. Create CPDs for utility nodes
         createUtilityCPDs()
 
+        // 6. Create CPDs for chance nodes from per-node Sample distributions.
+        //    A Sample's prior is independent of parents (it's the source of
+        //    randomness, not a function of upstream choices), so each parent
+        //    column carries the same marginal distribution.
+        createChanceCPDs()
+
         // Deduplicate edges
         val uniqueEdges = edges.distinctBy { it.source to it.target }
 
@@ -322,6 +328,48 @@ private class MaidConverter(private val ir: GameIR) {
                 values = cpdValues
             ))
         }
+    }
+
+    /**
+     * Emit a CPD for each chance node carrying an explicit [vegas.ir.Dist].
+     *
+     * MAID nodes are deduplicated by (owner, param); a single chance node
+     * may correspond to multiple actions (e.g. a commit / reveal pair).
+     * We emit one CPD per chance node, using the Dist on any backing
+     * action — they all agree because Sample metadata is propagated
+     * identically through commit/reveal expansion.
+     */
+    private fun createChanceCPDs() {
+        val emittedFor = mutableSetOf<String>()
+        for (meta in ir.dag.metas) {
+            val dist = meta.sample?.dist ?: continue
+            for (param in meta.spec.params) {
+                val fieldRef = FieldRef(meta.struct.owner, param.name)
+                val nodeId = fieldToNodeId[fieldRef] ?: continue
+                if (!emittedFor.add(nodeId)) continue
+                val node = nodes.firstOrNull { it.id == nodeId && it.type == MaidNodeType.CHANCE } ?: continue
+                val parents = edges.filter { it.target == nodeId }.map { it.source }.distinct()
+                val numCols = parents.fold(1) { acc, p ->
+                    val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
+                    acc * sz
+                }
+                val rowProbs = node.domain.map { dv ->
+                    val const = domainValToConst(dv)
+                    val w = dist.weight(const)
+                    if (w == null) 0.0
+                    else w.numerator.toDouble() / w.denominator.toDouble()
+                }
+                val cpdValues = rowProbs.map { p -> List(numCols) { p } }
+                cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
+            }
+        }
+    }
+
+    private fun domainValToConst(dv: Any): Expr.Const = when (dv) {
+        is Boolean -> Expr.Const.BoolVal(dv)
+        is Int -> Expr.Const.IntVal(dv)
+        is Long -> Expr.Const.IntVal(dv.toInt())
+        else -> Expr.Const.IntVal(toInt(dv))
     }
 
     /**

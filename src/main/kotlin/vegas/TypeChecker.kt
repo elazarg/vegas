@@ -638,6 +638,12 @@ internal class ProtocolTyper(
                             validateDistSupport(vd.dist, vd.type, q)
                         }
                     }
+                    if (q.params.count { it.dist != null } > 1) {
+                        throw StaticError(
+                            "At most one parameter may carry a '~ ...' annotation; joint distributions over multi-parameter samples are not yet supported",
+                            q,
+                        )
+                    }
 
                     val m = q.params.associate { (k, tRaw) ->
                         val fr = FieldRef(role, k.id)

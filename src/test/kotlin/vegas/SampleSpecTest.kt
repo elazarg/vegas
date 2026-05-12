@@ -211,4 +211,75 @@ class SampleSpecTest : FreeSpec({
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
         }
     }
+
+    "Codex findings" - {
+
+        "weighted dist survives automatic commit-reveal expansion" {
+            // A pure-public sample that is concurrent with a strategic
+            // pure-public action gets split into commit+reveal nodes by
+            // EventGraph.expandCommitReveal; the commit-node delta stores
+            // Hidden(v). Gambit's prior lookup must unwrap Hidden so the
+            // declared weights survive the rewrite.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ weighted { 0: 3, 1: 1 }) Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
+            efg shouldContain "3/4"
+            efg shouldContain "1/4"
+        }
+
+        "rejects two parameters both carrying ~ annotations" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Pair() ${'$'} 10;
+                  join B() ${'$'} 10;
+                  yield Pair(a: face ~ uniform { 0, 1 }, b: face ~ uniform { 0, 1 });
+                  yield B(call: face);
+                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "Dist rejects Rational with negative denominator that looks positive" {
+            // Rational does not normalize sign at construction; a naïve
+            // `numerator > 0` check would accept this negative weight.
+            shouldThrow<IllegalArgumentException> {
+                Dist(listOf(
+                    Expr.Const.IntVal(0) to Rational(1, -2),
+                    Expr.Const.IntVal(1) to Rational(3, 2),
+                ))
+            }
+        }
+
+        "MAID emits a chance CPD reflecting the declared weights" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
+                  yield Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val maid = vegas.backend.maid.generateMaid(ir)
+            val coinNode = maid.nodes.single { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
+            val cpd = maid.cpds.single { it.node == coinNode.id }
+            // Domain ordering is the typeToDomain order: [0, 1] for the
+            // {0, 1} range. The CPD has one column (no parents).
+            cpd.values.size shouldBe 2
+            cpd.values[0].single() shouldBe 0.75
+            cpd.values[1].single() shouldBe 0.25
+        }
+    }
 })

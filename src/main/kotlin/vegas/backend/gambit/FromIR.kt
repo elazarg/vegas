@@ -406,7 +406,11 @@ internal class TreeUnroller(
         // upstream (Dist is null when params != 1).
         val values: Collection<Expr.Const> = move.delta.values
         if (values.size != 1) return null
-        return dist.weight(values.first())
+        // Commit moves wrap the sampled value in Hidden; the Dist is keyed by
+        // the underlying value, so unwrap before lookup.
+        val raw = values.first()
+        val sampled = if (raw is Expr.Const.Hidden) raw.inner else raw
+        return dist.weight(sampled)
     }
 }
 

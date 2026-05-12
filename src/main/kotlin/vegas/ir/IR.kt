@@ -101,7 +101,9 @@ data class Dist(val support: List<Pair<Expr.Const, Rational>>) {
         require(support.distinctBy { it.first }.size == support.size) {
             "Dist keys must be distinct: $support"
         }
-        require(support.all { it.second.numerator > 0 }) {
+        // Rational does not normalize sign at construction (e.g. Rational(1, -2)
+        // is representable), so test positivity by sign-product, not numerator.
+        require(support.all { (_, w) -> w.numerator.toLong() * w.denominator.toLong() > 0L }) {
             "Dist weights must be strictly positive: $support"
         }
         val sum = support.map { it.second }.reduce { a, b -> a + b }
