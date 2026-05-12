@@ -321,5 +321,49 @@ class SampleSpecTest : FreeSpec({
             cpd.values[0].single() shouldBe 1.0
             cpd.values[1].single() shouldBe 0.0
         }
+
+        "MAID chance CPD folds self-only guard even after commit-reveal expansion" {
+            // The Coin sample is pure-public and concurrent with Bettor's
+            // yield, so EventGraph.expandCommitReveal splits Coin into
+            // commit (guard = true) + reveal (original guard). The chance
+            // CPD must use the reveal node's guard, not the commit's, or
+            // it would emit the unprojected prior 0.5/0.5.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
+                        Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val maid = vegas.backend.maid.generateMaid(ir)
+            val coinNode = maid.nodes.single {
+                it.type == vegas.backend.maid.MaidNodeType.CHANCE
+            }
+            val cpd = maid.cpds.single { it.node == coinNode.id }
+            cpd.values.size shouldBe 2
+            cpd.values[0].single() shouldBe 1.0
+            cpd.values[1].single() shouldBe 0.0
+        }
+
+        "MAID rejects a chance node whose self-only guard is unsatisfiable" {
+            // Empty support after projection means the sample cannot fire;
+            // emitting any CPD silently would be wrong. Throw instead.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 0 && Coin.side != 1;
+                  yield Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            shouldThrow<IllegalStateException> { vegas.backend.maid.generateMaid(ir) }
+        }
     }
 })

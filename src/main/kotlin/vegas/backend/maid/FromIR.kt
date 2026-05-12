@@ -343,37 +343,53 @@ private class MaidConverter(private val ir: GameIR) {
      * identically through commit/reveal expansion.
      */
     private fun createChanceCPDs() {
-        val emittedFor = mutableSetOf<String>()
+        data class ChanceGroup(val field: FieldRef, val dist: Dist, val metas: MutableList<NodeMeta>)
+        val groups = mutableMapOf<String, ChanceGroup>()
+
         for (meta in ir.dag.metas) {
-            val rawDist = meta.sample?.dist ?: continue
+            val dist = meta.sample?.dist ?: continue
             for (param in meta.spec.params) {
                 val fieldRef = FieldRef(meta.struct.owner, param.name)
                 val nodeId = fieldToNodeId[fieldRef] ?: continue
-                if (!emittedFor.add(nodeId)) continue
-                val node = nodes.firstOrNull { it.id == nodeId && it.type == MaidNodeType.CHANCE } ?: continue
-                val parents = edges.filter { it.target == nodeId }.map { it.source }.distinct()
-                val numCols = parents.fold(1) { acc, p ->
-                    val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
-                    acc * sz
-                }
-                val effective = projectDistThroughSelfGuard(meta, fieldRef, rawDist) ?: rawDist
-                val rowProbs = node.domain.map { dv ->
-                    val const = domainValToConst(dv)
-                    val w = effective.weight(const)
-                    if (w == null) 0.0
-                    else w.numerator.toDouble() / w.denominator.toDouble()
-                }
-                val cpdValues = rowProbs.map { p -> List(numCols) { p } }
-                cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
+                val group = groups.getOrPut(nodeId) { ChanceGroup(fieldRef, dist, mutableListOf()) }
+                group.metas.add(meta)
             }
         }
+
+        for ((nodeId, group) in groups) {
+            val node = nodes.firstOrNull { it.id == nodeId && it.type == MaidNodeType.CHANCE } ?: continue
+            val parents = edges.filter { it.target == nodeId }.map { it.source }.distinct()
+            val numCols = parents.fold(1) { acc, p ->
+                val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
+                acc * sz
+            }
+            // After commit-reveal expansion, the commit node's guardExpr is
+            // rewritten to `true` and the reveal node retains the original
+            // guard. Pick the meta whose guard is non-trivial so the dist
+            // gets projected through the real constraint.
+            val guardingMeta = group.metas.firstOrNull { !isTrivialTrue(it.spec.guardExpr) }
+                ?: group.metas.first()
+            val effective = projectDistThroughSelfGuard(guardingMeta, group.field, group.dist) ?: group.dist
+            val rowProbs = node.domain.map { dv ->
+                val const = domainValToConst(dv)
+                val w = effective.weight(const)
+                if (w == null) 0.0
+                else w.numerator.toDouble() / w.denominator.toDouble()
+            }
+            val cpdValues = rowProbs.map { p -> List(numCols) { p } }
+            cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
+        }
     }
+
+    private fun isTrivialTrue(e: Expr): Boolean = e is Expr.Const.BoolVal && e.v
 
     /**
      * For a single-parameter sample node with a self-only guard, restrict the
      * prior to guard-surviving values and renormalize. Returns null if the
      * guard cannot be evaluated locally (contextual reads — already rejected
-     * upstream — or unsupported expression shapes), or if no value survives.
+     * upstream — or unsupported expression shapes). Throws if the guard
+     * leaves no value in the support: an unsatisfiable chance node is a
+     * malformed program, not a fallback case.
      */
     private fun projectDistThroughSelfGuard(
         meta: NodeMeta,
@@ -382,7 +398,7 @@ private class MaidConverter(private val ir: GameIR) {
     ): Dist? {
         if (meta.struct.guardReads.isNotEmpty()) return null
         val guard = meta.spec.guardExpr
-        if (guard is Expr.Const.BoolVal && guard.v) return dist
+        if (isTrivialTrue(guard)) return dist
         val survivors = mutableListOf<Pair<Expr.Const, vegas.Rational>>()
         for ((v, w) in dist.support) {
             val ok = try {
@@ -395,7 +411,13 @@ private class MaidConverter(private val ir: GameIR) {
             }
             if (ok) survivors.add(v to w)
         }
-        if (survivors.isEmpty()) return null
+        if (survivors.isEmpty()) {
+            throw IllegalStateException(
+                "Chance node ${field.owner.name}.${field.param.name}: " +
+                "self-only guard eliminates every value in the prior support — " +
+                "the sample is unsatisfiable. Widen the distribution or the guard."
+            )
+        }
         val total = survivors.map { it.second }.reduce { a, b -> a + b }
         return Dist(survivors.map { (v, w) -> v to (w / total) })
     }
