@@ -73,18 +73,49 @@ through a quit handler is rejected).  Before reveal, only the
 committing actor knows the value --- operationally, the contract
 holds only the hash.
 
-\paragraph{\TT{random}.}  Declares a chance role.  Syntactically
-parallel to \TT{join}: the role is given a deposit and added to
-the game's actor set, but it acts on behalf of nature rather
-than a strategic player.
+\paragraph{Randomness.}  Vegas distinguishes two surface forms,
+matching the two operational modes available on EVM today.
+
+A \TT{random} declaration introduces a chance role with an actor
+identity but no deposit: useful when the draw is \emph{private}
+and must be committed and later revealed by a designated actor.
 \begin{lstlisting}[style=vg]
-random Host() $ 100;
+random Host;
+commit Host(car: door ~ uniform { 0, 1, 2 });
+reveal Host(car: door);
 \end{lstlisting}
-A chance role's subsequent \TT{yield}/\TT{commit}/\TT{reveal}
-actions are interpreted as chance events whose moves the Gambit
-backend emits with a uniform distribution over the action's
-domain.  The current language has no syntax for explicit
-non-uniform distributions; that is on the future-work list.
+A \TT{sample} declaration introduces an \emph{anonymous public}
+draw with no actor:
+\begin{lstlisting}[style=vg]
+sample (w: ticket);
+\end{lstlisting}
+Anonymous samples live under a reserved label \TT{Sample}; their
+value is computed on chain from \TT{block.prevrandao} with
+domain separation.  No actor identity is required; the field is
+referenced in expressions as \TT{Sample.w}.
+
+A parameter may carry a \emph{distribution annotation}
+\TT{$\sim$ \textit{D}} declaring its analysis prior.  Two surface
+forms are available, both finite-support and rational-weighted:
+\TT{uniform \{ \dots \}} and
+\TT{weighted \{ v\textsubscript{1}: w\textsubscript{1}, \dots \}}.
+The annotation is an \emph{analysis assumption}: the analysis
+backends (Gambit, MAID) interpret the action as a draw from the
+declared distribution.  On a strategic role's action it asserts
+that the role plays through; on a chance role's or sample's
+action it overrides the default uniform-over-domain prior.
+
+\paragraph{Trust model for random sources.}
+Random sources are trusted to follow the declared (or assumed
+uniform) distribution.  There is no penalisation, no quit, no
+slash; if a \TT{random} actor commits an out-of-support value and
+refuses to reveal, the game stalls with funds held in the
+contract.  A guard on a chance node is interpreted as standard
+probabilistic conditioning, \TT{$\sim D$ where $\varphi$} meaning
+``the value is drawn from the conditional distribution $D \mid
+\varphi$''.  The MAID emitter projects self-only guards
+statically into a renormalised CPD; the Gambit emitter
+conditions per trace; both reject \TT{where false}.
 
 \paragraph{Simultaneous moves.}  Multiple roles can appear in a
 single statement; they are then deemed simultaneous:
@@ -150,21 +181,27 @@ detail.
 \subsection{Withdraw and conservation}
 
 A game terminates by reaching a \TT{withdraw} clause, which
-allocates the entire locked pool to roles.  The total must match
-the pool exactly: there is no implicit dust and no implicit burn.
-\TT{withdraw} can be conditional:
+allocates the entire locked pool.  Outcomes are
+brace-delimited blocks of \TT{role -> exp} entries; an outcome
+may additionally carry a single \TT{burn N} item that records
+how much of the pool is destroyed (or, in the EVM emission,
+retained in the contract permanently).  \TT{withdraw} can be
+conditional:
 \begin{lstlisting}[style=vg]
 withdraw (A.c && B.c) ? { A -> 100; B -> 100 }
        : (A.c)        ? { A -> 200; B -> 0   }
        : (B.c)        ? { A -> 0;   B -> 200 }
        :                { A -> 90;  B -> 110 }
 \end{lstlisting}
-Conservation --- that the per-branch payouts sum to the pool ---
-is a design invariant of the language: every \TT{withdraw}
-clause should allocate the pool exactly, with no implicit dust
-or burn.  Statically checking this against arbitrary payoff
-expressions is not currently performed by the compiler; it is on
-the TODO list.
+Conservation --- that, on every reachable terminal branch, the
+sum of role payouts and the burn equals the sum of strategic
+deposits --- is enforced statically.  The compiler runs the same
+extensive-form enumeration the Gambit backend uses, and at each
+terminal checks the per-branch equation; any underpayment (funds
+stuck) or overpayment (contract reverts) is reported as a static
+error.  Chance roles and anonymous samples have no claim on the
+pool and so do not appear in withdraw payouts: their share, if
+any, is recorded as a \TT{burn}.
 
 \subsection{Types}
 
@@ -265,13 +302,17 @@ For reference, the full surface grammar lives in the ANTLR file
 roughly:
 \begin{align*}
 \mathit{program} &::= (\mathit{typeDec} \mid \mathit{macroDec})^*\ \TT{game}\ \mathit{ident}\ \TT{()}\ \TT{\{}\ \mathit{ext}\ \TT{\}}\\
-\mathit{ext} &::= \mathit{kind}\ (\texttt{or}\ \mathit{handler})?\ \mathit{query}^+\ \TT{;}\ \mathit{ext}
-              \mid \kwithdraw\ \mathit{outcome}\\
-\mathit{kind} &::= \kjoin \mid \kyield \mid \kreveal \mid \kcommit \mid \krandom\\
+\mathit{ext} &::= \mathit{kind}\ (\texttt{or}\ \mathit{handler})?\ \mathit{query}^+\ \TT{;}\ \mathit{ext}\\
+             &\mid \TT{random}\ \mathit{role}\ (\TT{()})?\ \TT{;}\ \mathit{ext}\\
+             &\mid \TT{sample}\ \TT{(}\ \mathit{varDec}^+\ \TT{)}\ \TT{;}\ \mathit{ext}\\
+             &\mid \kwithdraw\ \mathit{outcome}\\
+\mathit{kind} &::= \kjoin \mid \kyield \mid \kreveal \mid \kcommit\\
 \mathit{query} &::= \mathit{role}\ \TT{(}\ \mathit{paramDec}^*\ \TT{)}\ (\$\,\mathit{int})?\ (\kwhere\ \mathit{exp})?\ (\TT{||}\ \mathit{queryHandler})?\\
-\mathit{handler} &::= \TT{split} \mid \TT{burn} \mid \TT{null}.
+\mathit{paramDec} &::= \mathit{name}\ \TT{:}\ \mathit{type}\ (\TT{$\sim$}\ \mathit{dist})?\\
+\mathit{dist} &::= \TT{uniform \{ \dots \}} \mid \TT{weighted \{ }\mathit{v}\TT{:}\,\mathit{w},\dots\ \TT{\}}\\
+\mathit{handler} &::= \TT{split} \mid \TT{burn} \mid \TT{null}\\
+\mathit{item} &::= \mathit{role}\ \TT{->}\ \mathit{exp} \mid \TT{burn}\ \mathit{exp}
 \end{align*}
-The \texttt{or}-handler is optional, and \TT{join}/\TT{random}
-are admitted in the same production as the other action kinds.
-The grammar is unsurprising; what makes Vegas work is the analysis
-done in the next several sections.
+The \TT{random} production does not admit \TT{\$ deposit}: chance
+actors do not stake.  The grammar is unsurprising; what makes
+Vegas work is the analysis done in the next several sections.
