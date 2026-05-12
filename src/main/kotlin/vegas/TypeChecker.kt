@@ -712,8 +712,18 @@ internal class ProtocolTyper(
                     // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal.
                     // Quit handlers allocate the strategic pot among the surviving
                     // strategic roles; random / sample roles are absent from
-                    // withdraw and so absent from handler allocation too.
-                    if (!isJoin && !isReveal) checkHandler(q, roles2 - randomRoles2, st.fields)
+                    // withdraw and so absent from handler allocation too. But
+                    // the payout expressions may still reference random roles'
+                    // already-visible fields, so the typing view sees all roles.
+                    if (!isJoin && !isReveal) {
+                        checkHandler(
+                            q = q,
+                            allocRoles = roles2 - randomRoles2,
+                            visibleRoles = roles2,
+                            visibleRandomRoles = randomRoles2,
+                            visibleFields = st.fields,
+                        )
+                    }
 
                     deltaMaps += m
                 }
@@ -815,7 +825,21 @@ internal class ProtocolTyper(
         }
     }
 
-    private fun checkHandler(q: Query, roles: Set<RoleId>, visibleFields: Map<FieldRef, TypeExp>) {
+    /**
+     * @param allocRoles strategic roles eligible to receive payouts in the
+     *   handler (random / sample owners are excluded - they have no claim
+     *   on the strategic pot).
+     * @param visibleRoles all roles whose fields may be referenced in the
+     *   handler's payout expressions. Includes random / sample owners
+     *   when their fields are already visible (PUBLIC / REVEAL).
+     */
+    private fun checkHandler(
+        q: Query,
+        allocRoles: Set<RoleId>,
+        visibleRoles: Set<RoleId>,
+        visibleRandomRoles: Set<RoleId>,
+        visibleFields: Map<FieldRef, TypeExp>,
+    ) {
         val h = q.handler ?: return
 
         // Split, Burn, and Null are valid for single-query handlers
@@ -825,13 +849,21 @@ internal class ProtocolTyper(
 
         if (h !is Outcome.Value) throw StaticError("Quit handler must be a simple withdraw outcome, split, burn, or null", h)
 
-        val expected = roles - q.role.id
+        val expected = allocRoles - q.role.id
         val got = h.ts.keys.map { it.id }.toSet()
         if (got != expected) throw StaticError("Quit handler must allocate to exactly other roles (size ${expected.size})", h)
 
         for ((_, e) in h.ts) {
-            // Handlers allow reading visible fields
-            val view = View(roles = roles, fields = visibleFields, vars = emptyMap())
+            // Handlers allow reading visible fields, including random
+            // roles' visible writes (e.g. `Coin.side` after the coin has
+            // yielded), even though random roles do not appear in the
+            // allocation map.
+            val view = View(
+                roles = visibleRoles,
+                fields = visibleFields,
+                vars = emptyMap(),
+                randomRoles = visibleRandomRoles,
+            )
             val t = expr.type(e, view)
             if (!expr.isSubtype(t, INT)) throw StaticError("Handler payout must be int", e)
         }

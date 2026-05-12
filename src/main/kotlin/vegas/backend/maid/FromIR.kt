@@ -188,18 +188,21 @@ private class MaidConverter(private val ir: GameIR) {
     }
 
     /**
-     * Create utility nodes from payoff expressions.
+     * Create utility nodes from payoff expressions. Iterate strategic
+     * roles (not `ir.payoffs` keys) so that a depositor omitted from
+     * `withdraw` still gets a modeled utility (preference for getting
+     * back their deposit), matching the conservation-check semantics
+     * that already counts their net loss.
      */
     private fun createUtilityNodes() {
-        for ((role, expr) in ir.payoffs) {
-            // Skip chance roles - they don't have utility
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
 
             val utilId = "U_${role.name}"
             utilityNodeIds[role] = utilId
 
-            // Extract domain from payoff expression
-            val domain = extractPayoffDomain(expr)
+            val expr = ir.payoffs[role]
+            val domain = if (expr != null) extractPayoffDomain(expr) else listOf<Any>(0)
 
             nodes.add(MaidNode(
                 id = utilId,
@@ -238,9 +241,12 @@ private class MaidConverter(private val ir: GameIR) {
             }
         }
 
-        // Edges to utility nodes (based on payoff dependencies)
-        for ((role, expr) in ir.payoffs) {
+        // Edges to utility nodes (based on payoff dependencies). For
+        // roles omitted from `ir.payoffs` the utility is a constant
+        // (-deposit), so there are no parents.
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
+            val expr = ir.payoffs[role] ?: continue
             val utilNodeId = utilityNodeIds[role] ?: continue
             val dependencies = extractFieldRefs(expr)
             for (dep in dependencies) {
@@ -259,10 +265,21 @@ private class MaidConverter(private val ir: GameIR) {
      * - Values are probabilities (1.0 for the actual payoff, 0.0 otherwise)
      */
     private fun createUtilityCPDs() {
-        for ((role, expr) in ir.payoffs) {
+        for (role in ir.roles) {
             if (role in ir.chanceRoles) continue
-
             val utilNodeId = utilityNodeIds[role] ?: continue
+
+            // A role omitted from `ir.payoffs` has gross payout 0 by
+            // default; emit a constant-0 CPD so the MAID has a complete
+            // utility table for every strategic agent.
+            val expr = ir.payoffs[role] ?: run {
+                val utilNode = nodes.find { it.id == utilNodeId } ?: continue
+                val cpdValues = utilNode.domain.map { domainVal ->
+                    listOf(if (toInt(domainVal) == 0) 1.0 else 0.0)
+                }
+                cpds.add(TabularCPD(node = utilNodeId, parents = emptyList(), values = cpdValues))
+                continue
+            }
             val dependencies = extractFieldRefs(expr).distinct()
 
             // Get the utility node to access its domain

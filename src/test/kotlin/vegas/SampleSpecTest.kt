@@ -660,6 +660,49 @@ class SampleSpecTest : FreeSpec({
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
         }
+
+        "quit handler payout expression may read a visible random field" {
+            // Allocation roles exclude random roles, but the expression-
+            // typing view still includes them so payouts can depend on
+            // already-revealed random values.
+            val src = """
+                game main() {
+                  random Coin;
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield Coin(side: bool);
+                  yield A(x: bool) || { B -> Coin.side ? 20 : 0 };
+                  yield B(y: bool);
+                  withdraw { A -> 10; B -> 10 }
+                }
+            """.trimIndent()
+            // Should typecheck cleanly (Coin.side is visible in A's
+            // quit handler since Coin yielded earlier).
+            typeCheck(parseCode(src))
+        }
+    }
+
+    "MAID utility nodes cover all strategic depositors" - {
+        "role omitted from withdraw still has a utility node and a constant-0 CPD" {
+            val src = """
+                game main() {
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield A(g: bool);
+                  yield B(g: bool);
+                  withdraw { A -> 10; burn 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            val maid = vegas.backend.maid.generateMaid(ir)
+            val utilityNodes = maid.nodes.filter {
+                it.type == vegas.backend.maid.MaidNodeType.UTILITY
+            }
+            // Both A and B must have utility nodes.
+            utilityNodes.map { it.agent } shouldContainExactlyInAnyOrder listOf("A", "B")
+            // B's CPD must exist and represent constant 0.
+            val bUtil = utilityNodes.single { it.agent == "B" }
+            val bCpd = maid.cpds.single { it.node == bUtil.id }
+            check(bCpd.parents.isEmpty()) { "B's payoff has no parents (constant)" }
+        }
     }
 
     "PrevRandao entropy for anonymous sample (EVM)" - {
