@@ -117,8 +117,10 @@ probabilistic conditioning, \TT{$\sim D$ where $\varphi$} meaning
 statically into a renormalised CPD; the Gambit emitter
 conditions per trace; both reject \TT{where false}.
 
-\paragraph{Simultaneous moves.}  Multiple roles can appear in a
-single statement; they are then deemed simultaneous:
+\paragraph{Independent public moves.}  Multiple roles can appear in a
+single statement.  Strategically, these are simultaneous moves:
+no role is allowed to condition its choice on another role's
+choice from the same statement.
 \begin{lstlisting}[style=vg]
 yield or split A(c: bool) B(c: bool);
 \end{lstlisting}
@@ -253,7 +255,7 @@ not introduce new actions or rewrite the action sequence.
 Putting the constructs together, here is a three-bidder sealed-bid
 second-price (Vickrey) auction with a fixed-domain bid type.  The
 \TT{yield or split} statement carries three actor heads, declaring
-the three bids as simultaneous.
+the three bids as independent public choices.
 
 \begin{lstlisting}[style=vg]
 type bid = {0 .. 2}
@@ -288,12 +290,12 @@ game main() {
 \end{lstlisting}
 
 The compiler does not assume the front-running problem has been
-solved.  It reads three simultaneous public moves and rewrites
-the EventGraph so that each bidder commits to a hash first and
-reveals later, with every reveal gated on every other bidder's
-commit.  The resulting Solidity contract implements a sealed-bid
-auction; the resulting Gambit game has each bidder choose a hidden
-value in a common information set.  Both come from the same source.
+solved.  It reads three independent public moves and rewrites the
+EventGraph so that each bidder commits to a hash first and reveals
+later, with every reveal gated on every other bidder's commit.
+The resulting Solidity contract implements a sealed-bid auction;
+the resulting Gambit game has each bidder choose a hidden value in
+a common information set.  Both come from the same source.
 
 \subsection{Grammar}
 

@@ -112,11 +112,11 @@ holds:
   must come after its commit.
 \end{itemize}
 
-Within a single phase, multiple roles can act simultaneously (they
-appear in the same \TT{yield}/\TT{commit} statement).  Their nodes
-share predecessors and are not connected to each other: they are
-concurrent in the dependency graph, which is what justifies
-treating them as simultaneous moves in the strategic analysis.
+Within a single phase, multiple roles can appear in the same
+\TT{yield}/\TT{commit} statement.  Their nodes share predecessors
+and are not connected to each other: they are concurrent in the
+dependency graph, which is what justifies treating them as
+simultaneous moves in the strategic analysis.
 
 \subsection{Visibility}
 \label{sec:eventgraph:visibility}
@@ -171,20 +171,22 @@ computation itself.
 Two properties of the frontier matter for the backends:
 
 \begin{itemize}\itemsep1pt
-\item \emph{Concurrency.}  If two distinct nodes $A, B$ are on the
-  same frontier --- neither reaches the other in the DAG ---
-  scheduling $A$ before $B$ versus $B$ before $A$ produces the
-  same configuration after both have fired.  This is what allows
-  Solidity to accept the actions in any order and Gambit to model
-  them as simultaneous.
+\item \emph{Frontier independence.}  If two distinct nodes $A, B$
+  are on the same frontier --- neither reaches the other in the
+  DAG --- scheduling $A$ before $B$ versus $B$ before $A$ produces
+  the same configuration after both have fired.  This is what
+  allows Solidity to accept the actions in any order and analysis
+  backends to present them as simultaneous moves.  Gambit does so
+  with information sets that hide the other roles' choices in that
+  strategic move.
 \item \emph{Information barrier.}  If a node $B$ is a \REVEAL,
   every node on which it depends has already fired by the time
   $B$ is enabled.  In particular, in any configuration where
   $B$'s match \COMMIT is unfinished, $B$ is not on the frontier.
-  This is the structural counterpart to the commit-reveal
-  insertion pass: once a player can reveal, every other player
-  has already committed; no player can condition a commit on
-  another's revealed value.
+  For reveals introduced by the commit-reveal rewrite, every
+  risk partner's commit is also a predecessor of the reveal, so
+  no role in that risk group can condition its commit on another
+  role's revealed value.
 \end{itemize}
 
 The compiler computes the frontier on demand with a small
@@ -266,10 +268,12 @@ graph's concurrent diamonds quotient out orderings of independent
 events that the player could not have distinguished anyway.  The
 set of fields observable by role $R$ at node $B$ is
 
-\begin{equation*}
-  \mathrm{obs}_R(B) \;=\; \bigl\{\, f \;\big|\; f \text{ is written by some ancestor } A \text{ of } B,
-            \text{ and either } \mathrm{owner}(A) = R \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\},
-\end{equation*}
+\begin{align*}
+  \mathrm{obs}_R(B) = \bigl\{\, f \;\big|\;&
+    f \text{ is written by some ancestor } A \text{ of } B,\\
+  & \text{and either } \mathrm{owner}(A) = R
+    \text{ or } \mathrm{vis}(A,f) \in \{\PUBLIC, \REVEAL\} \bigr\}.
+\end{align*}
 where ``ancestor'' means $A$ reaches $B$ in the dependency DAG.
 The owner of a node always observes their own writes, including
 \emph{committed} fields, since a player knows the value they

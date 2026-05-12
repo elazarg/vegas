@@ -1,6 +1,6 @@
-% macros.tex — Vegas paper notation
+% macros.tex - Vegas paper notation
 
-% ── Packages ──────────────────────────────────────────────────────────
+% Packages
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{stmaryrd}
 \usepackage{mathtools}
@@ -10,8 +10,14 @@
 \usepackage{booktabs}
 \usepackage{enumitem}
 \usepackage{listings}
+\usepackage{pifont}
 
-% ── Theorem environments ──────────────────────────────────────────────
+% Feature-table marks
+\newcommand{\cmk}{\ding{51}}                       % native primitive
+\newcommand{\xmk}{\ding{55}}                       % absent
+\newcommand{\tmk}{$\sim$}                          % encodable but not primitive
+
+% Theorem environments
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{proposition}[theorem]{Proposition}
@@ -22,12 +28,12 @@
 \theoremstyle{remark}
 \newtheorem{remark}[theorem]{Remark}
 
-% ── Players / roles / fields ──────────────────────────────────────────
+% Players / roles / fields
 \newcommand{\Role}{\mathsf{Role}}
 \newcommand{\Var}{\mathsf{Var}}
 \newcommand{\Field}[2]{#1.#2}
 
-% ── Constructs (lowercased for surface, capitalized for IR) ───────────
+% Constructs (lowercased for surface, capitalized for IR)
 \newcommand{\kw}[1]{\mathbf{#1}}
 \newcommand{\kjoin}{\kw{join}}
 \newcommand{\kyield}{\kw{yield}}
@@ -43,21 +49,21 @@
 \newcommand{\Sample}{\mathsf{Sample}}
 \newcommand{\Ret}{\mathsf{Ret}}
 
-% ── Visibility tags ───────────────────────────────────────────────────
+% Visibility tags
 \newcommand{\COMMIT}{\textsc{commit}}
 \newcommand{\REVEAL}{\textsc{reveal}}
 \newcommand{\PUBLIC}{\textsc{public}}
 
-% ── Probability ───────────────────────────────────────────────────────
+% Probability
 \newcommand{\PMF}[1]{\mathrm{PMF}(#1)}
 \newcommand{\NN}{\mathbb{N}}
 \newcommand{\RR}{\mathbb{R}}
 
-% ── Code in prose ─────────────────────────────────────────────────────
+% Code in prose
 \newcommand{\TT}[1]{\texttt{#1}}
 \newcommand{\file}[1]{\texttt{#1}}
 
-% ── Vegas listing language ────────────────────────────────────────────
+% Vegas listing language
 \definecolor{VegasKW}{RGB}{0,80,150}
 \definecolor{VegasComment}{RGB}{96,96,96}
 \definecolor{VegasString}{RGB}{160,32,32}

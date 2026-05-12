@@ -9,17 +9,21 @@ Each item is independently shippable.
 
 A new backend that consumes `SampleSpec.dist` directly to answer
 expected-utility and probability-of-winning queries. The per-node
-SampleSpec metadata is already in place; the IR is ready. PRISM's
-stochastic multi-player games (SMG) model maps onto Vegas's
-strategic + chance node distinction cleanly, and PRISM's PCTL /
-rPATL logics fit the kinds of questions Gambit answers awkwardly
-(e.g. "what is Guest's expected payoff in MontyHallChance under
-uniform Host?").
+SampleSpec metadata is already in place. PRISM-games CSGs are an
+exact target for the finite public-state fragment of Vegas: a
+set of independent public yields becomes one joint-action CSG state,
+and public chance samples become probabilistic transitions.
+This fits expected-utility and probability-of-winning queries that
+Gambit answers awkwardly.
+
+Plain PRISM-games CSGs do not directly encode persistent private
+information across later decisions. Commit/reveal games such as
+MontyHallChance therefore remain Gambit/EFG territory unless a
+future backend compiles hidden chance into public belief states.
 
 Estimated cost: a backend in the style of `gambit/FromIR.kt`, walking
-the EventGraph and emitting PRISM's `.prism` module syntax. The
-chance-vs-strategic distinction maps directly onto PRISM's `probability` /
-`player` annotations.
+the EventGraph, quotienting public frontiers into CSG transitions,
+and emitting PRISM's `.prism` plus `.props` syntax.
 
 Tracked as [GitHub issue #50](https://github.com/elazarg/vegas/issues/50)
 and `TODO.txt`.

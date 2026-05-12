@@ -119,6 +119,167 @@ rather than approximating with sampling; the PPL community
 generally relaxes them and pays for it with Monte Carlo
 inference.
 
+\subsection{Logic programming, games, and probability}
+\label{sec:related:lp}
+
+A second declarative tradition sits adjacent to the PPL one and
+is worth comparing against on its own terms.  It splits cleanly
+into two strands: \emph{game-aware} logic programming, in which
+the role-vs-Nature distinction is a primitive of the language,
+and \emph{probabilistic} logic programming, in which all
+nondeterminism is Nature.
+
+The game-aware strand has two main representatives.  Poole's
+Independent Choice Logic~\citep{Poole1997ICL} partitions atoms
+into \emph{choice alternatives} owned by agents, with Nature's
+alternatives carrying probabilities and strategic agents'
+alternatives left open for an equilibrium operator to fill in.
+The mapping into Vegas is partial.  The VegasCore calculus has
+five primitive constructors (\TT{ret}, \TT{letExpr}, \TT{sample},
+\TT{commit}, \TT{reveal}); two of them are recognisable in ICL
+and the third is the divergence point.  \TT{sample x $\sim$ D}
+corresponds directly to an ICL Nature choice over the support of
+$D$.  \TT{commit x@who where R} corresponds to a role-owned
+choice alternative, with the guard $R$ restricting the legal
+alternatives --- modulo a feature ICL does not have, that
+\TT{commit}'s output is visible only to \TT{who}.  \TT{reveal}
+has no ICL analogue at all: ICL has no primitive that promotes a
+hidden atom to public after the fact, and the visibility lattice
+on Vegas variables (\TT{pub} versus \TT{hidden\,who}) is
+external to ICL's possible-worlds semantics.
+
+Every Vegas program denotes a finite extensive-form game with
+information sets, and every such EFG is encodable in ICL by
+indexing each role's choice set on the prefix of atoms
+observable to that role and adding an information-set
+measurability constraint on strategies.  The encoding is
+non-local: each \TT{commit} or \TT{reveal} alters the index list
+of every downstream choice set.  The visibility lattice on
+VegasCore contexts is a static discipline enforced at the type
+level; the corresponding ICL property is a meta-condition on
+strategies, not a property of the program text.  The
+general-game-playing language
+GDL-II~\citep{ThielscherGDLII}, extending the original
+GDL~\citep{LovePerkinsEtAl2008GDL}, makes the same distinction
+operationally: a distinguished \TT{random} role whose moves are
+stipulated uniform over its \TT{legal} set, ordinary roles whose
+moves are strategic, and a \TT{sees} predicate for imperfect
+information.  GDL-II describes games turn by turn through
+\TT{legal(R,M)} and \TT{does(R,M)} predicates over a state
+fluent; Vegas's EventGraph is the asynchronous analogue, with
+dependency rather than a global step counter ordering moves, and
+with commit-reveal as a first-class node kind rather than a
+derived information-flow pattern.  GDL-III~\citep{ThielscherGDLIII}
+extends GDL-II with epistemic predicates \TT{knows} and
+\TT{common\_knowledge} that may appear inside \TT{legal} and
+\TT{terminal}.  This is an orthogonal direction to Vegas's:
+GDL-III lets game \emph{rules read} epistemic state inferred from
+the observation trace, while Vegas lets game \emph{bindings
+create} epistemic state via the \TT{commit}/\TT{reveal} pair and
+the visibility lattice on contexts.  Either language can encode
+the other's idiom by re-routing through its native primitive ---
+a Vegas \TT{reveal} corresponds to emitting \TT{sees} for every
+role in GDL-III, and a GDL-III knowledge-conditioned \TT{legal}
+clause corresponds, in Vegas, to a guard over a previously
+revealed witness --- but the primitives chosen are different.  ICL is closer to Vegas in
+flavour --- both are declarative, both make the agent-owning-a-
+choice-set construct primary --- while GDL-II is closer in
+intent, as a description language for whole games.
+
+The probabilistic strand --- Sato's distribution
+semantics~\citep{Sato1995DistributionSemantics},
+ProbLog~\citep{DeRaedt2007ProbLog},
+P-log~\citep{BaralGelfondRushton2009PLog} --- annotates logical
+facts with probabilities and defines a measure over the
+program's stable models or proof trees.  These languages are
+not game description languages: they have no agent primitive,
+and a \TT{random} fact owned by ``the Matcher'' is no
+different from a \TT{random} fact owned by Nature.
+P-log in particular is excellent at the Bayesian-update
+question --- the cleanest way to state ``given that Host opened
+door $1$ after Guest picked $0$, what is the posterior on the
+car location'' is a one-line P-log query --- and Vegas's PPL
+story (\S\ref{sec:related:ppl}) is the natural place to relate
+that machinery.  But for the strategic question, these
+languages can describe one strategy profile at a time and
+require a meta-layer over strategies to talk about equilibrium.
+DTProbLog~\citep{VandenBroeck2010DTProbLog} adds a single-agent
+decision-theoretic layer to ProbLog and is honest about the
+restriction; extending it to multi-agent equilibrium is, in
+spirit, what Vegas does on the IR side, taking the ICL/GDL-II
+role distinction as the right primitive on which to build.  Concurrent constraint
+programming~\citep{Saraswat1991CCP} supplies the right semantic
+shape for that asynchrony: an action fires when its
+\emph{ask} (dependencies derivable) succeeds and then
+\emph{tells} its output, which is structurally the firing rule
+for an EventGraph node.
+
+Two further connections are worth flagging even though Vegas
+does not pursue them.  First, the pool's conservation law has
+the shape of a linearity constraint and would sit naturally in a
+linear logical framework~\citep{CervesatoPfenning2002CLF,
+LopezPfenningPolakow2005LolliMon}: deposits as linear resources,
+\TT{withdraw} as their exact consumption.  Vegas instead checks
+conservation as an integrity property of the generated artifact.
+Second, equilibrium computation is genuinely outside the
+fixed-point theory of standard LP: a Nash operator is not
+monotone in the lattice that gives stable models, so a logic
+programming presentation of Vegas would either delegate
+equilibrium to an external solver (as ASP-with-optimisation
+does) or commit to a richer game-theoretic semantics on top.
+
+The framing this comparison suggests --- which we record here as
+a stylistic claim, not a formal correspondence --- is that
+Vegas's source semantics is approximately \emph{concurrent
+constraint logic programming with role-indexed choice
+alternatives (Nature being one role whose alternatives carry
+probabilities), a visibility lattice on bindings exposed through
+\TT{commit}/\TT{reveal}, linear resources for the pool, and
+default rules on a non-derivability of a deadline atom}.  The
+\TT{commit}/\TT{reveal} pair is a \emph{primitive} of the source
+calculus rather than a derived information-flow pattern: what
+the EVM backend does to it (hash, store, check on reveal) is a
+lowering of the primitive into a setting that does not natively
+support hidden bindings, and what the Gambit backend does
+(translate to information sets) is a different lowering of the
+same primitive.  The unusual part of Vegas is therefore the
+target, not the source semantics.
+
+Table~\ref{tab:lp-features} summarises the comparison along
+the axes that matter for Vegas's design.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccccc}
+\toprule
+                                & ICL & GDL-II & GDL-III & ProbLog & DTProbLog & P-log & CCP & Vegas \\
+\midrule
+Role vs.\ Nature is primitive   & \cmk & \cmk & \cmk & \xmk & \tmk\textsuperscript{a} & \xmk & \tmk\textsuperscript{b} & \cmk \\
+Observation primitive (\TT{sees}) & \tmk & \cmk & \cmk & \xmk & \xmk & \xmk & \xmk & \tmk \\
+Epistemic predicates in guards  & \xmk & \xmk & \cmk & \xmk & \xmk & \xmk & \xmk & \xmk \\
+Visibility lattice on bindings  & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \cmk \\
+\TT{commit}/\TT{reveal} as primitive & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \cmk \\
+Bayesian conditioning (\TT{observe}) & \tmk & \xmk & \xmk & \cmk & \cmk & \cmk & \xmk & \cmk \\
+Asynchronous DAG firing         & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \cmk & \cmk \\
+Linear resource / conservation  & \xmk & \xmk & \xmk & \xmk & \xmk & \xmk & \tmk & \cmk \\
+Equilibrium operator in language & \tmk\textsuperscript{c} & \tmk\textsuperscript{c} & \tmk\textsuperscript{c} & \xmk & \xmk & \xmk & \xmk & \cmk \\
+\bottomrule
+\end{tabular}
+\caption{Feature comparison.  \cmk\ = native primitive;
+\tmk\ = encodable but not primitive; \xmk\ = absent.
+\textsuperscript{a}DTProbLog has a single decision agent, not
+a role partition.
+\textsuperscript{b}CCP has agents only in the sense of
+concurrent processes, with no Nature distinction.
+\textsuperscript{c}GDL/GGP and ICL leave equilibrium to an
+external solver layer rather than fixing a semantics; Vegas
+commits to particular equilibrium notions through its MAID and
+Gambit backends.}
+\label{tab:lp-features}
+\end{table}
+
 \subsection{Multi-agent influence diagrams and game representations}
 
 MAID~\citep{koller2003multi} provides a factored representation

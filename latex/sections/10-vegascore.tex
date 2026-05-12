@@ -9,9 +9,9 @@ section says what VegasCore is, what it mechanizes, and how the
 two artifacts fit together.  Vegas and VegasCore are independent
 codebases: the compiler is useful without the library, and the
 library is useful without the compiler.  What VegasCore adds is
-mechanical fulfilment of Vegas's design premise --- that
-game-theoretic reasoning about a Vegas program transfers, up to
-the stated execution model, to the deployed contract.
+a mechanized account of the EventGraph-side facts that make
+source-level game analysis a well-defined target for backend
+refinement.
 
 \subsection{What VegasCore is}
 
@@ -29,9 +29,10 @@ revealed on every non-quit path), \TT{NormalizedDists}
 sums to one), and \TT{Legal} (every commit site has at least
 one legal value in every reachable configuration).  From a checked
 program the library derives a probabilistic \TT{Machine}, native
-strategy carriers, kernel-game presentations, and FOSG/EFG
-bridges; on top of these it states and proves a small inventory
-of structural and strategic theorems.
+strategy carriers, kernel-game presentations, and bridges to
+factored-observation stochastic games (FOSGs)~\citep{KovarikEtAl2022FOSG}
+and extensive-form games (EFGs); on top of these it states and
+proves a small inventory of structural and strategic theorems.
 
 \subsection{What VegasCore mechanizes}
 \label{sec:vegascore:theorems}
@@ -248,6 +249,6 @@ The current state of the connection:
 In short: Vegas's transferability premise is defended today by
 three things --- the design of the IR, the mechanically proved
 theorems VegasCore contributes about that structure, and the
-systematic-by-code-review nature of the backends.  A formally
-certified end-to-end pipeline is the natural next milestone,
-not a prerequisite for present use.
+disciplined, code-reviewed structure of the backends.  A
+formally certified end-to-end pipeline is the natural next
+milestone, not a prerequisite for present use.

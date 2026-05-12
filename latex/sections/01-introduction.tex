@@ -37,11 +37,13 @@ SMT-LIB encoding for reachability queries, and several others.
 
 The premise is not that strategic correctness is proved
 automatically.  The premise is that game-theoretic reasoning
-about the program transfers, modulo the stated execution model,
-to the deployed contract: if an analyst (or a tool) concludes
-that truthful bidding is dominant in the source-language Vickrey
-specification, that conclusion carries over to the Solidity
-contract running on chain.
+about the program has a single object to refer to: the same
+EventGraph drives the game model and the deployed artifacts.
+If an analyst (or a tool) concludes that truthful bidding is
+dominant in the source-language Vickrey specification, that
+conclusion is meant to apply to the deployed contract subject
+to the stated execution model and the backend-refinement
+obligations discussed later.
 
 To make transferability defensible, the language design does
 four things in concert.  It makes the game-relevant information
@@ -87,8 +89,8 @@ are:
   entropy --- with optional analysis-time distribution
   annotations;
 \item commit-reveal patterns, with automatic insertion when the
-  compiler detects simultaneous public moves that would otherwise be
-  front-runnable;
+  compiler detects independent public moves that would otherwise
+  be front-runnable;
 \item explicit operational handling of non-responsive participants
   (timeouts and bail-outs, with handler clauses chosen by the
   programmer);
@@ -128,7 +130,7 @@ foundations.
 \label{sec:intro:first-example}
 
 The following Vegas program is the complete specification of a
-distribution-semantics Monty Hall game.  Two roles, Host and Guest,
+Monty Hall game with explicit distribution semantics.  Two roles, Host and Guest,
 each lock 20 wei of deposit into a 40 wei pool.  The Host hides the
 car behind one of three doors; the Guest picks a door; the Host
 reveals a goat door; the Guest decides whether to switch; the Host
@@ -183,17 +185,20 @@ for Gambit, twice, with the two backends owning their own
 semantics.  That is also the natural hand-written approach when both views
 are wanted.  Vegas does not do this for three reasons.
 
-First, the textual order of the Vegas source does \emph{not} encode
-the strategic structure.  In the Monty Hall example above, the line
-\TT{yield Guest(d: door)} appears below the Host's hidden
-\TT{commit}.  But the Guest cannot read the Host's hidden value, and
-the Host's commit has no data dependency on the Guest; the two
-actions are concurrent in the strategic sense, regardless of the
-order they happen to be typed in.  Compiling to a tree directly
-would force an arbitrary ordering choice, which then has to be
-``undone'' with information-set equivalences.  Inferring
-concurrency from data dependencies once, in the IR, and letting
-every backend read it off the same graph, is simpler.
+First, the textual shape of the Vegas source is not itself a
+game tree.  A single surface phase can contain several role heads,
+as in \TT{yield A(x: bool) B(y: bool)}; those actions share
+predecessors and are treated as one simultaneous strategic move,
+even though an operational backend must accept the corresponding
+transactions in some order.  Conversely, textual phase boundaries
+still matter.  In the Monty Hall example above, the Host's hidden
+\TT{commit} precedes the Guest's public \TT{yield}, precisely so
+the Host cannot wait to choose the car until after seeing the
+Guest's door.  Compiling directly to a tree would force each
+backend to rediscover which orderings are strategic and which are
+merely operational.  Inferring the dependency relation once, in
+the IR, and letting every backend read it off the same graph, is
+simpler.
 
 Second, the operational behaviour of a Solidity contract is more
 naturally described by a dependency relation than by a global step
@@ -238,9 +243,9 @@ The contributions of this report are:
   commit-then-reveal pair, with predecessors set up so that no
   player can observe another player's reveal before committing
   themselves.  This addresses one specific subclass of MEV ---
-  observation-before-action on simultaneous moves within the
-  protocol --- by making the mitigation a structural property
-  of the IR rather than an implementation discipline.
+  observation-before-action on independent public moves within the
+  protocol --- by making the mitigation a structural property of
+  the IR rather than an implementation discipline.
 
 \item \emph{A family of backends} (\S\S\ref{sec:solidity}--\ref{sec:other-backends})
   that each consume the same EventGraph: Solidity and Vyper for

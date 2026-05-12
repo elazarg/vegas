@@ -22,7 +22,7 @@ From a single Vegas specification, the tool generates:
 
 - **Declarative Flow**: Define actions (`yield`, `reveal`) naturally; the compiler infers the necessary execution order.
 - **Macros**: Define reusable logic and predicates to keep specifications clean.
-- **Automatic Commit-Reveal**: The compiler automatically detects concurrent public moves that are vulnerable to front-running and rewrites them into secure commit-reveal protocols.
+- **Commit-Reveal Semantics**: Simultaneous-move constructs carry commit-reveal semantics; the generated contract realizes this semantics on-chain, mitigating observation-before-action vulnerabilities.
 - **Distribution Transparency**: Write code as if it were a centralized sequential game. The compiler handles the complexity of distributed state, cryptographic commitments, and timeouts.
 
 ### Example: Monty Hall Game

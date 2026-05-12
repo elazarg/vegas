@@ -15,14 +15,14 @@ The backend is a depth-first frontier expander.  At a configuration
 $C$, it enumerates the frontier, groups its nodes by owning role,
 and for each role that has at least one node on the frontier it
 generates a Gambit decision node.  Multiple roles may have nodes on
-the same frontier; they are the simultaneous-move case
-(\S\ref{sec:eventgraph:frontier}).  Gambit's \TT{.efg} format does
-not have a primitive ``simultaneous block'': simultaneity is
-expressed by nesting the per-role decision nodes in a canonical
-role order and arranging the information sets so that each role's
-information set hides the other roles' choices at the same
-frontier.  The strategic content is in the information sets, not
-the textual nesting order.
+the same frontier; these are simultaneous moves in the strategic
+analysis (\S\ref{sec:eventgraph:frontier}).  Gambit's \TT{.efg}
+format does not have a primitive simultaneous block: the backend
+nests the per-role decision nodes in a canonical role order and
+arranges the information sets so that each role's information set
+hides the other roles' choices at the same strategic move.  The
+strategic content is in the information sets, not the textual
+nesting order.
 
 For each role, the actions are the products of values its nodes may
 take.  Bounded-type fields have an explicit finite alphabet
@@ -46,9 +46,10 @@ produce a terminal node carrying the payoff vector.
 A player's information set at a decision node is the set of
 histories they cannot distinguish, given what they have observed.
 The backend computes this directly from
-$\mathrm{obs}_R(B)$ (\S\ref{sec:eventgraph:visibility-recall}): two
-nodes are in the same information set for role $R$ iff the
-projections of their pre-state to $R$-observable fields are equal.
+$\mathrm{obs}_R(B)$ (\S\ref{sec:eventgraph:visibility-recall}):
+two Gambit decision nodes are in the same information set for
+role $R$ iff the projections of their pre-state to
+$R$-observable fields are equal.
 
 In practice, hidden commits create the information sets that
 matter.  In the Vickrey example, each bidder's reveal node is at a
@@ -124,5 +125,5 @@ support is renormalised so that probabilities sum to one on the
 children of the chance node.  Contextual guards (referring to
 prior fields) are conditioned per trace, with a fresh
 renormalisation at each reached context.  Each chance event is
-a node of its own, with the same simultaneity treatment as a
+a node of its own, with the same simultaneous-move treatment as a
 player move.

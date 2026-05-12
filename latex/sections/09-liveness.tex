@@ -85,7 +85,8 @@ For the Gambit backend, \TT{Quit} is an additional alphabet
 symbol at every move site with a handler.  Equilibrium analyses
 therefore see \TT{Quit} as a real move, with the payoff indicated
 by the handler.  This is what lets the analysis surface griefing
-incentives without modelling them outside the game.  In a simultaneous \TT{or split} statement, for instance,
+incentives without modelling them outside the game.  In an
+independent public \TT{or split} statement, for instance,
 \TT{Quit} is strictly dominated by any non-quit move iff the
 split penalty exceeds the worst non-quit payoff.  The dominance
 check on the generated EFG verifies this mechanically.

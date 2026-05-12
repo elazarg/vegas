@@ -2,32 +2,32 @@
 \label{sec:commit-reveal}
 
 This section describes the EventGraph rewrite that protects
-simultaneous public moves from transaction-ordering adversaries.
+independent public moves from transaction-ordering adversaries.
 The pass is small but the property it secures is one of the most
 visible payoffs of using Vegas: a programmer who writes
-``two players \TT{yield} simultaneously'' gets the commit-reveal
-protocol the textbook would have insisted on, deployed on chain.
+``two players \TT{yield} without either observing the other first''
+gets the commit-reveal protocol the textbook would have insisted
+on, deployed on chain.
 
 \subsection{The problem}
 \label{sec:cr:problem}
 
-Consider the two-line specification
+Consider the one-phase specification
 \begin{lstlisting}[style=vg]
-yield A(x: bool);
-yield B(y: bool);
+yield A(x: bool) B(y: bool);
 \end{lstlisting}
 At the EventGraph level these are two PUBLIC writes on concurrent
-nodes.  Read as a game, the analysis is unambiguous: A and B move
-simultaneously without observing each other.  Read as a Solidity
-contract, the implementation has to be cautious.  If A's
+nodes.  Read as a game, the analysis is unambiguous: A and B make
+simultaneous strategic choices without observing each other.  Read
+as a Solidity contract, the implementation has to be cautious.  If A's
 transaction is in the public mempool, B can read \TT{x} before
 deciding \TT{y}.  An ordering adversary (a builder, or a competing
 searcher) can promote the read-then-write transaction.  The
-specification's notion of simultaneity is broken by the deployment
-target's notion of transaction ordering.
+specification's information-independence property is broken by the
+deployment target's notion of transaction ordering.
 
 This is a specific subclass of MEV --- \emph{observation-before-action}
-on simultaneous moves --- and the canonical mitigation is well
+on independent public moves --- and the canonical mitigation is well
 known~\citep{Blum1983CoinFlipping,Pedersen1991Commitment,breidenbach2018enter}:
 each role first commits to a hash of their move, and only after
 all roles have committed does anybody reveal.  Vegas applies the
@@ -83,7 +83,7 @@ After the rewrite, no \REVEAL node is on the frontier of any
 configuration in which a sibling \COMMIT is still unresolved.
 \Cref{sec:eventgraph:frontier} called this the structural
 information barrier; the rewrite is what guarantees it for any
-group of originally-simultaneous public moves.
+group of originally independent public moves.
 
 \subsection{Illustration}
 
@@ -151,12 +151,12 @@ commit-then-reveal pair of contract functions per rewritten
 action; the Solidity backend uses the hidden write's payload as
 the input to a hash and stores the hash, then on reveal verifies
 the hash and assigns the public field.  The Gambit backend reads
-the rewritten graph as a sequence of two simultaneous-move rounds
-(commits, then reveals); information sets are computed from the
-new graph in the usual way, and they correctly reflect the
-informational barrier.  No backend-specific commit-reveal logic
-exists: the property is paid for once, in the IR, and consumed
-everywhere.
+the rewritten graph as two independence-preserving frontier
+stages (commits, then reveals); information sets are computed
+from the new graph in the usual way, and they correctly reflect
+the informational barrier.  No backend-specific commit-reveal
+logic exists: the property is paid for once, in the IR, and
+consumed everywhere.
 
 \subsection{What the rewrite does \emph{not} do}
 
