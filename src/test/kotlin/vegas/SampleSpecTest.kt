@@ -37,6 +37,13 @@ private fun typedCompile(src: String) = run {
     vegas.frontend.compileToIR(ast)
 }
 
+/** typecheck-then-compile from an example file path. */
+private fun typedCompileFile(path: String) = run {
+    val ast = vegas.frontend.parseFile(path)
+    vegas.typeCheck(ast)
+    vegas.frontend.compileToIR(ast)
+}
+
 class SampleSpecTest : FreeSpec({
 
     "Dist invariants" - {
@@ -89,8 +96,7 @@ class SampleSpecTest : FreeSpec({
     "SampleSpec wiring from chance roles" - {
 
         "MontyHallChance: Host's draw nodes are sample nodes with uniform dist over the door domain" {
-            val ast = parseFile("examples/MontyHallChance.vg")
-            val ir = compileToIR(ast)
+            val ir = typedCompileFile("examples/MontyHallChance.vg")
             val host = RoleId("Host")
 
             host shouldBe (ir.chanceRoles.singleOrNull() ?: error("Host should be the only chance role"))
@@ -126,8 +132,7 @@ class SampleSpecTest : FreeSpec({
         }
 
         "Strategic roles get no sample spec" {
-            val ast = parseFile("examples/MontyHallChance.vg")
-            val ir = compileToIR(ast)
+            val ir = typedCompileFile("examples/MontyHallChance.vg")
             val guest = RoleId("Guest")
 
             val guestNodes = ir.dag.actions.filter { ir.dag.owner(it) == guest }
@@ -140,8 +145,7 @@ class SampleSpecTest : FreeSpec({
         "Join steps of chance roles are not sample nodes" {
             // A chance role's join step has no parameters and is not itself a
             // random draw; only its later yield/commit/reveal nodes are.
-            val ast = parseFile("examples/MontyHallChance.vg")
-            val ir = compileToIR(ast)
+            val ir = typedCompileFile("examples/MontyHallChance.vg")
             val host = RoleId("Host")
 
             val hostJoin = ir.dag.actions
@@ -527,6 +531,22 @@ class SampleSpecTest : FreeSpec({
             ir.burn shouldBe Expr.Const.IntVal(10)
         }
 
+        "let-bound variable inside a burn expression substitutes correctly" {
+            // The let-substitution in Transform.kt used to drop the burn
+            // field when reconstructing Outcome.Value. With burn referring
+            // to a let-bound variable, the IR would have either lost the
+            // burn entirely or referenced an unbound name.
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw let x: int = 7 in { P -> 0; burn x }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            ir.burn shouldBe Expr.Const.IntVal(7)
+        }
+
         "no burn item leaves GameIR.burn at the default 0" {
             val src = """
                 game main() {
@@ -655,7 +675,7 @@ class SampleSpecTest : FreeSpec({
             //   * address_Sample / done_Sample / claimed_Sample slots
             //   * withdraw_Sample function
             // Strategic role gates are still expected.
-            val ir = compileToIR(parseFile("examples/Lottery.vg"))
+            val ir = typedCompileFile("examples/Lottery.vg")
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
             for (forbidden in listOf(

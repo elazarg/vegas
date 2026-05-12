@@ -90,9 +90,10 @@ fun renameVar(exp: Exp, from: VarId, to: VarId): Exp {
 fun renameVarInOutcome(outcome: Outcome, from: VarId, to: VarId): Outcome {
     return when (outcome) {
         is Outcome.Value -> copySpan(
-            Outcome.Value(outcome.ts.mapValues { (_, exp) ->
-                renameVar(exp, from, to)
-            }),
+            Outcome.Value(
+                ts = outcome.ts.mapValues { (_, exp) -> renameVar(exp, from, to) },
+                burn = outcome.burn?.let { renameVar(it, from, to) },
+            ),
             outcome
         )
         is Outcome.Cond -> copySpan(
@@ -185,9 +186,10 @@ fun substituteVar(exp: Exp, varId: VarId, replacement: Exp): Exp {
 fun substituteVarInOutcome(outcome: Outcome, varId: VarId, replacement: Exp): Outcome {
     return when (outcome) {
         is Outcome.Value -> copySpan(
-            Outcome.Value(outcome.ts.mapValues { (_, exp) ->
-                substituteVar(exp, varId, replacement)
-            }),
+            Outcome.Value(
+                ts = outcome.ts.mapValues { (_, exp) -> substituteVar(exp, varId, replacement) },
+                burn = outcome.burn?.let { substituteVar(it, varId, replacement) },
+            ),
             outcome
         )
         is Outcome.Cond -> copySpan(
@@ -244,8 +246,10 @@ private fun desugar(outcome: Outcome, names: List<Pair<VarDec, Exp>>): Outcome.V
     }
 
     is Outcome.Cond -> {
-        val ifTrue = desugar(outcome.ifTrue, names).ts
-        val ifFalse = desugar(outcome.ifFalse, names).ts
+        val ifTrueVal = desugar(outcome.ifTrue, names)
+        val ifFalseVal = desugar(outcome.ifFalse, names)
+        val ifTrue = ifTrueVal.ts
+        val ifFalse = ifFalseVal.ts
         fun safeGetRole(m: Map<Role, Exp>, role: Role): Exp {
             try {
                 return m.getValue(role)
@@ -257,7 +261,19 @@ private fun desugar(outcome: Outcome, names: List<Pair<VarDec, Exp>>): Outcome.V
         val ts = ifTrue.keys.associateWith {
             copySpan(Exp.Cond(outcome.cond, safeGetRole(ifTrue, it), safeGetRole(ifFalse, it)), it)
         }
-        copySpan(Outcome.Value(ts), outcome)
+        // Thread burn through the conditional, defaulting either branch's
+        // absent burn to 0 so the merged Cond is well-typed.
+        val burn: Exp? =
+            if (ifTrueVal.burn == null && ifFalseVal.burn == null) null
+            else copySpan(
+                Exp.Cond(
+                    outcome.cond,
+                    ifTrueVal.burn ?: Exp.Const.Num(0),
+                    ifFalseVal.burn ?: Exp.Const.Num(0),
+                ),
+                outcome,
+            )
+        copySpan(Outcome.Value(ts, burn), outcome)
     }
 
     is Outcome.Let -> {

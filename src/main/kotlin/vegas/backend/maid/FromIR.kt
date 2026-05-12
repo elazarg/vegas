@@ -372,6 +372,12 @@ private class MaidConverter(private val ir: GameIR) {
             // is well-formed; this matches the Gambit-side fallback for
             // null-dist sample nodes.
             val rowProbs: List<Double> = if (group.dist != null) {
+                // After expandCommitReveal moves a sample's self-only
+                // guard onto the commit, exactly one of {commit, reveal}
+                // carries a non-trivial guard. Picking firstOrNull here
+                // is deterministic because actionDagFromPhases inserts
+                // metas in phase-index order and that order is preserved
+                // through expansion.
                 val guardingMeta = group.metas.firstOrNull { !isTrivialTrue(it.spec.guardExpr) }
                     ?: group.metas.first()
                 val effective = projectDistThroughSelfGuard(guardingMeta, group.field, group.dist) ?: group.dist

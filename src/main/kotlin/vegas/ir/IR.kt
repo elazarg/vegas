@@ -144,11 +144,18 @@ sealed class EntropySource {
  *
  * Semantics of `~ D where phi(x)`: the value is drawn from the conditional
  * distribution `D | phi`. Equivalently, in standard probabilistic-
- * programming notation, `sample x ~ D; observe phi(x)`. Self-only guards
- * are projected statically into a renormalized prior; contextual guards
- * are conditioned per-trace at exploration time (Gambit) or rejected
- * (MAID, which cannot encode context-dependent supports). `where false`
- * is an unsatisfiable sample and is reported as a static error.
+ * programming notation, `sample x ~ D; observe phi(x)`. Two operational
+ * realizations of the same conditioning math, per backend:
+ *  - MAID projects self-only guards statically into a renormalized CPD;
+ *    contextual guards are rejected (MAID cannot encode context-dependent
+ *    supports).
+ *  - Gambit conditions per-trace: enumerateAssignmentsForAction filters
+ *    guard-failing values out of each frontier's move set, and
+ *    computeChanceProbabilities renormalizes the remaining priors so they
+ *    sum to 1. The Dist itself is never mutated.
+ *
+ * `where false` is an unsatisfiable sample and is reported as a static
+ * error by both backends.
  */
 data class SampleSpec(
     val dist: Dist?,
