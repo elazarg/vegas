@@ -73,9 +73,11 @@ named action is still unfinished and the window has expired.
 Bail is one-way, and the bailed role is always one with a
 genuinely outstanding action --- the caller cannot bail
 themselves, and bystanders with no outstanding dependency cannot
-be bailed.  A per-action deadline scheme would tighten the
-window further at the cost of substantially more state; the
-single-window design is the simpler starting point.
+be bailed.  The contract already stores a per-action timestamp
+slot per role (used for off-chain analytics); the bail policy
+consults only the single global \TT{lastTs} window, so tightening
+to per-action deadlines is a policy change against state that
+already exists.
 
 \subsection{Liveness in the game model}
 
@@ -92,18 +94,21 @@ check on the generated EFG verifies this mechanically.
 
 Two known limits worth flagging.
 
-\paragraph{Fair-play liveness is not statically checked.}  A
+\paragraph{Fair-play liveness has a partial check.}  A
 \emph{fair-play guard} is a \TT{where} clause whose role can
 always find a satisfying value, regardless of prior moves.  The
-language does not verify that today; a contextual guard like
+conservation enumeration (\S\ref{sec:language}) doubles as a
+fair-play check on its bounded subset: a contextual guard like
 \TT{yield B(y: int) where y != A.x \&\& y != A.x + 1 \&\& y != A.x - 1}
-over a type \TT{int = \{0..2\}} becomes unsatisfiable depending on
-\TT{A}'s play, forcing \TT{B} to quit through no fault of its own.
-The project's design notes sketch a static check
-(exhaustive enumeration over bounded types, or an SMT call for
-the general case) that would type the affected field as
-\TT{opt T} when satisfiability cannot be established; implementing
-it is on the TODO list under the name \emph{fair-play liveness}.
+over a type \TT{int = \{0..2\}} becomes unsatisfiable for every
+choice of \TT{A.x}, and the enumerator raises a dead-choice
+static error on every such reachable configuration.  What the
+check does not cover is games the enumerator cannot exhaustively
+explore (unbounded \TT{int} parameters, very deep trees); for
+those, the project's design notes sketch an SMT-call fallback
+that would type the affected field as \TT{opt T} when
+satisfiability cannot be established.  This is the open item
+under the name \emph{fair-play liveness}.
 
 \paragraph{Computational tractability is not checked either.}  A
 guard such as \TT{p * q == N} for a large semiprime \TT{N} is

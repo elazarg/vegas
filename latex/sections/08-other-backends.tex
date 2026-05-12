@@ -59,22 +59,20 @@ types from the global protocol.
 
 \subsection{Bitcoin / Lightning (sketch)}
 
-A proof-of-concept backend (\file{backend/bitcoin/}) targets the
-two-party Lightning channel for the subset of Vegas games with
-exactly two strategic roles.  Each EventGraph node is mapped to
-a state in a per-game state machine; the backend emits a
-textual listing of the Lightning protocol moves and transitions
-needed to realise the game (states, the role active at each
-state, and the legal transitions between states).  No Bitcoin
-script is generated --- the encoding to actual on-chain
-opcodes, the integration with a Lightning node, and the
-deployment work generally are all out-of-band.
+A backend (\file{backend/bitcoin/}) targets the two-party
+Lightning channel for the subset of Vegas games with exactly
+two strategic roles.  Each EventGraph node maps to a state in a
+per-game state machine; the backend emits the full protocol
+state machine, the role active at each state, the legal
+transitions, and the per-state abort balances --- ready to drive
+a Lightning runtime.  The two pieces still out-of-band are the
+on-chain Bitcoin script emission and the Lightning-node
+adapter; a two-party Vegas game compiles to a deployable
+state-machine artifact today, modulo that adapter.
 
-The value of this backend in the present work is as an
-existence sketch: the EventGraph abstraction can in principle
-lift to a non-EVM execution layer with completely different
-cryptographic primitives.  A proper Bitcoin/Lightning backend
-is on the future-work list.
+This backend also serves as an existence proof that the
+EventGraph abstraction can lift to a non-EVM execution layer
+with completely different cryptographic primitives.
 
 \subsection{MAID}
 

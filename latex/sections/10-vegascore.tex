@@ -148,11 +148,13 @@ an explicit rewrite (\S\ref{sec:commit-reveal}) that introduces
 commit-reveal pairs for concurrent public writes.  VegasCore
 models programs whose graphs are \emph{already} in commit-reveal
 normal form: its calculus has commit and reveal as primitive
-constructors and never needs a rewrite.  The pass in Vegas is
-the bridge between a user-friendly surface and the canonical
-form VegasCore governs; the strategic equivalence of the
-pre- and post-rewrite graphs is a property one would want to
-state and prove on the Vegas side; it is not yet stated.
+constructors and never needs a rewrite.  VegasCore's barrier
+theorem (\S\ref{sec:vegascore:theorems}) holds for any program
+in normal form.  The open piece is a matching \emph{equivalence}
+theorem: that the Vegas rewrite preserves the strategic content
+of the pre-rewrite graph.  The expected route is a bisimulation
+between the pre- and post-rewrite frontier machines under the
+actor's view; we have not stated it formally.
 
 \paragraph{The operational handler layer.}  Quit handlers,
 bail-out timeouts, and the structural choices in the Solidity
