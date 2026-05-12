@@ -30,9 +30,12 @@ package vegas.backend.maid
 
 import vegas.FieldRef
 import vegas.RoleId
+import vegas.ir.Dist
 import vegas.ir.Expr
 import vegas.ir.GameIR
+import vegas.ir.NodeMeta
 import vegas.ir.Type
+import vegas.ir.asBool
 import vegas.ir.asInt
 import vegas.ir.observableFieldsAt
 import vegas.semantics.eval
@@ -342,7 +345,7 @@ private class MaidConverter(private val ir: GameIR) {
     private fun createChanceCPDs() {
         val emittedFor = mutableSetOf<String>()
         for (meta in ir.dag.metas) {
-            val dist = meta.sample?.dist ?: continue
+            val rawDist = meta.sample?.dist ?: continue
             for (param in meta.spec.params) {
                 val fieldRef = FieldRef(meta.struct.owner, param.name)
                 val nodeId = fieldToNodeId[fieldRef] ?: continue
@@ -353,9 +356,10 @@ private class MaidConverter(private val ir: GameIR) {
                     val sz = nodes.firstOrNull { it.id == p }?.domain?.size ?: 1
                     acc * sz
                 }
+                val effective = projectDistThroughSelfGuard(meta, fieldRef, rawDist) ?: rawDist
                 val rowProbs = node.domain.map { dv ->
                     val const = domainValToConst(dv)
-                    val w = dist.weight(const)
+                    val w = effective.weight(const)
                     if (w == null) 0.0
                     else w.numerator.toDouble() / w.denominator.toDouble()
                 }
@@ -363,6 +367,37 @@ private class MaidConverter(private val ir: GameIR) {
                 cpds.add(TabularCPD(node = nodeId, parents = parents, values = cpdValues))
             }
         }
+    }
+
+    /**
+     * For a single-parameter sample node with a self-only guard, restrict the
+     * prior to guard-surviving values and renormalize. Returns null if the
+     * guard cannot be evaluated locally (contextual reads — already rejected
+     * upstream — or unsupported expression shapes), or if no value survives.
+     */
+    private fun projectDistThroughSelfGuard(
+        meta: NodeMeta,
+        field: FieldRef,
+        dist: Dist,
+    ): Dist? {
+        if (meta.struct.guardReads.isNotEmpty()) return null
+        val guard = meta.spec.guardExpr
+        if (guard is Expr.Const.BoolVal && guard.v) return dist
+        val survivors = mutableListOf<Pair<Expr.Const, vegas.Rational>>()
+        for ((v, w) in dist.support) {
+            val ok = try {
+                val read: (FieldRef) -> Expr.Const = { f ->
+                    if (f == field) v else error("guard reads unexpected field $f")
+                }
+                eval(read, guard).asBool()
+            } catch (_: Exception) {
+                return null
+            }
+            if (ok) survivors.add(v to w)
+        }
+        if (survivors.isEmpty()) return null
+        val total = survivors.map { it.second }.reduce { a, b -> a + b }
+        return Dist(survivors.map { (v, w) -> v to (w / total) })
     }
 
     private fun domainValToConst(dv: Any): Expr.Const = when (dv) {

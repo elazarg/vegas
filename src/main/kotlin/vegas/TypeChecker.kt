@@ -638,9 +638,9 @@ internal class ProtocolTyper(
                             validateDistSupport(vd.dist, vd.type, q)
                         }
                     }
-                    if (q.params.count { it.dist != null } > 1) {
+                    if (q.params.any { it.dist != null } && q.params.size != 1) {
                         throw StaticError(
-                            "At most one parameter may carry a '~ ...' annotation; joint distributions over multi-parameter samples are not yet supported",
+                            "Distribution annotations '~ ...' are currently only supported on single-parameter sample actions; joint distributions are not yet supported",
                             q,
                         )
                     }

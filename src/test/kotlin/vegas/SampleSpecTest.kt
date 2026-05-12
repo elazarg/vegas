@@ -281,5 +281,45 @@ class SampleSpecTest : FreeSpec({
             cpd.values[0].single() shouldBe 0.75
             cpd.values[1].single() shouldBe 0.25
         }
+
+        "rejects ~ on a single parameter of a multi-parameter action" {
+            // A single ~ on one of several parameters would silently lose
+            // the annotation at lowering (singleOrNull is null when there
+            // are 2+ params). Reject at the typechecker instead.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Pair() ${'$'} 10;
+                  join B() ${'$'} 10;
+                  yield Pair(a: face ~ weighted { 0: 3, 1: 1 }, b: face);
+                  yield B(call: face);
+                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "MAID chance CPD folds self-only guard into the prior" {
+            // The guard `where Coin.side != 1` is self-only (reads only the
+            // sampled field) so it should restrict the prior to {0} and
+            // renormalize to a deterministic distribution.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1;
+                  yield Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val maid = vegas.backend.maid.generateMaid(ir)
+            val coinNode = maid.nodes.single { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
+            val cpd = maid.cpds.single { it.node == coinNode.id }
+            cpd.values.size shouldBe 2
+            cpd.values[0].single() shouldBe 1.0
+            cpd.values[1].single() shouldBe 0.0
+        }
     }
 })
