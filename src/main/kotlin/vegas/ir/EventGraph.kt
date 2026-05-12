@@ -293,11 +293,13 @@ class EventGraph private constructor(
                 // an illegal value cannot be unilaterally chosen and revealed
                 // later. Keep the guard on the commit and trivialize the
                 // reveal so any consumer sees a single guarded chance
-                // decision. For strategic actions the original split holds:
-                // the player commits freely and the reveal-time check
-                // enforces the constraint on the revealed value.
-                val sampleSelfGuard = meta.sample != null && struct.guardReads.isEmpty() &&
-                    spec.guardExpr !is Expr.Const.BoolVal
+                // decision. This includes BoolVal(false) (unsatisfiable
+                // sample), which a backend can then surface as a dead-
+                // choice error rather than crashing downstream. For
+                // strategic actions the original split holds: the player
+                // commits freely and the reveal-time check enforces the
+                // constraint on the revealed value.
+                val sampleSelfGuard = meta.sample != null && struct.guardReads.isEmpty()
 
                 val commitGuard = if (sampleSelfGuard) spec.guardExpr else Expr.Const.BoolVal(true)
                 val revealGuard = if (sampleSelfGuard) Expr.Const.BoolVal(true) else spec.guardExpr

@@ -213,7 +213,18 @@ internal class TreeUnroller(
 
         // Group by role, maintaining canonical order
         val movesByRole = playMoves.groupBy({ it.role }, { it })
-        val rolesInOrder = movesByRole.keys.sortedBy { it.name }
+
+        // Chance roles with actions but no surviving moves never appear in
+        // movesByRole because enabledMoves does not synthesize a quit move
+        // for them. Without visiting them, the dead-choice check cannot
+        // fire and an unsatisfiable sample guard falls through to the
+        // internal FinalizeFrontier error.
+        val actionsByRole = config.actionsByRole(ir.dag)
+        val deadChanceRoles = actionsByRole.keys.filter { role ->
+            role !in movesByRole &&
+                actionsByRole.getValue(role).any { ir.dag.isSampleNode(it) && ir.dag.params(it).isNotEmpty() }
+        }
+        val rolesInOrder = (movesByRole.keys + deadChanceRoles).sortedBy { it.name }
 
         // Build tree by iterating through roles, creating decision nodes
         return buildRoleDecisions(
@@ -259,10 +270,11 @@ internal class TreeUnroller(
         val hasQuit = config.history.quit(role)
 
         // If the role has parameterized actions "in scope" but no enabled moves,
-        // we treat it as a static error (unsatisfiable where/guards), unless role already quit.
+        // we treat it as a static error (unsatisfiable where/guards), unless role
+        // already quit. This applies to chance roles too: a Sample whose guard
+        // kills every value in its dist support is malformed, not a fallback.
         if (
             failOnDeadChoices &&
-            !isChance &&
             !hasQuit &&
             actionsForRole.isNotEmpty() &&
             allParams.isNotEmpty() &&

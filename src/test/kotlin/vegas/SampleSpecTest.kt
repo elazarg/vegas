@@ -382,6 +382,27 @@ class SampleSpecTest : FreeSpec({
             }
         }
 
+        "Gambit rejects a chance node whose self-only guard is unsatisfiable" {
+            // `where false` is a self-only guard that kills every value in
+            // the prior support. The compiler must surface this as a static
+            // error from the Gambit pipeline, not silently emit a broken
+            // chance node or crash with the internal FinalizeFrontier check.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1 }) where false
+                        Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            shouldThrow<StaticError> {
+                generateExtensiveFormGame(ir, includeAbandonment = false)
+            }
+        }
+
         "MAID rejects a chance node whose self-only guard is unsatisfiable" {
             // Empty support after projection means the sample cannot fire;
             // emitting any CPD silently would be wrong. Throw instead.
