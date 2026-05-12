@@ -89,8 +89,8 @@ data class NodeStruct(
  * @param id stable identifier within the DAG
  * @param spec semantic payload (params, join, guard)
  * @param struct structural metadata (owner, writes, visibility, guard reads)
- * @param sample non-null iff this node is a Sample (chance) draw — i.e.
- *   the action's writes are produced by a random source rather than chosen
+ * @param sample non-null iff this node is a Sample (chance) draw: the
+ *   action's writes are produced by a random source rather than chosen
  *   strategically. Backends test sample-ness via [EventGraph.isSampleNode].
  * @property kind derived from [spec] and [struct].
  */
@@ -288,20 +288,30 @@ class EventGraph private constructor(
                 }
                 val revealStruct = struct.copy(visibility = revealVis)
 
-                // Commit spec:
-                //  - KEEP join (deposit happens at commit time)
-                //  - trivial guard (always allowed to commit)
+                // For sample (chance) nodes with a self-only guard, the
+                // value is drawn at commit time, so the guard binds there:
+                // an illegal value cannot be unilaterally chosen and revealed
+                // later. Keep the guard on the commit and trivialize the
+                // reveal so any consumer sees a single guarded chance
+                // decision. For strategic actions the original split holds:
+                // the player commits freely and the reveal-time check
+                // enforces the constraint on the revealed value.
+                val sampleSelfGuard = meta.sample != null && struct.guardReads.isEmpty() &&
+                    spec.guardExpr !is Expr.Const.BoolVal
+
+                val commitGuard = if (sampleSelfGuard) spec.guardExpr else Expr.Const.BoolVal(true)
+                val revealGuard = if (sampleSelfGuard) Expr.Const.BoolVal(true) else spec.guardExpr
+
+                // Commit spec: KEEP join (deposit happens at commit time).
                 val commitSpec = spec.copy(
                     join = spec.join,
-                    guardExpr = Expr.Const.BoolVal(true)
+                    guardExpr = commitGuard,
                 )
 
-                // Reveal spec:
-                //  - original guard
-                //  - NO join (deposit already done)
+                // Reveal spec: NO join (deposit already done).
                 val revealSpec = spec.copy(
                     join = null,
-                    guardExpr = spec.guardExpr
+                    guardExpr = revealGuard,
                 )
 
                 val commitMeta = NodeMeta(

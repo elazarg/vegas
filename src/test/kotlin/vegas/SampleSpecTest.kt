@@ -19,7 +19,7 @@ import vegas.ir.Expr
  *
  * Every action owned by a chance role gets a SampleSpec; the prior is
  * either an explicit `~ uniform/weighted { ... }` annotation lowered from
- * the surface, or — failing that — an inferred uniform over the parameter
+ * the surface, or (failing that) an inferred uniform over the parameter
  * domain. Multi-parameter / unbounded-int chance actions land with
  * dist=null and backends fall back to uniform-over-surviving-moves.
  */
@@ -347,6 +347,39 @@ class SampleSpecTest : FreeSpec({
             cpd.values.size shouldBe 2
             cpd.values[0].single() shouldBe 1.0
             cpd.values[1].single() shouldBe 0.0
+        }
+
+        "Gambit emits a deterministic chance branch when commit-reveal expansion meets a self-only guard" {
+            // Same shape as the MAID test: Coin's pure-public sample is
+            // concurrent with Bettor, so expandCommitReveal splits it.
+            // With the self-only guard moved onto the commit, Gambit sees
+            // a single guarded chance decision and emits only the legal
+            // branch (side = 0). Bettor's own commit is still binary
+            // (Bettor picks 0 or 1 for `call`), so we check chance nodes
+            // specifically.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin() ${'$'} 10;
+                  join Bettor() ${'$'} 10;
+                  yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
+                        Bettor(call: face);
+                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
+            val chanceLines = efg.lines().filter { it.startsWith("c ") }
+            check(chanceLines.isNotEmpty()) { "no chance lines in EFG:\n$efg" }
+            for (line in chanceLines) {
+                check(!line.contains("Hidden(1)")) {
+                    "chance node enumerates Hidden(1); guard projection on commit-expanded sample failed: $line"
+                }
+            }
+            // At least one chance node should be the Coin commit, picking only Hidden(0).
+            check(chanceLines.any { it.contains("\"Hidden(0)\" 1") }) {
+                "expected a deterministic chance branch on Hidden(0); got:\n${chanceLines.joinToString("\n")}"
+            }
         }
 
         "MAID rejects a chance node whose self-only guard is unsatisfiable" {

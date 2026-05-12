@@ -339,7 +339,7 @@ private class MaidConverter(private val ir: GameIR) {
      * MAID nodes are deduplicated by (owner, param); a single chance node
      * may correspond to multiple actions (e.g. a commit / reveal pair).
      * We emit one CPD per chance node, using the Dist on any backing
-     * action — they all agree because Sample metadata is propagated
+     * action: they all agree because Sample metadata is propagated
      * identically through commit/reveal expansion.
      */
     private fun createChanceCPDs() {
@@ -386,8 +386,8 @@ private class MaidConverter(private val ir: GameIR) {
     /**
      * For a single-parameter sample node with a self-only guard, restrict the
      * prior to guard-surviving values and renormalize. Returns null if the
-     * guard cannot be evaluated locally (contextual reads — already rejected
-     * upstream — or unsupported expression shapes). Throws if the guard
+     * guard cannot be evaluated locally (contextual reads, already rejected
+     * upstream, or unsupported expression shapes). Throws if the guard
      * leaves no value in the support: an unsatisfiable chance node is a
      * malformed program, not a fallback case.
      */
@@ -414,7 +414,7 @@ private class MaidConverter(private val ir: GameIR) {
         if (survivors.isEmpty()) {
             throw IllegalStateException(
                 "Chance node ${field.owner.name}.${field.param.name}: " +
-                "self-only guard eliminates every value in the prior support — " +
+                "self-only guard eliminates every value in the prior support: " +
                 "the sample is unsatisfiable. Widen the distribution or the guard."
             )
         }

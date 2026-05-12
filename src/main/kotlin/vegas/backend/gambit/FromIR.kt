@@ -367,8 +367,8 @@ internal class TreeUnroller(
      * If every Action move's Sample node carries an explicit Dist, each
      * move's probability is `dist.weight(value) / sum(weights)`. If any
      * move lacks an explicit Dist (multi-parameter chance node, unbounded
-     * domain), we fall back to uniform over surviving moves — the same
-     * answer the explicit path gives when the underlying dist is uniform.
+     * domain), we fall back to uniform over surviving moves, which is the
+     * same answer the explicit path gives when the underlying dist is uniform.
      */
     private fun computeChanceProbabilities(
         roleMoves: List<Label.Play>,
