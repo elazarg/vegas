@@ -709,8 +709,11 @@ internal class ProtocolTyper(
                     checkWhere(q, st.copy(roles = roles2, randomRoles = randomRoles2), m)
 
                     // Handler Policy B: Handlers can read all currently visible fields
-                    // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal
-                    if (!isJoin && !isReveal) checkHandler(q, roles2, st.fields)
+                    // Note: handlers allowed on yield and commit (for quit behavior), not on join/reveal.
+                    // Quit handlers allocate the strategic pot among the surviving
+                    // strategic roles; random / sample roles are absent from
+                    // withdraw and so absent from handler allocation too.
+                    if (!isJoin && !isReveal) checkHandler(q, roles2 - randomRoles2, st.fields)
 
                     deltaMaps += m
                 }

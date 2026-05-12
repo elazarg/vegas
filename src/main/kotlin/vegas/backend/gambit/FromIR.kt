@@ -444,12 +444,21 @@ internal class TreeUnroller(
     }
 
     private fun computePayoffs(config: Configuration): Map<RoleId, Expr.Const> {
-        fun computeUtility(role: RoleId, expr: Expr): Expr.Const.IntVal {
+        // Compute utilities for every strategic role, not just those
+        // mentioned in `ir.payoffs`. A role that joined (depositing) but
+        // does not appear in the `withdraw` clause has gross payout 0
+        // and net utility -deposit; conservation must see that loss,
+        // otherwise an omitted depositor is invisible to the check.
+        fun computeUtility(role: RoleId, expr: Expr?): Expr.Const.IntVal {
             val deposit: Expr.Const.IntVal = ir.dag.deposit(role)
-            val outcome: Expr.Const.IntVal = eval({ config.history.get(it) }, expr).toOutcome()
+            val outcome: Expr.Const.IntVal = if (expr != null) {
+                eval({ config.history.get(it) }, expr).toOutcome()
+            } else {
+                Expr.Const.IntVal(0)
+            }
             return Expr.Const.IntVal(outcome.v - deposit.v)
         }
-        return ir.payoffs.mapValues { (role, expr) -> computeUtility(role, expr) }
+        return ir.roles.associateWith { role -> computeUtility(role, ir.payoffs[role]) }
     }
 
     /**

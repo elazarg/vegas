@@ -623,6 +623,43 @@ class SampleSpecTest : FreeSpec({
             val ir = typedCompileFile("examples/MontyHallChance.vg")
             vegas.backend.gambit.verifyConservation(ir)
         }
+
+        "depositor omitted from withdraw fails conservation (not silently accepted)" {
+            // Without all-strategic-roles iteration, B's deposit of 10
+            // would be invisible to the conservation walker and the
+            // check would pass on an obviously-broken game.
+            val src = """
+                game main() {
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield A(g: bool);
+                  yield B(g: bool);
+                  withdraw { A -> 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            shouldThrow<vegas.backend.gambit.ConservationViolation> {
+                vegas.backend.gambit.verifyConservation(ir)
+            }
+        }
+    }
+
+    "Random roles excluded from quit-handler allocation" - {
+        "quit handler that names a random role fails typecheck" {
+            // The handler must allocate to the surviving STRATEGIC roles
+            // only. Naming a random role (Coin) here is rejected because
+            // random roles cannot appear in withdraw / handlers.
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Coin;
+                  join A() ${'$'} 10;
+                  yield A(g: face) || { Coin -> 10 };
+                  sample (w: face);
+                  withdraw (A.g == Sample.w) ? { A -> 10 } : { A -> 0; burn 10 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
     }
 
     "PrevRandao entropy for anonymous sample (EVM)" - {

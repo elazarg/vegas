@@ -15,7 +15,7 @@ fun compileToIR(ast: GameAst): GameIR {
         (if (hasSampleBinding(ast.game)) setOf(SAMPLE_OWNER) else emptySet())
 
     val phases = collectPhases(ast.game, typeEnv)
-    val payoffs = extractPayoffs(ast.game, typeEnv)
+    val payoffs = extractPayoffs(ast.game, typeEnv, chanceRoles)
 
     val dag = actionDagFromPhases(phases, chanceRoles)
         ?: error("EventGraph construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
@@ -862,15 +862,20 @@ private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
 
 private data class DesugaredOutcome(val payoffs: Map<RoleId, Expr>, val burn: Expr)
 
-private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): DesugaredOutcome {
+private fun extractPayoffs(
+    ext: Ext,
+    typeEnv: Map<AstType.TypeId, AstType>,
+    chanceRoles: Set<RoleId>,
+): DesugaredOutcome {
     val allHandlers = collectAllHandlers(ext)
     val terminalOutcome = extractTerminalOutcome(ext)
     val phases = collectPhases(ext, typeEnv)
     val stakes = computeStakes(ext)
-    // Sample bindings live under SAMPLE_OWNER but the label has no actor
-    // and no payout. Excluding it here keeps it out of the split / burn
-    // synthesis (which iterates allRoles to compute survivor shares).
-    val allRoles = phases.flatMap { it.roles() }.toSet() - SAMPLE_OWNER
+    // Split / burn synthesis allocates the strategic pot among the
+    // surviving *strategic* roles. Chance roles (random / sample) are
+    // not depositors-with-payout: they have no claim on the pot, so
+    // they must not appear in synthesized handler payoffs.
+    val allRoles = phases.flatMap { it.roles() }.toSet() - chanceRoles
 
     // Check if there are any split/burn handlers (not null - null just makes fields optional)
     val hasSplitBurn = allHandlers.any { it.handler is Outcome.Split || it.handler is Outcome.Burn }
