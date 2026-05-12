@@ -23,7 +23,7 @@
  * This backend therefore gates on `NodeStruct.guardReads`: if any node's
  * guard references a field written by a different node, MAID emission is
  * refused with an [UnsupportedMaidGuardException]. Self-only guards remain
- * accepted (their domain restriction is currently still discarded — a TODO
+ * accepted (their domain restriction is currently still discarded; a TODO
  * for the self-only encoding pass).
  */
 package vegas.backend.maid

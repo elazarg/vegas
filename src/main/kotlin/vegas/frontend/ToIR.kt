@@ -24,7 +24,8 @@ fun compileToIR(ast: GameAst): GameIR {
         name = ast.name,
         roles = roles,
         dag = EventGraph.expandCommitReveal(dag),
-        payoffs = payoffs,
+        payoffs = payoffs.payoffs,
+        burn = payoffs.burn,
     )
 
     // IMPORTANT: Verify that IR contains no frontend Exp.Let nodes
@@ -736,7 +737,7 @@ private fun computeStakes(ext: Ext): Map<RoleId, Int> {
 }
 
 /**
- * Compute alive(r) — global predicate: has role NOT timed out anywhere?
+ * Compute alive(r): global predicate of whether the role timed out anywhere.
  *
  * For split/burn handlers, a role is "alive" if all their params (including hidden commits)
  * have been submitted. This differs from the original reveal-requirement semantics.
@@ -854,7 +855,9 @@ private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
     is Ext.Value -> ext.outcome
 }
 
-private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+private data class DesugaredOutcome(val payoffs: Map<RoleId, Expr>, val burn: Expr)
+
+private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): DesugaredOutcome {
     val allHandlers = collectAllHandlers(ext)
     val terminalOutcome = extractTerminalOutcome(ext)
     val phases = collectPhases(ext, typeEnv)
@@ -882,7 +885,7 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
 
     // With split/burn handlers, we need to build payoffs with proper failure conditions
     // Start with terminal outcome payoffs
-    var currentPayoffs = desugarOutcome(terminalOutcome, typeEnv)
+    var current = desugarOutcome(terminalOutcome, typeEnv)
 
     // Process handlers in reverse order (innermost first, then wrap with outer conditions)
     // Use effectiveHandlers which excludes null handlers (they don't affect payoffs)
@@ -896,10 +899,16 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
         // This ensures alive(r) only checks params from phases that have been reached
         val relevantPhases = phases.take(phaseIndex + 1)
 
-        val handlerPayoffs: Map<RoleId, Expr> = when (handler) {
+        val handlerDesugared: DesugaredOutcome = when (handler) {
             is Outcome.Split, is Outcome.Burn -> {
-                // Use alive(r) computed from phases up to this handler's phase
-                generateSplitBurnPayoffs(handler, allRoles, stakes, relevantPhases)
+                // Use alive(r) computed from phases up to this handler's phase.
+                // Synthesized split/burn payoffs leave the strategic-pot
+                // burn at 0 (the surface `burn N` item only appears in
+                // explicit Outcome.Value forms).
+                DesugaredOutcome(
+                    payoffs = generateSplitBurnPayoffs(handler, allRoles, stakes, relevantPhases),
+                    burn = Expr.Const.IntVal(0),
+                )
             }
 
             is Outcome.Value -> {
@@ -913,25 +922,29 @@ private fun extractPayoffs(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): Map
             }
         }
 
-        // Wrap: if stepFailed then handlerPayoffs else currentPayoffs
-        currentPayoffs = allRoles.associateWith { role ->
+        // Wrap: if stepFailed then handlerDesugared else current
+        val mergedPayoffs = allRoles.associateWith { role ->
             Expr.Ite(
                 stepFailed,
-                handlerPayoffs[role] ?: Expr.Const.IntVal(0),
-                currentPayoffs[role] ?: Expr.Const.IntVal(0)
+                handlerDesugared.payoffs[role] ?: Expr.Const.IntVal(0),
+                current.payoffs[role] ?: Expr.Const.IntVal(0)
             )
         }
+        val mergedBurn = Expr.Ite(stepFailed, handlerDesugared.burn, current.burn)
+        current = DesugaredOutcome(mergedPayoffs, mergedBurn)
     }
 
-    return currentPayoffs
+    return current
 }
 
-private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): Map<RoleId, Expr> {
+private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstType>): DesugaredOutcome {
     return when (outcome) {
         // Base case: direct value mapping
         is Outcome.Value -> {
-            outcome.ts.mapKeys { it.key.id }
+            val payoffs = outcome.ts.mapKeys { it.key.id }
                 .mapValues { lowerExpr(it.value, typeEnv) }
+            val burn = outcome.burn?.let { lowerExpr(it, typeEnv) } ?: Expr.Const.IntVal(0)
+            DesugaredOutcome(payoffs, burn)
         }
 
         // Conditional outcome
@@ -941,12 +954,14 @@ private fun desugarOutcome(outcome: Outcome, typeEnv: Map<AstType.TypeId, AstTyp
             val cond = lowerExpr(outcome.cond, typeEnv)
 
             // Merge: for each role, create ite expression
-            val allRoles = ifTrue.keys + ifFalse.keys
-            allRoles.associateWith { role ->
-                val t = ifTrue[role] ?: Expr.Const.IntVal(0) // Default to 0 if role not in branch
-                val f = ifFalse[role] ?: Expr.Const.IntVal(0)
+            val allRoles = ifTrue.payoffs.keys + ifFalse.payoffs.keys
+            val mergedPayoffs = allRoles.associateWith { role ->
+                val t = ifTrue.payoffs[role] ?: Expr.Const.IntVal(0)
+                val f = ifFalse.payoffs[role] ?: Expr.Const.IntVal(0)
                 Expr.Ite(cond, t, f)
             }
+            val mergedBurn = Expr.Ite(cond, ifTrue.burn, ifFalse.burn)
+            DesugaredOutcome(mergedPayoffs, mergedBurn)
         }
 
         // Let in outcome (desugar by substitution)

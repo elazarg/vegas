@@ -651,6 +651,12 @@ internal class ProtocolTyper(
                                     q,
                                 )
                             }
+                            if (isReveal) {
+                                throw StaticError(
+                                    "Distribution annotation '~ ...' is not allowed on a reveal step; place it on the originating commit instead",
+                                    q,
+                                )
+                            }
                             validateDistSupport(vd.dist, vd.type, q)
                         }
                     }

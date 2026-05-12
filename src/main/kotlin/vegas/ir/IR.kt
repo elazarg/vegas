@@ -141,6 +141,14 @@ sealed class EntropySource {
  *                  chance nodes, unbounded int domains, etc.); backends
  *                  fall back to uniform over surviving moves.
  * @property source Physical entropy source.
+ *
+ * Semantics of `~ D where phi(x)`: the value is drawn from the conditional
+ * distribution `D | phi`. Equivalently, in standard probabilistic-
+ * programming notation, `sample x ~ D; observe phi(x)`. Self-only guards
+ * are projected statically into a renormalized prior; contextual guards
+ * are conditioned per-trace at exploration time (Gambit) or rejected
+ * (MAID, which cannot encode context-dependent supports). `where false`
+ * is an unsatisfiable sample and is reported as a static error.
  */
 data class SampleSpec(
     val dist: Dist?,
@@ -187,12 +195,19 @@ data class Signature(
  * [chanceRoles] is derived from the DAG's per-node sample metadata; the
  * source of truth is per-node ([EventGraph.isSampleNode]), and this set
  * is the role-level projection.
+ *
+ * [burn] is the per-state amount of strategic-pot funds that leave the
+ * game without going to any role. It is the principled counterpart to
+ * the no-implicit-donors design: when a branch's role payouts do not
+ * total the deposits, `burn` accounts for the difference. Defaults to
+ * the constant 0 for games that do not use the `burn` outcome item.
  */
 data class GameIR(
     val name: String,
     val roles: Set<RoleId>,
     val dag: EventGraph,
     val payoffs: Map<RoleId, Expr>,
+    val burn: Expr = Expr.Const.IntVal(0),
 ) {
     val chanceRoles: Set<RoleId> get() = dag.chanceRoles
 }

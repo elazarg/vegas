@@ -23,6 +23,20 @@ import vegas.ir.Expr
  * domain. Multi-parameter / unbounded-int chance actions land with
  * dist=null and backends fall back to uniform-over-surviving-moves.
  */
+/**
+ * Parse, typecheck, and lower a source string in one call. Tests that
+ * assert specific IR / backend output for a *valid* program should use
+ * this helper rather than going directly through compileToIR: typecheck
+ * gates the program against the same rules production code applies, so
+ * sources that violate (e.g.) the random-in-withdraw prohibition don't
+ * silently get past the harness.
+ */
+private fun typedCompile(src: String) = run {
+    val ast = vegas.frontend.parseCode(src)
+    vegas.typeCheck(ast)
+    vegas.frontend.compileToIR(ast)
+}
+
 class SampleSpecTest : FreeSpec({
 
     "Dist invariants" - {
@@ -149,10 +163,10 @@ class SampleSpecTest : FreeSpec({
                   join Guest() ${'$'} 100;
                   yield Host(car: door ~ uniform { 0, 1, 2 });
                   yield Guest(d: door);
-                  withdraw { Host -> Guest.d == Host.car ? 0 : 200; Guest -> Guest.d == Host.car ? 200 : 0; }
+                  withdraw (Guest.d == Host.car) ? { Guest -> 100 } : { Guest -> 0; burn 100 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val host = RoleId("Host")
             val carNode = ir.dag.actions.single { ir.dag.owner(it) == host && ir.dag.spec(it).join == null }
             val dist = ir.dag.sampleSpec(carNode)?.dist
@@ -168,10 +182,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val coin = RoleId("Coin")
             val sampleNode = ir.dag.actions.single { ir.dag.owner(it) == coin && ir.dag.spec(it).join == null }
             val dist = ir.dag.sampleSpec(sampleNode)?.dist
@@ -205,7 +219,7 @@ class SampleSpecTest : FreeSpec({
                   join B() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1, 7 });
                   yield B(call: face);
-                  withdraw { Coin -> 0; B -> B.call == Coin.side ? 20 : 0 }
+                  withdraw { B -> B.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
@@ -226,10 +240,10 @@ class SampleSpecTest : FreeSpec({
                   random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 }) Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
             efg shouldContain "3/4"
             efg shouldContain "1/4"
@@ -243,7 +257,7 @@ class SampleSpecTest : FreeSpec({
                   join B() ${'$'} 10;
                   yield Pair(a: face ~ uniform { 0, 1 }, b: face ~ uniform { 0, 1 });
                   yield B(call: face);
-                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                  withdraw { B -> B.call == Pair.a ? 20 : 0 }
                 }
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
@@ -268,10 +282,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val maid = vegas.backend.maid.generateMaid(ir)
             val coinNode = maid.nodes.single { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
             val cpd = maid.cpds.single { it.node == coinNode.id }
@@ -293,7 +307,7 @@ class SampleSpecTest : FreeSpec({
                   join B() ${'$'} 10;
                   yield Pair(a: face ~ weighted { 0: 3, 1: 1 }, b: face);
                   yield B(call: face);
-                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                  withdraw { B -> B.call == Pair.a ? 20 : 0 }
                 }
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
@@ -310,10 +324,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1;
                   yield Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val maid = vegas.backend.maid.generateMaid(ir)
             val coinNode = maid.nodes.single { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
             val cpd = maid.cpds.single { it.node == coinNode.id }
@@ -335,10 +349,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
                         Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val maid = vegas.backend.maid.generateMaid(ir)
             val coinNode = maid.nodes.single {
                 it.type == vegas.backend.maid.MaidNodeType.CHANCE
@@ -364,10 +378,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
                         Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
             val chanceLines = efg.lines().filter { it.startsWith("c ") }
             check(chanceLines.isNotEmpty()) { "no chance lines in EFG:\n$efg" }
@@ -394,10 +408,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val efg = generateExtensiveFormGame(ir, includeAbandonment = false)
             val chanceLines = efg.lines().filter { it.startsWith("c ") }
             check(chanceLines.isNotEmpty()) { "no chance lines in EFG:\n$efg" }
@@ -426,10 +440,10 @@ class SampleSpecTest : FreeSpec({
                   join B() ${'$'} 10;
                   yield Pair(a: face, b: face);
                   yield B(call: face);
-                  withdraw { Pair -> 0; B -> B.call == Pair.a ? 20 : 0 }
+                  withdraw { B -> B.call == Pair.a ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val maid = vegas.backend.maid.generateMaid(ir)
             val chanceNodes = maid.nodes.filter { it.type == vegas.backend.maid.MaidNodeType.CHANCE }
             check(chanceNodes.size == 2) { "expected 2 chance nodes (a, b); got $chanceNodes" }
@@ -454,10 +468,10 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where false
                         Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             shouldThrow<StaticError> {
                 generateExtensiveFormGame(ir, includeAbandonment = false)
             }
@@ -473,11 +487,56 @@ class SampleSpecTest : FreeSpec({
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 0 && Coin.side != 1;
                   yield Bettor(call: face);
-                  withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
+                  withdraw { Bettor -> Bettor.call == Coin.side ? 20 : 0 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             shouldThrow<IllegalStateException> { vegas.backend.maid.generateMaid(ir) }
+        }
+    }
+
+    "Burn lowering" - {
+
+        "burn N reaches the IR as GameIR.burn" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  join P() ${'$'} 10;
+                  sample (w: face);
+                  yield P(g: face);
+                  withdraw (P.g == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            // burn must be a non-trivial expression (an Ite over the
+            // outcome condition) rather than the default constant 0.
+            check(ir.burn !is Expr.Const.IntVal || (ir.burn as Expr.Const.IntVal).v != 0) {
+                "Expected ir.burn to encode the conditional burn expression; got ${ir.burn}"
+            }
+        }
+
+        "burn N in a non-conditional outcome lowers to a constant" {
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            ir.burn shouldBe Expr.Const.IntVal(10)
+        }
+
+        "no burn item leaves GameIR.burn at the default 0" {
+            val src = """
+                game main() {
+                  join P() ${'$'} 10;
+                  yield P(g: bool);
+                  withdraw { P -> 10 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            ir.burn shouldBe Expr.Const.IntVal(0)
         }
     }
 
@@ -493,7 +552,7 @@ class SampleSpecTest : FreeSpec({
                   withdraw (P.guess == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val sampleOwner = vegas.frontend.SAMPLE_OWNER
             // The sample binding produces a sample node owned by the
             // synthetic owner with uniform-over-domain inferred.
@@ -519,7 +578,7 @@ class SampleSpecTest : FreeSpec({
                   withdraw (P.guess == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
                 }
             """.trimIndent()
-            val ir = compileToIR(parseCode(src))
+            val ir = typedCompile(src)
             val sampleOwner = vegas.frontend.SAMPLE_OWNER
             val sampleNode = ir.dag.actions.single { ir.dag.owner(it) == sampleOwner }
             val dist = ir.dag.sampleSpec(sampleNode)?.dist
@@ -548,6 +607,26 @@ class SampleSpecTest : FreeSpec({
                 game main() {
                   join Sample() ${'$'} 10;
                   withdraw { Sample -> 10 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "typechecker rejects ~ D on a reveal step" {
+            // The dist annotation must bind at the commit where the value
+            // is drawn, not at the reveal. Allowing it on reveal would
+            // attach a phantom SampleSpec to the reveal node and confuse
+            // every backend (commit-reveal expansion already propagates
+            // the originating commit's metadata).
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Host;
+                  join G() ${'$'} 10;
+                  commit Host(c: face);
+                  yield G(g: face);
+                  reveal Host(c: face ~ uniform { 0, 1 });
+                  withdraw { G -> 10 }
                 }
             """.trimIndent()
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
