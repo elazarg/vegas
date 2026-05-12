@@ -11,7 +11,8 @@ import vegas.ir.EventGraph.Companion.fromGraph
 fun compileToIR(ast: GameAst): GameIR {
     val typeEnv = ast.types
     val roles = findRoleIds(ast.game)
-    val chanceRoles = findChanceRoleIds(ast.game)
+    val chanceRoles = findChanceRoleIds(ast.game) +
+        (if (hasSampleBinding(ast.game)) setOf(SAMPLE_OWNER) else emptySet())
 
     val phases = collectPhases(ast.game, typeEnv)
     val payoffs = extractPayoffs(ast.game, typeEnv)
@@ -327,6 +328,25 @@ private fun collectPhases(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): List
                 ext.q.role.id to lowerQuery(ext.q, ext.kind, typeEnv)
             )
             listOf(Phase(phase)) + collectPhases(ext.ext, typeEnv)
+        }
+
+        is Ext.Sample -> {
+            // Each binding becomes its own independent phase, owned by the
+            // synthetic sample owner. No deposit, no guard, public visibility.
+            val samplePhases = ext.bindings.map { vd ->
+                val sig = Signature(
+                    join = null,
+                    parameters = listOf(Parameter(
+                        name = vd.v.id,
+                        type = lowerType(vd.type, typeEnv),
+                        visible = true,
+                        dist = vd.dist?.let { lowerDist(it) },
+                    )),
+                    guard = Guard(emptySet(), Expr.Const.BoolVal(true)),
+                )
+                Phase(mapOf(SAMPLE_OWNER to sig))
+            }
+            samplePhases + collectPhases(ext.ext, typeEnv)
         }
 
         is Ext.Value -> emptyList() // Terminal: no more phases
@@ -656,6 +676,7 @@ private fun collectAllHandlers(ext: Ext): List<HandlerInfo> {
 
                 result + go(ext.ext, phaseIndex + 1)
             }
+            is Ext.Sample -> go(ext.ext, phaseIndex + ext.bindings.size)
             is Ext.Value -> emptyList()
         }
     }
@@ -680,6 +701,7 @@ private fun collectHandlers(ext: Ext): List<Pair<Query, Outcome>> {
                 ?: emptyList()
             handler + collectHandlers(ext.ext)
         }
+        is Ext.Sample -> collectHandlers(ext.ext)
         is Ext.Value -> emptyList()
     }
 }
@@ -705,6 +727,7 @@ private fun computeStakes(ext: Ext): Map<RoleId, Int> {
                 }
                 collect(e.ext)
             }
+            is Ext.Sample -> collect(e.ext)
             is Ext.Value -> {}
         }
     }
@@ -827,6 +850,7 @@ private fun mergeHandlersIntoOutcome(
 private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
     is Ext.Bind -> extractTerminalOutcome(ext.ext)
     is Ext.BindSingle -> extractTerminalOutcome(ext.ext)
+    is Ext.Sample -> extractTerminalOutcome(ext.ext)
     is Ext.Value -> ext.outcome
 }
 

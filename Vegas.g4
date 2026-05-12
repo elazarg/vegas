@@ -26,12 +26,19 @@ typeExp
     | name=typeId                         # IdTypeExp
     ;
 
-ext : kind=('join' | 'yield' | 'reveal' | 'commit' | 'random') ('or' handler=groupHandler)? query+ ';' ext  # ReceiveExt
-    | 'withdraw' outcome                                                                                    # WithdrawExt
+ext : kind=('join' | 'yield' | 'reveal' | 'commit') ('or' handler=groupHandler)? query+ ';' ext  # ReceiveExt
+    | 'random' randomQuery+ ';' ext                                                               # RandomExt
+    | 'sample' '(' bindings+=varDec (',' bindings+=varDec)* ')' ';' ext                           # SampleExt
+    | 'withdraw' outcome                                                                          # WithdrawExt
     ;
 
 // Per-query handlers: only brace-wrapped outcomes (not split/burn keywords)
 query : role=roleId ('(' (decls+=varDec (',' decls+=varDec)*)? ')')? ('$' deposit=INT)? ('where' cond=exp)? ('||' handler=queryHandler)? ;
+
+// random declares a chance role: no deposit, no params at the join step,
+// no guard, no per-query handler. The role's later yield/commit/reveal
+// steps use the normal `query` production.
+randomQuery : role=roleId ('(' ')')? ;
 
 // Query handlers: outcomes for individual query timeouts
 queryHandler
@@ -58,7 +65,10 @@ outcome
     | '{' items+=item+ '}'                                          # OutcomeExp
     ;
 
-item : (role=roleId '->' exp ';'?) ;
+item
+    : role=roleId '->' exp ';'?    # RoleItem
+    | 'burn' amount=exp ';'?       # BurnItem
+    ;
 
 exp
     : '(' exp ')'                                            # ParenExp

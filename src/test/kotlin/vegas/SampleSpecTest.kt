@@ -164,7 +164,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
@@ -201,7 +201,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join B() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1, 7 });
                   yield B(call: face);
@@ -223,7 +223,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 }) Bettor(call: face);
                   withdraw { Coin -> 0; Bettor -> Bettor.call == Coin.side ? 20 : 0 }
@@ -239,7 +239,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Pair() ${'$'} 10;
+                  random Pair;
                   join B() ${'$'} 10;
                   yield Pair(a: face ~ uniform { 0, 1 }, b: face ~ uniform { 0, 1 });
                   yield B(call: face);
@@ -264,7 +264,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
@@ -289,7 +289,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Pair() ${'$'} 10;
+                  random Pair;
                   join B() ${'$'} 10;
                   yield Pair(a: face ~ weighted { 0: 3, 1: 1 }, b: face);
                   yield B(call: face);
@@ -306,7 +306,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1;
                   yield Bettor(call: face);
@@ -331,7 +331,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
                         Bettor(call: face);
@@ -360,7 +360,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 1
                         Bettor(call: face);
@@ -390,7 +390,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0 .. 2}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ weighted { 0: 3, 1: 1 });
                   yield Bettor(call: face);
@@ -422,7 +422,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Pair() ${'$'} 10;
+                  random Pair;
                   join B() ${'$'} 10;
                   yield Pair(a: face, b: face);
                   yield B(call: face);
@@ -450,7 +450,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where false
                         Bettor(call: face);
@@ -469,7 +469,7 @@ class SampleSpecTest : FreeSpec({
             val src = """
                 type face = {0, 1}
                 game main() {
-                  random Coin() ${'$'} 10;
+                  random Coin;
                   join Bettor() ${'$'} 10;
                   yield Coin(side: face ~ uniform { 0, 1 }) where Coin.side != 0 && Coin.side != 1;
                   yield Bettor(call: face);
@@ -478,6 +478,79 @@ class SampleSpecTest : FreeSpec({
             """.trimIndent()
             val ir = compileToIR(parseCode(src))
             shouldThrow<IllegalStateException> { vegas.backend.maid.generateMaid(ir) }
+        }
+    }
+
+    "Anonymous public sample and burn" - {
+
+        "sample binds a field under the synthetic Sample owner" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  join P() ${'$'} 10;
+                  sample (w: face);
+                  yield P(guess: face);
+                  withdraw (P.guess == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val sampleOwner = vegas.frontend.SAMPLE_OWNER
+            // The sample binding produces a sample node owned by the
+            // synthetic owner with uniform-over-domain inferred.
+            sampleOwner shouldBe ir.chanceRoles.single()
+            val sampleNode = ir.dag.actions.single { ir.dag.owner(it) == sampleOwner }
+            val spec = ir.dag.sampleSpec(sampleNode)
+            spec.shouldNotBeNull()
+            val dist = spec.dist
+            dist.shouldNotBeNull()
+            dist.values shouldContainExactlyInAnyOrder listOf(
+                Expr.Const.IntVal(0),
+                Expr.Const.IntVal(1),
+            )
+        }
+
+        "sample with explicit ~ weighted" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  join P() ${'$'} 10;
+                  sample (w: face ~ weighted { 0: 3, 1: 1 });
+                  yield P(guess: face);
+                  withdraw (P.guess == Sample.w) ? { P -> 10 } : { P -> 0; burn 10 }
+                }
+            """.trimIndent()
+            val ir = compileToIR(parseCode(src))
+            val sampleOwner = vegas.frontend.SAMPLE_OWNER
+            val sampleNode = ir.dag.actions.single { ir.dag.owner(it) == sampleOwner }
+            val dist = ir.dag.sampleSpec(sampleNode)?.dist
+            dist.shouldNotBeNull()
+            dist.weight(Expr.Const.IntVal(0)) shouldBe Rational(3, 4)
+            dist.weight(Expr.Const.IntVal(1)) shouldBe Rational(1, 4)
+        }
+
+        "typechecker rejects a random role appearing in withdraw" {
+            val src = """
+                type face = {0, 1}
+                game main() {
+                  random Host;
+                  join G() ${'$'} 10;
+                  commit Host(c: face);
+                  yield G(g: face);
+                  reveal Host(c: face);
+                  withdraw { G -> 10; Host -> 0 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
+        "typechecker reserves the Sample owner name" {
+            val src = """
+                game main() {
+                  join Sample() ${'$'} 10;
+                  withdraw { Sample -> 10 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
         }
     }
 })

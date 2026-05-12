@@ -152,6 +152,34 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
             return new Ext.Bind(kind, list(queryCtxs, this::query), groupHandler, ext);
     }
 
+    @Override
+    public Ext visitRandomExt(RandomExtContext ctx) {
+        Ext ext = ext(ctx.ext());
+        List<RandomQueryContext> queryCtxs = ctx.randomQuery();
+
+        if (queryCtxs.size() == 1)
+            return new Ext.BindSingle(Kind.JOIN_CHANCE, randomQuery(queryCtxs.getFirst()), null, ext);
+        else
+            return new Ext.Bind(Kind.JOIN_CHANCE, list(queryCtxs, this::randomQuery), null, ext);
+    }
+
+    private Query randomQuery(RandomQueryContext ctx) {
+        return withSpan(new Query(
+            role(ctx.roleId()),
+            java.util.Collections.emptyList(),
+            new Exp.Const.Num(0),
+            new Exp.Const.Bool(true),
+            null
+        ), ctx);
+    }
+
+    @Override
+    public Ext visitSampleExt(SampleExtContext ctx) {
+        Ext ext = ext(ctx.ext());
+        List<VarDec> bindings = list(ctx.bindings, this::vardec);
+        return new Ext.Sample(bindings, ext);
+    }
+
     private Query query(QueryContext ctx) {
         return withSpan(new Query(role(ctx.roleId()), list(ctx.decls, this::vardec), num(ctx.deposit), where(ctx.cond), queryHandler(ctx.handler)), ctx);
     }
@@ -188,8 +216,29 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public Outcome visitOutcomeQueryHandler(OutcomeQueryHandlerContext ctx) {
-        Map<Role, Exp> m = ctx.items.stream().collect(toMap(e -> role(e.role), e -> exp(e.exp())));
-        return new Outcome.Value(m);
+        return buildOutcomeValue(ctx.items, ctx);
+    }
+
+    private Outcome.Value buildOutcomeValue(List<ItemContext> items, ParserRuleContext span) {
+        Map<Role, Exp> roleEntries = new java.util.LinkedHashMap<>();
+        Exp burn = null;
+        for (ItemContext it : items) {
+            if (it instanceof RoleItemContext ri) {
+                Role r = role(ri.role);
+                if (roleEntries.containsKey(r)) {
+                    throw new StaticError("Duplicate role '" + r.getName() + "' in outcome", withSpan(r, ri));
+                }
+                roleEntries.put(r, exp(ri.exp()));
+            } else if (it instanceof BurnItemContext bi) {
+                if (burn != null) {
+                    throw new StaticError("Multiple 'burn' items in a single outcome; combine them into one expression", withSpan(new Exp.Const.Num(0), bi));
+                }
+                burn = exp(bi.amount);
+            } else {
+                throw new AssertionError("Unknown item subtype: " + it.getClass());
+            }
+        }
+        return new Outcome.Value(roleEntries, burn);
     }
 
     @Override
@@ -339,8 +388,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public Outcome visitOutcomeExp(OutcomeExpContext ctx) {
-        Map<Role, Exp> m = ctx.items.stream().collect(toMap(e -> role(e.role), e -> exp(e.exp())));
-        return new Outcome.Value(m);
+        return buildOutcomeValue(ctx.items, ctx);
     }
 
     @Override

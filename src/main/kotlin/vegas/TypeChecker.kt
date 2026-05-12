@@ -10,6 +10,7 @@ import vegas.frontend.Kind
 import vegas.frontend.MacroDec
 import vegas.frontend.Outcome
 import vegas.frontend.Query
+import vegas.frontend.SAMPLE_OWNER
 import vegas.frontend.TypeExp
 import vegas.frontend.TypeExp.*
 import vegas.frontend.SourceLoc
@@ -286,7 +287,8 @@ internal data class View(
     val fields: Map<FieldRef, TypeExp>,
     val vars: Map<VarId, TypeExp>,
     val whereOwner: RoleId? = null,
-    val facts: Facts = Facts.empty()
+    val facts: Facts = Facts.empty(),
+    val randomRoles: Set<RoleId> = emptySet(),
 )
 
 internal class ExprTyper(
@@ -350,7 +352,9 @@ internal class ExprTyper(
     /* ---------- Field access + contextual unhide ---------- */
 
     private fun fieldType(f: FieldRef, view: View, node: Ast): TypeExp {
-        if (f.owner !in view.roles) throw StaticError("${f.owner} is not a role", node)
+        if (f.owner !in view.roles && f.owner !in view.randomRoles) {
+            throw StaticError("${f.owner} is not a role", node)
+        }
         val raw = view.fields[f] ?: throw StaticError("Field '$f' is undefined", node)
 
         // 1) Contextual unhide (ONLY in where(owner))
@@ -585,7 +589,12 @@ internal class ProtocolTyper(
                     throw StaticError("Commit of '$field' has no corresponding reveal", node)
                 }
                 // Pass View to Outcome to allow var scoping
-                val view = View(roles = st.roles, fields = st.fields, vars = emptyMap())
+                val view = View(
+                    roles = st.roles,
+                    fields = st.fields,
+                    vars = emptyMap(),
+                    randomRoles = st.randomRoles,
+                )
                 typeOutcome(ext.outcome, view)
             }
             is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.handler, ext.ext), st)
@@ -613,6 +622,13 @@ internal class ProtocolTyper(
                     val isRandom = ext.kind == Kind.JOIN_CHANCE
                     val isReveal = ext.kind == Kind.REVEAL
                     val isCommit = ext.kind == Kind.COMMIT
+
+                    if (isJoin && role == SAMPLE_OWNER) {
+                        throw StaticError(
+                            "'${SAMPLE_OWNER.name}' is a reserved label for anonymous public samples; pick a different role name",
+                            q.role,
+                        )
+                    }
 
                     if (isJoin) {
                         roles2 += role
@@ -703,6 +719,30 @@ internal class ProtocolTyper(
 
                 typeExt(ext.ext, State(roles = roles2, randomRoles = randomRoles2, fields = newFields, unrevealedCommits = newUnrevealed))
             }
+            is Ext.Sample -> {
+                // Anonymous public samples bind fields under the synthetic
+                // SAMPLE_OWNER. No deposit, no actor, no guard. Each binding
+                // optionally carries an analysis dist (~ D). Reject sample
+                // bindings that collide with strategic roles' field names
+                // by SAMPLE_OWNER scoping.
+                val newFields = st.fields.toMutableMap()
+                for (vd in ext.bindings) {
+                    if (vd.dist != null) {
+                        validateDistSupport(vd.dist, vd.type, ext)
+                    }
+                    val fr = FieldRef(SAMPLE_OWNER, vd.v.id)
+                    if (fr in newFields) {
+                        throw StaticError("Sample binding '${vd.v.id.name}' shadows an earlier sample binding", ext)
+                    }
+                    newFields[fr] = universe.resolve(vd.type)
+                }
+                // Add SAMPLE_OWNER to randomRoles so downstream guard / quit
+                // logic does not try to insert quit moves for samples.
+                typeExt(ext.ext, st.copy(
+                    randomRoles = st.randomRoles + SAMPLE_OWNER,
+                    fields = newFields,
+                ))
+            }
         }
     }
 
@@ -738,7 +778,8 @@ internal class ProtocolTyper(
             fields = st.fields + localFields,
             vars = emptyMap(),
             whereOwner = q.role.id,
-            facts = Facts(nonNull = locallyDefinedByActor)
+            facts = Facts(nonNull = locallyDefinedByActor),
+            randomRoles = st.randomRoles,
         )
 
         val t = expr.type(q.where, view)
@@ -801,9 +842,19 @@ internal class ProtocolTyper(
         when (o) {
             is Outcome.Value -> {
                 for ((role, e) in o.ts) {
+                    if (role.id in view.randomRoles) {
+                        throw StaticError(
+                            "Role '${role.id.name}' is declared as 'random' and cannot appear in 'withdraw'; use 'burn' to account for funds that leave the strategic pot",
+                            role,
+                        )
+                    }
                     if (role.id !in view.roles) throw StaticError("${role.id} is not a role", role)
                     val t = expr.type(e, view)
                     if (!expr.isSubtype(t, INT)) throw StaticError("Outcome value must be int", e)
+                }
+                o.burn?.let {
+                    val t = expr.type(it, view)
+                    if (!expr.isSubtype(t, INT)) throw StaticError("'burn' amount must be int", it)
                 }
             }
             is Outcome.Cond -> {

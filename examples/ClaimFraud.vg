@@ -1,37 +1,30 @@
-// Claim fraud inspection: claimant may lie, world accident, inspector may investigate and catch fraud.
-// Distribution semantics: pot (300 wei) allocated based on fraud detection and investigation
+// Claim fraud inspection: claimant may lie, nature decides whether accident occurred,
+// inspector may investigate and catch fraud.
+// Distribution semantics: strategic pot (200 wei) allocated between Claimant and Inspector.
 
 macro isFraud(accident: bool, inflate: bool, claim: bool): bool =
     (claim && (!accident || inflate));
 
 game main() {
   join Claimant() $ 100 Inspector() $ 100;
-  random World() $ 100;
-  
-  yield Claimant(claim: bool, inflate: bool) || { Inspector -> 150; World -> 150 };
-  yield World(accident: bool) || { Claimant -> 150; Inspector -> 150 };
-  yield Inspector(invest: bool) || { Claimant -> 150; World -> 150 };
-  
+  sample (accident: bool);
+
+  yield Claimant(claim: bool, inflate: bool) || { Inspector -> 150; burn 50 };
+  yield Inspector(invest: bool) || { Claimant -> 150; burn 50 };
+
   withdraw {
       Claimant ->
           !Claimant.claim ? 100
           : Inspector.invest ?
-              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 70 : 120)
+              (isFraud(Sample.accident, Claimant.inflate, Claimant.claim) ? 70 : 120)
           :
               120;
-  
+
       Inspector ->
           !Claimant.claim ? 100
           : !Inspector.invest ?
-              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 100)
+              (isFraud(Sample.accident, Claimant.inflate, Claimant.claim) ? 90 : 100)
           :
-              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 130 : 90);
-  
-      World ->
-          !Claimant.claim ? 100
-          : !Inspector.invest ?
-              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 90 : 80)
-          :
-              (isFraud(World.accident, Claimant.inflate, Claimant.claim) ? 100 : 90);
+              (isFraud(Sample.accident, Claimant.inflate, Claimant.claim) ? 130 : 90);
   }
 }
