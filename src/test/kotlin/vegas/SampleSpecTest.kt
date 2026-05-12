@@ -661,6 +661,21 @@ class SampleSpecTest : FreeSpec({
             shouldThrow<StaticError> { typeCheck(parseCode(src)) }
         }
 
+        "quit handler with non-int burn fails typecheck" {
+            // The handler validator must also check `burn` (not just role
+            // payouts) is int-typed; otherwise a non-int burn slips into
+            // GameIR.burn and trips later backends.
+            val src = """
+                game main() {
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield A(g: bool) || { B -> 0; burn true };
+                  yield B(g: bool);
+                  withdraw { A -> 10; B -> 10 }
+                }
+            """.trimIndent()
+            shouldThrow<StaticError> { typeCheck(parseCode(src)) }
+        }
+
         "quit handler payout expression may read a visible random field" {
             // Allocation roles exclude random roles, but the expression-
             // typing view still includes them so payouts can depend on

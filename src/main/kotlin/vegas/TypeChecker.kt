@@ -853,19 +853,23 @@ internal class ProtocolTyper(
         val got = h.ts.keys.map { it.id }.toSet()
         if (got != expected) throw StaticError("Quit handler must allocate to exactly other roles (size ${expected.size})", h)
 
+        // Handlers allow reading visible fields, including random
+        // roles' visible writes (e.g. `Coin.side` after the coin has
+        // yielded), even though random roles do not appear in the
+        // allocation map.
+        val view = View(
+            roles = visibleRoles,
+            fields = visibleFields,
+            vars = emptyMap(),
+            randomRoles = visibleRandomRoles,
+        )
         for ((_, e) in h.ts) {
-            // Handlers allow reading visible fields, including random
-            // roles' visible writes (e.g. `Coin.side` after the coin has
-            // yielded), even though random roles do not appear in the
-            // allocation map.
-            val view = View(
-                roles = visibleRoles,
-                fields = visibleFields,
-                vars = emptyMap(),
-                randomRoles = visibleRandomRoles,
-            )
             val t = expr.type(e, view)
             if (!expr.isSubtype(t, INT)) throw StaticError("Handler payout must be int", e)
+        }
+        h.burn?.let {
+            val t = expr.type(it, view)
+            if (!expr.isSubtype(t, INT)) throw StaticError("Handler 'burn' amount must be int", it)
         }
     }
 

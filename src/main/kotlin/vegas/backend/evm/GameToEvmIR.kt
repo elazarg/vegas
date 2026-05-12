@@ -281,6 +281,11 @@ private fun buildAction(
                 IntLit(idx),
             ))
             val entropy = Call("uint256", listOf(Keccak256(seed)))
+            // Modulo into the declared support. Bias is bounded by
+            // supportSize / 2^256, i.e. below 2^-248 for any realistic
+            // supportSize; statistically undetectable. If exact
+            // uniformity is ever needed, rejection sampling is the
+            // standard mitigation (see docs/FUTURE.md).
             val r = Binary(BinaryOp.MOD, entropy, IntLit(supportSize))
             val rVar = Var(VarId("r"))
 
