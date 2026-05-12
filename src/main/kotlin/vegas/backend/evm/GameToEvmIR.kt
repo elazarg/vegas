@@ -173,17 +173,19 @@ private fun buildAction(
 
     // 3c. Guards - `where` expressions
     val guards = if (!hidden) {
-        translateDomainGuards(spec.params) + if (spec.guardExpr != Expr.Const.BoolVal(true)) {
-            listOf(
-                translateExpr(
-                    spec.guardExpr,
-                    contextOwner = meta.struct.owner,
-                    contextParams = spec.params.map { it.name }.toSet()
+        translateDomainGuards(spec.params) +
+            translateSampleSupportGuards(meta) +
+            if (spec.guardExpr != Expr.Const.BoolVal(true)) {
+                listOf(
+                    translateExpr(
+                        spec.guardExpr,
+                        contextOwner = meta.struct.owner,
+                        contextParams = spec.params.map { it.name }.toSet()
+                    )
                 )
-            )
-        } else {
-            listOf()
-        }
+            } else {
+                listOf()
+            }
     } else {
         listOf()
     }
@@ -331,6 +333,37 @@ private fun translateDomainGuards(params: List<NodeParam>): List<EvmExpr> =
             else -> null
         }
     }
+
+/**
+ * Generate 'require' statements that the submitted value lies in the
+ * declared distribution's support. Single-parameter sample nodes with
+ * an explicit Dist enforce this on-chain: without it, anyone calling
+ * the sample function could submit a value outside the support of
+ * `~ uniform/weighted { ... }` (the type range alone may be wider).
+ *
+ * This is a stopgap on the way to a real entropy-source taxonomy
+ * (block.prevrandao / VRF / drand): until that lands, the on-chain
+ * contract trusts the caller's submission, but at least pins the
+ * value to the declared support so the analysis-time and on-chain
+ * supports agree.
+ */
+private fun translateSampleSupportGuards(meta: NodeMeta): List<EvmExpr> {
+    val dist = meta.sample?.dist ?: return emptyList()
+    val param = meta.spec.params.singleOrNull() ?: return emptyList()
+    val x = Var(VarId(inputParam(param.name, false)))
+    val supportLits: List<EvmExpr> = dist.support.mapNotNull { (v, _) ->
+        when (v) {
+            is Expr.Const.IntVal -> IntLit(v.v)
+            is Expr.Const.BoolVal -> BoolLit(v.v)
+            else -> null
+        }
+    }
+    if (supportLits.isEmpty()) return emptyList()
+    val disjunction = supportLits
+        .map { Binary(BinaryOp.EQ, x, it) }
+        .reduce { a, b -> Binary(BinaryOp.OR, a, b) }
+    return listOf(disjunction)
+}
 
 private fun translateExpr(
     expr: Expr,

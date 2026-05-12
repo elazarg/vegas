@@ -733,6 +733,11 @@ internal class ProtocolTyper(
                 // by SAMPLE_OWNER scoping.
                 val newFields = st.fields.toMutableMap()
                 for (vd in ext.bindings) {
+                    // Validate the declared type the same way query params do
+                    // (universe.validateDefined surfaces unknown type aliases
+                    // as a StaticError with source context, not an IR-time
+                    // panic from universe.resolve).
+                    universe.validateDefined(vd.type, ext)
                     if (vd.dist != null) {
                         validateDistSupport(vd.dist, vd.type, ext)
                     }

@@ -531,6 +531,23 @@ class SampleSpecTest : FreeSpec({
             ir.burn shouldBe Expr.Const.IntVal(10)
         }
 
+        "conditional withdraw with role only in one branch keeps that role" {
+            // Previously Transform.kt's desugar(Outcome.Cond) iterated
+            // ifTrue.keys only, silently dropping any role that appears
+            // only in the false branch.
+            val src = """
+                game main() {
+                  join A() ${'$'} 10 B() ${'$'} 10;
+                  yield A(x: bool);
+                  yield B(y: bool);
+                  withdraw A.x ? { A -> 20 } : { B -> 20 }
+                }
+            """.trimIndent()
+            val ir = typedCompile(src)
+            check(RoleId("A") in ir.payoffs) { "Role A dropped from conditional payoffs" }
+            check(RoleId("B") in ir.payoffs) { "Role B (false-branch only) dropped from conditional payoffs" }
+        }
+
         "let-bound variable inside a burn expression substitutes correctly" {
             // The let-substitution in Transform.kt used to drop the burn
             // field when reconstructing Outcome.Value. With burn referring

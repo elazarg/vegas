@@ -250,16 +250,17 @@ private fun desugar(outcome: Outcome, names: List<Pair<VarDec, Exp>>): Outcome.V
         val ifFalseVal = desugar(outcome.ifFalse, names)
         val ifTrue = ifTrueVal.ts
         val ifFalse = ifFalseVal.ts
-        fun safeGetRole(m: Map<Role, Exp>, role: Role): Exp {
-            try {
-                return m.getValue(role)
-            } catch (_: NoSuchElementException) {
-                throw StaticError("$role is not a role", role)
-            }
-        }
 
-        val ts = ifTrue.keys.associateWith {
-            copySpan(Exp.Cond(outcome.cond, safeGetRole(ifTrue, it), safeGetRole(ifFalse, it)), it)
+        // Union of role keys: a role mentioned in only one branch implicitly
+        // receives 0 in the other. (The prior implementation iterated
+        // `ifTrue.keys` only, silently dropping false-branch-only roles.)
+        val allRoles = ifTrue.keys + ifFalse.keys
+        val zero: Exp = Exp.Const.Num(0)
+        val ts = allRoles.associateWith { role ->
+            copySpan(
+                Exp.Cond(outcome.cond, ifTrue[role] ?: zero, ifFalse[role] ?: zero),
+                role,
+            )
         }
         // Thread burn through the conditional, defaulting either branch's
         // absent burn to 0 so the merged Cond is well-typed.
