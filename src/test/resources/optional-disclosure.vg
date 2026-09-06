@@ -1,0 +1,12 @@
+game main() {
+  random Coin;
+  join Alice() $ 10 Bob() $ 10;
+  commit Alice(secret: bool) || null;
+  yield Coin(signal: bool);
+  reveal Alice(secret: bool) where Coin.signal || !Coin.signal || null;
+  yield Bob(response: bool) || null;
+  withdraw (Alice.secret == null) ? { Bob -> 20 }
+    : (Bob.response == null) ? { Alice -> 20 }
+    : (Alice.secret == Bob.response) ? { Alice -> 20 }
+    : { Bob -> 20 }
+}
