@@ -224,6 +224,27 @@ class EthJsonRpc(private val rpcUrl: String) {
         evmIncreaseTime(seconds)
         evmMine()
     }
+
+    fun latestBlockTimestamp(): Long {
+        val block = call("eth_getBlockByNumber", buildJsonArray {
+            add("latest")
+            add(false)
+        }).jsonObject
+        return block.getValue("timestamp").jsonPrimitive.content.hexToLong()
+    }
+
+    fun setNextBlockTimestamp(timestamp: Long) {
+        call("evm_setNextBlockTimestamp", buildJsonArray { add(timestamp) })
+    }
+
+    fun getStorageAt(address: String, slot: ByteArray): BigInteger {
+        val slotHex = "0x" + slot.joinToString("") { "%02x".format(it) }
+        return call("eth_getStorageAt", buildJsonArray {
+            add(address)
+            add(slotHex)
+            add("latest")
+        }).jsonPrimitive.content.hexToBigInteger()
+    }
 }
 
 private fun String.hexToLong(): Long {

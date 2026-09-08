@@ -78,17 +78,6 @@ private fun StringBuilder.renderInfrastructureModifiers() {
 
         mapping(Role => bool) private bailed;
 
-        modifier depends(Role role, uint256 actionId) {
-            if (!actionDone[role][actionId] && block.timestamp > lastTs + TIMEOUT) {
-                bailed[role] = true;
-                lastTs = block.timestamp;
-            }
-            if (!bailed[role]) {
-                require(actionDone[role][actionId], "dependency not satisfied");
-            }
-            _;
-        }
-
         modifier action(Role role, uint256 actionId) {
             require((!actionDone[role][actionId]), "already done");
             actionDone[role][actionId] = true;
@@ -144,11 +133,24 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     val modifiers = buildList {
         if (!isSample) add("by(${roleEnumName}.${a.invokedBy})")
         add("action(Role.${a.actionId.first}, ${a.actionId.second})")
-        a.dependencies.forEach { dep -> add("depends(Role.${dep.first}, ${dep.second})") }
     }.joinToString(" ")
 
     append("function ${a.name}($inputs) $visibility$mutability $modifiers")
     block {
+        if (a.dependencies.isNotEmpty()) {
+            appendLine("{")
+            appendLine("    uint256 vegasDependencyOrigin = lastTs;")
+            a.dependencies.forEach { dep ->
+                appendLine("    if (!actionDone[Role.${dep.first}][${dep.second}] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {")
+                appendLine("        bailed[Role.${dep.first}] = true;")
+                appendLine("        lastTs = block.timestamp;")
+                appendLine("    }")
+                appendLine("    if (!bailed[Role.${dep.first}]) {")
+                appendLine("        require(actionDone[Role.${dep.first}][${dep.second}], \"dependency not satisfied\");")
+                appendLine("    }")
+            }
+            appendLine("}")
+        }
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }

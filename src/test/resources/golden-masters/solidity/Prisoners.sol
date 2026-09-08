@@ -37,17 +37,6 @@ contract Prisoners {
     
     mapping(Role => bool) private bailed;
     
-    modifier depends(Role role, uint256 actionId) {
-        if (!actionDone[role][actionId] && block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
     modifier action(Role role, uint256 actionId) {
         require((!actionDone[role][actionId]), "already done");
         actionDone[role][actionId] = true;
@@ -91,7 +80,17 @@ contract Prisoners {
         done_A = true;
     }
     
-    function move_B_1() public payable by(Role.None) action(Role.B, 1) depends(Role.A, 0) {
+    function move_B_1() public payable by(Role.None) action(Role.B, 1) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.A][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.A] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.A]) {
+                require(actionDone[Role.A][0], "dependency not satisfied");
+            }
+        }
         require((!done_B), "already joined");
         require((msg.value == 100), "bad stake");
         roles[msg.sender] = Role.B;
@@ -99,29 +98,114 @@ contract Prisoners {
         done_B = true;
     }
     
-    function move_A_2(bytes32 _hidden_c) public by(Role.A) action(Role.A, 3) depends(Role.B, 1) {
+    function move_A_2(bytes32 _hidden_c) public by(Role.A) action(Role.A, 3) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B][1] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][1], "dependency not satisfied");
+            }
+        }
         A_c_hidden = _hidden_c;
         done_A_c_hidden = true;
     }
     
-    function move_B_4(bytes32 _hidden_c) public by(Role.B) action(Role.B, 5) depends(Role.B, 1) {
+    function move_B_4(bytes32 _hidden_c) public by(Role.B) action(Role.B, 5) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B][1] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][1], "dependency not satisfied");
+            }
+        }
         B_c_hidden = _hidden_c;
         done_B_c_hidden = true;
     }
     
-    function move_A_3(bool _c, uint256 _salt) public by(Role.A) action(Role.A, 4) depends(Role.B, 1) depends(Role.A, 3) depends(Role.B, 5) {
+    function move_A_3(bool _c, uint256 _salt) public by(Role.A) action(Role.A, 4) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B][1] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][1], "dependency not satisfied");
+            }
+            if (!actionDone[Role.A][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.A] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.A]) {
+                require(actionDone[Role.A][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][5], "dependency not satisfied");
+            }
+        }
         _checkReveal(A_c_hidden, Role.A, msg.sender, abi.encode(_c, _salt));
         A_c = _c;
         done_A_c = true;
     }
     
-    function move_B_5(bool _c, uint256 _salt) public by(Role.B) action(Role.B, 6) depends(Role.B, 1) depends(Role.A, 3) depends(Role.B, 5) {
+    function move_B_5(bool _c, uint256 _salt) public by(Role.B) action(Role.B, 6) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B][1] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][1], "dependency not satisfied");
+            }
+            if (!actionDone[Role.A][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.A] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.A]) {
+                require(actionDone[Role.A][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][5], "dependency not satisfied");
+            }
+        }
         _checkReveal(B_c_hidden, Role.B, msg.sender, abi.encode(_c, _salt));
         B_c = _c;
         done_B_c = true;
     }
     
-    function withdraw_A() public by(Role.A) action(Role.A, 5) depends(Role.A, 4) depends(Role.B, 6) {
+    function withdraw_A() public by(Role.A) action(Role.A, 5) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.A][4] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.A] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.A]) {
+                require(actionDone[Role.A][4], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B][6] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][6], "dependency not satisfied");
+            }
+        }
         require((!claimed_A), "already claimed");
         claimed_A = true;
         int256 payout = (((!done_A_c) || (!done_B_c)) ? (done_A_c ? (int256(100) + (((done_A_c ? int256(0) : int256(100)) + (done_B_c ? int256(0) : int256(100))) / ((((done_A_c ? int256(1) : int256(0)) + (done_B_c ? int256(1) : int256(0))) > int256(0)) ? ((done_A_c ? int256(1) : int256(0)) + (done_B_c ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((A_c && B_c) ? int256(100) : ((A_c && (!B_c)) ? int256(0) : (((!A_c) && B_c) ? int256(200) : int256(90)))));
@@ -131,7 +215,24 @@ contract Prisoners {
         }
     }
     
-    function withdraw_B() public by(Role.B) action(Role.B, 7) depends(Role.A, 4) depends(Role.B, 6) {
+    function withdraw_B() public by(Role.B) action(Role.B, 7) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.A][4] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.A] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.A]) {
+                require(actionDone[Role.A][4], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B][6] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B]) {
+                require(actionDone[Role.B][6], "dependency not satisfied");
+            }
+        }
         require((!claimed_B), "already claimed");
         claimed_B = true;
         int256 payout = (((!done_A_c) || (!done_B_c)) ? (done_B_c ? (int256(100) + (((done_A_c ? int256(0) : int256(100)) + (done_B_c ? int256(0) : int256(100))) / ((((done_A_c ? int256(1) : int256(0)) + (done_B_c ? int256(1) : int256(0))) > int256(0)) ? ((done_A_c ? int256(1) : int256(0)) + (done_B_c ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((A_c && B_c) ? int256(100) : ((A_c && (!B_c)) ? int256(200) : (((!A_c) && B_c) ? int256(0) : int256(110)))));

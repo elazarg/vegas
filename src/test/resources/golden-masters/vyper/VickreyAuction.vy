@@ -119,22 +119,23 @@ def move_B1_4(_hidden_b: bytes32):
     assert self.roles[msg.sender] == Role.B1, "bad role"
     assert not self.bailed[Role.B1], "you bailed"
     assert not self.actionDone[Role.B1][2], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
@@ -150,22 +151,23 @@ def move_B2_6(_hidden_b: bytes32):
     assert self.roles[msg.sender] == Role.B2, "bad role"
     assert not self.bailed[Role.B2], "you bailed"
     assert not self.actionDone[Role.B2][4], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
@@ -181,22 +183,23 @@ def move_B3_8(_hidden_b: bytes32):
     assert self.roles[msg.sender] == Role.B3, "bad role"
     assert not self.bailed[Role.B3], "you bailed"
     assert not self.actionDone[Role.B3][6], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
@@ -212,37 +215,38 @@ def move_B1_5(_b: int256, _salt: uint256):
     assert self.roles[msg.sender] == Role.B1, "bad role"
     assert not self.bailed[Role.B1], "you bailed"
     assert not self.actionDone[Role.B1][3], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
         assert self.actionDone[Role.Seller][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B1][2]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B1][2]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][2], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][4]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][4]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][4], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][6]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][6]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -260,37 +264,38 @@ def move_B2_7(_b: int256, _salt: uint256):
     assert self.roles[msg.sender] == Role.B2, "bad role"
     assert not self.bailed[Role.B2], "you bailed"
     assert not self.actionDone[Role.B2][5], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
         assert self.actionDone[Role.Seller][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B1][2]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B1][2]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][2], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][4]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][4]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][4], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][6]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][6]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -308,37 +313,38 @@ def move_B3_9(_b: int256, _salt: uint256):
     assert self.roles[msg.sender] == Role.B3, "bad role"
     assert not self.bailed[Role.B3], "you bailed"
     assert not self.actionDone[Role.B3][7], "already done"
-    if (not self.actionDone[Role.B1][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
         assert self.actionDone[Role.B3][0], "dependency not satisfied"
-    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.Seller][0]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.Seller] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.Seller]:
         assert self.actionDone[Role.Seller][0], "dependency not satisfied"
-    if (not self.actionDone[Role.B1][2]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B1][2]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][2], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][4]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][4]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][4], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][6]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][6]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -356,17 +362,18 @@ def withdraw_Seller():
     assert self.roles[msg.sender] == Role.Seller, "bad role"
     assert not self.bailed[Role.Seller], "you bailed"
     assert not self.actionDone[Role.Seller][1], "already done"
-    if (not self.actionDone[Role.B1][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][3]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][3], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][5]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][5], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][7]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][7]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -386,17 +393,18 @@ def withdraw_B1():
     assert self.roles[msg.sender] == Role.B1, "bad role"
     assert not self.bailed[Role.B1], "you bailed"
     assert not self.actionDone[Role.B1][4], "already done"
-    if (not self.actionDone[Role.B1][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][3]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][3], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][5]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][5], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][7]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][7]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -416,17 +424,18 @@ def withdraw_B2():
     assert self.roles[msg.sender] == Role.B2, "bad role"
     assert not self.bailed[Role.B2], "you bailed"
     assert not self.actionDone[Role.B2][6], "already done"
-    if (not self.actionDone[Role.B1][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][3]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][3], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][5]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][5], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][7]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][7]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:
@@ -446,17 +455,18 @@ def withdraw_B3():
     assert self.roles[msg.sender] == Role.B3, "bad role"
     assert not self.bailed[Role.B3], "you bailed"
     assert not self.actionDone[Role.B3][8], "already done"
-    if (not self.actionDone[Role.B1][3]) and (block.timestamp > self.lastTs + TIMEOUT):
+    vegasDependencyOrigin: uint256 = self.lastTs
+    if (not self.actionDone[Role.B1][3]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B1] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B1]:
         assert self.actionDone[Role.B1][3], "dependency not satisfied"
-    if (not self.actionDone[Role.B2][5]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B2][5]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B2] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B2]:
         assert self.actionDone[Role.B2][5], "dependency not satisfied"
-    if (not self.actionDone[Role.B3][7]) and (block.timestamp > self.lastTs + TIMEOUT):
+    if (not self.actionDone[Role.B3][7]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):
         self.bailed[Role.B3] = True
         self.lastTs = block.timestamp
     if not self.bailed[Role.B3]:

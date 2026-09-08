@@ -51,17 +51,6 @@ contract VickreyAuction {
     
     mapping(Role => bool) private bailed;
     
-    modifier depends(Role role, uint256 actionId) {
-        if (!actionDone[role][actionId] && block.timestamp > lastTs + TIMEOUT) {
-            bailed[role] = true;
-            lastTs = block.timestamp;
-        }
-        if (!bailed[role]) {
-            require(actionDone[role][actionId], "dependency not satisfied");
-        }
-        _;
-    }
-    
     modifier action(Role role, uint256 actionId) {
         require((!actionDone[role][actionId]), "already done");
         actionDone[role][actionId] = true;
@@ -129,43 +118,316 @@ contract VickreyAuction {
         done_B3 = true;
     }
     
-    function move_B1_4(bytes32 _hidden_b) public by(Role.B1) action(Role.B1, 2) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
+    function move_B1_4(bytes32 _hidden_b) public by(Role.B1) action(Role.B1, 2) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+        }
         B1_b_hidden = _hidden_b;
         done_B1_b_hidden = true;
     }
     
-    function move_B2_6(bytes32 _hidden_b) public by(Role.B2) action(Role.B2, 4) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
+    function move_B2_6(bytes32 _hidden_b) public by(Role.B2) action(Role.B2, 4) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+        }
         B2_b_hidden = _hidden_b;
         done_B2_b_hidden = true;
     }
     
-    function move_B3_8(bytes32 _hidden_b) public by(Role.B3) action(Role.B3, 6) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) {
+    function move_B3_8(bytes32 _hidden_b) public by(Role.B3) action(Role.B3, 6) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+        }
         B3_b_hidden = _hidden_b;
         done_B3_b_hidden = true;
     }
     
-    function move_B1_5(int256 _b, uint256 _salt) public by(Role.B1) action(Role.B1, 3) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
+    function move_B1_5(int256 _b, uint256 _salt) public by(Role.B1) action(Role.B1, 3) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B1][2] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][2], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][4] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][4], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][6] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][6], "dependency not satisfied");
+            }
+        }
         require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B1_b_hidden, Role.B1, msg.sender, abi.encode(_b, _salt));
         B1_b = _b;
         done_B1_b = true;
     }
     
-    function move_B2_7(int256 _b, uint256 _salt) public by(Role.B2) action(Role.B2, 5) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
+    function move_B2_7(int256 _b, uint256 _salt) public by(Role.B2) action(Role.B2, 5) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B1][2] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][2], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][4] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][4], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][6] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][6], "dependency not satisfied");
+            }
+        }
         require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B2_b_hidden, Role.B2, msg.sender, abi.encode(_b, _salt));
         B2_b = _b;
         done_B2_b = true;
     }
     
-    function move_B3_9(int256 _b, uint256 _salt) public by(Role.B3) action(Role.B3, 7) depends(Role.B1, 0) depends(Role.B2, 0) depends(Role.B3, 0) depends(Role.Seller, 0) depends(Role.B1, 2) depends(Role.B2, 4) depends(Role.B3, 6) {
+    function move_B3_9(int256 _b, uint256 _salt) public by(Role.B3) action(Role.B3, 7) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.Seller][0] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.Seller] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.Seller]) {
+                require(actionDone[Role.Seller][0], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B1][2] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][2], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][4] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][4], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][6] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][6], "dependency not satisfied");
+            }
+        }
         require(((_b >= 0) && (_b <= 2)), "domain");
         _checkReveal(B3_b_hidden, Role.B3, msg.sender, abi.encode(_b, _salt));
         B3_b = _b;
         done_B3_b = true;
     }
     
-    function withdraw_Seller() public by(Role.Seller) action(Role.Seller, 1) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+    function withdraw_Seller() public by(Role.Seller) action(Role.Seller, 1) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][5], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][7] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][7], "dependency not satisfied");
+            }
+        }
         require((!claimed_Seller), "already claimed");
         claimed_Seller = true;
         int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (true ? (int256(100) + (((((true ? int256(0) : int256(100)) + (done_B1_b ? int256(0) : int256(100))) + (done_B2_b ? int256(0) : int256(100))) + (done_B3_b ? int256(0) : int256(100))) / ((((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) > int256(0)) ? ((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : (int256(100) + ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))));
@@ -175,7 +437,31 @@ contract VickreyAuction {
         }
     }
     
-    function withdraw_B1() public by(Role.B1) action(Role.B1, 4) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+    function withdraw_B1() public by(Role.B1) action(Role.B1, 4) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][5], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][7] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][7], "dependency not satisfied");
+            }
+        }
         require((!claimed_B1), "already claimed");
         claimed_B1 = true;
         int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B1_b ? (int256(100) + (((((true ? int256(0) : int256(100)) + (done_B1_b ? int256(0) : int256(100))) + (done_B2_b ? int256(0) : int256(100))) + (done_B3_b ? int256(0) : int256(100))) / ((((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) > int256(0)) ? ((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (int256(100) - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : int256(100)));
@@ -185,7 +471,31 @@ contract VickreyAuction {
         }
     }
     
-    function withdraw_B2() public by(Role.B2) action(Role.B2, 6) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+    function withdraw_B2() public by(Role.B2) action(Role.B2, 6) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][5], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][7] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][7], "dependency not satisfied");
+            }
+        }
         require((!claimed_B2), "already claimed");
         claimed_B2 = true;
         int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B2_b ? (int256(100) + (((((true ? int256(0) : int256(100)) + (done_B1_b ? int256(0) : int256(100))) + (done_B2_b ? int256(0) : int256(100))) + (done_B3_b ? int256(0) : int256(100))) / ((((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) > int256(0)) ? ((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (int256(100) - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : int256(100)));
@@ -195,7 +505,31 @@ contract VickreyAuction {
         }
     }
     
-    function withdraw_B3() public by(Role.B3) action(Role.B3, 8) depends(Role.B1, 3) depends(Role.B2, 5) depends(Role.B3, 7) {
+    function withdraw_B3() public by(Role.B3) action(Role.B3, 8) {
+        {
+            uint256 vegasDependencyOrigin = lastTs;
+            if (!actionDone[Role.B1][3] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B1] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B1]) {
+                require(actionDone[Role.B1][3], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B2][5] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B2] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B2]) {
+                require(actionDone[Role.B2][5], "dependency not satisfied");
+            }
+            if (!actionDone[Role.B3][7] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {
+                bailed[Role.B3] = true;
+                lastTs = block.timestamp;
+            }
+            if (!bailed[Role.B3]) {
+                require(actionDone[Role.B3][7], "dependency not satisfied");
+            }
+        }
         require((!claimed_B3), "already claimed");
         claimed_B3 = true;
         int256 payout = ((((!done_B1_b) || (!done_B2_b)) || (!done_B3_b)) ? (done_B3_b ? (int256(100) + (((((true ? int256(0) : int256(100)) + (done_B1_b ? int256(0) : int256(100))) + (done_B2_b ? int256(0) : int256(100))) + (done_B3_b ? int256(0) : int256(100))) / ((((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) > int256(0)) ? ((((true ? int256(1) : int256(0)) + (done_B1_b ? int256(1) : int256(0))) + (done_B2_b ? int256(1) : int256(0))) + (done_B3_b ? int256(1) : int256(0))) : int256(1)))) : int256(0)) : ((B3_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? (int256(100) - ((B1_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B2_b >= B3_b) ? B2_b : B3_b) : ((B2_b == ((((B1_b >= B2_b) ? B1_b : B2_b) >= B3_b) ? ((B1_b >= B2_b) ? B1_b : B2_b) : B3_b)) ? ((B1_b >= B3_b) ? B1_b : B3_b) : ((B1_b >= B2_b) ? B1_b : B2_b)))) : int256(100)));

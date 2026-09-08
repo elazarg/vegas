@@ -127,10 +127,13 @@ private fun StringBuilder.renderAction(a: EvmAction) {
         // Dependencies (inline 'depends' modifier) - bail attribution gated on the
         // dependency not being satisfied, so the delinquent role (not the caller)
         // is the one marked bailed.
+        if (a.dependencies.isNotEmpty()) {
+            appendLine("vegasDependencyOrigin: uint256 = self.lastTs")
+        }
         a.dependencies.forEach { dep ->
             val depRole = roleEnumMember(dep.first.name)
             val depIdx = dep.second
-            appendLine("if (not self.actionDone[$depRole][$depIdx]) and (block.timestamp > self.lastTs + TIMEOUT):")
+            appendLine("if (not self.actionDone[$depRole][$depIdx]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):")
             appendLine("    self.bailed[$depRole] = True")
             appendLine("    self.lastTs = block.timestamp")
             appendLine("if not self.bailed[$depRole]:")
