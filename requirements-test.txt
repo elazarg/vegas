@@ -1,1 +1,2 @@
 solc-select==1.2.0
+vyper==0.4.3

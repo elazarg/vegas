@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Install external tools required by Ethereum integration tests: solc and anvil.
+Install external tools required by Ethereum integration tests: solc, vyper and anvil.
 
 Usage:
     python setup-eth-tools.py
 
 Steps:
   1. Create a Python venv in .venv/ (if absent)
-  2. Install solc-select from requirements-test.txt
-  3. Install and activate solc 0.8.31
+  2. Install solc-select and vyper from requirements-test.txt
+  3. Install and activate solc 0.8.37
   4. Install Foundry (provides anvil) via foundryup
   5. Verify both tools respond on PATH
 """
@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SOLC_VERSION = "0.8.31"
+SOLC_VERSION = "0.8.37"
 REPO_ROOT = Path(__file__).resolve().parent
 VENV_DIR = REPO_ROOT / ".venv"
 REQUIREMENTS = REPO_ROOT / "requirements-test.txt"
@@ -52,7 +52,7 @@ def install_solc():
     pip = str(venv_bin("pip"))
     solc_select = str(venv_bin("solc-select"))
 
-    print("Installing solc-select ...")
+    print("Installing solc-select and vyper ...")
     run([pip, "install", "-r", str(REQUIREMENTS)])
 
     print(f"Installing solc {SOLC_VERSION} ...")

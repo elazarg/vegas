@@ -16,8 +16,8 @@ import vegas.runtime.*
 /**
  * Condition that checks for anvil and solc availability.
  */
-class EthToolsAvailable : io.kotest.core.annotation.EnabledCondition {
-    override fun enabled(kclass: kotlin.reflect.KClass<out io.kotest.core.spec.Spec>): Boolean {
+class EthToolsAvailable : io.kotest.core.annotation.Condition {
+    override fun evaluate(kclass: kotlin.reflect.KClass<out io.kotest.core.spec.Spec>): Boolean {
         return ToolCheck.cached().allAvailable
     }
 }

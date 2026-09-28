@@ -61,8 +61,8 @@ game main() {
 
 ### Prerequisites
 
-- Java 21 or later
-- Maven 3.6+
+- JDK 26 or later (developed on JDK 27; Kotlin 2.4 targets JVM 26 bytecode)
+- Maven 3.9+
 
 ### Build
 

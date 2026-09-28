@@ -31,6 +31,9 @@ class ToolCheck private constructor(
     /** Resolved absolute path to solc binary, or null if not found. */
     val solcPath: String? get() = (solc as? ToolStatus.Available)?.path
 
+    /** Resolved anvil executable, or null if not found. */
+    val anvilPath: String? get() = (anvil as? ToolStatus.Available)?.path
+
     companion object {
         @Volatile
         private var instance: ToolCheck? = null
@@ -61,16 +64,27 @@ class ToolCheck private constructor(
             }
         }
 
+        /**
+         * Find anvil: the standard foundryup location `~/.foundry/bin` first,
+         * so an older copy elsewhere on PATH does not shadow it, then PATH.
+         */
+        private fun findAnvil(): String {
+            val isWindows = System.getProperty("os.name").lowercase().contains("win")
+            val foundry = File(System.getProperty("user.home"), ".foundry/bin/" + if (isWindows) "anvil.exe" else "anvil")
+            return if (foundry.exists()) foundry.absolutePath else "anvil"
+        }
+
         private fun probeAnvil(): ToolStatus {
+            val anvilPath = findAnvil()
             return try {
-                val process = ProcessBuilder("anvil", "--version")
+                val process = ProcessBuilder(anvilPath, "--version")
                     .redirectErrorStream(true)
                     .start()
                 val output = process.inputStream.bufferedReader().readText().trim()
                 val exitCode = process.waitFor()
                 if (exitCode == 0 && output.isNotEmpty()) {
                     val version = output.lines().firstOrNull()?.trim() ?: output
-                    ToolStatus.Available("anvil", version)
+                    ToolStatus.Available(anvilPath, version)
                 } else {
                     ToolStatus.Missing("anvil returned exit code $exitCode")
                 }

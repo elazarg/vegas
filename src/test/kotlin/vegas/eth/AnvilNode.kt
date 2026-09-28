@@ -1,7 +1,5 @@
 package vegas.eth
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -38,7 +36,6 @@ class AnvilNode {
     }
 
     private var process: Process? = null
-    private var drainThread: Thread? = null
     private var _rpcUrl: String? = null
 
     val rpcUrl: String get() = _rpcUrl ?: error("AnvilNode not started")
@@ -47,66 +44,28 @@ class AnvilNode {
     /**
      * Start the anvil process.
      *
-     * Uses port 0 (OS-assigned free port), parses actual port from stdout.
+     * Listens on a free port chosen here; its output is discarded.
      * Performs a strict readiness probe via eth_chainId.
      *
-     * @throws IllegalStateException if anvil doesn't respond within 5 seconds
+     * @throws IllegalStateException if anvil doesn't respond within 10 seconds
      */
     fun start() {
+        // Pick a free port here rather than parsing anvil's output: its output
+        // is discarded by the OS, so no pipe can fill up and stall the node.
+        val port = java.net.ServerSocket(0).use { it.localPort }
         val pb = ProcessBuilder(
-            "anvil",
+            ToolCheck.cached().anvilPath ?: "anvil",
             "--mnemonic", MNEMONIC,
             "--chain-id", CHAIN_ID.toString(),
-            "--port", "0",  // OS-assigned port
+            "--port", port.toString(),
             "--accounts", "10",
             "--balance", "10000",  // 10000 ETH per account
             "--base-fee", "0",    // Zero base fee for deterministic balance comparisons
             "--gas-price", "0",   // Zero gas price for legacy transactions
-        ).redirectErrorStream(true)
+        ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD)
 
-        val proc = pb.start()
-        process = proc
-
-        // Parse port from anvil's stdout
-        val reader = BufferedReader(InputStreamReader(proc.inputStream))
-        val startTime = System.currentTimeMillis()
-        var port: Int? = null
-
-        while (System.currentTimeMillis() - startTime < 10_000) {
-            if (!proc.isAlive) {
-                val remaining = reader.readText()
-                error("anvil process died during startup. Output: $remaining")
-            }
-            if (reader.ready()) {
-                val line = reader.readLine() ?: continue
-                // Look for "Listening on 127.0.0.1:NNNNN" or "Listening on 0.0.0.0:NNNNN"
-                val match = Regex("""Listening on \S+:(\d+)""").find(line)
-                if (match != null) {
-                    port = match.groupValues[1].toInt()
-                    break
-                }
-            } else {
-                Thread.sleep(50)
-            }
-        }
-
-        if (port == null) {
-            proc.destroyForcibly()
-            error("Failed to parse port from anvil output within 10 seconds")
-        }
-
+        process = pb.start()
         _rpcUrl = "http://127.0.0.1:$port"
-
-        // Drain anvil's stdout in background to prevent pipe buffer from filling up
-        // (which would cause anvil to block on writes and freeze)
-        drainThread = Thread({
-            try {
-                while (reader.readLine() != null) { /* discard */ }
-            } catch (_: Exception) { /* process closed */ }
-        }, "anvil-drain").apply {
-            isDaemon = true
-            start()
-        }
 
         // Strict readiness probe: poll eth_chainId
         waitForReady()
@@ -116,7 +75,7 @@ class AnvilNode {
         val client = HttpClient.newHttpClient()
         val startTime = System.currentTimeMillis()
 
-        while (System.currentTimeMillis() - startTime < 5_000) {
+        while (System.currentTimeMillis() - startTime < 10_000) {
             try {
                 val request = HttpRequest.newBuilder()
                     .uri(URI.create(rpcUrl))
@@ -137,7 +96,7 @@ class AnvilNode {
         }
 
         stop()
-        error("anvil readiness probe timed out after 5 seconds at $rpcUrl")
+        error("anvil readiness probe timed out after 10 seconds at $rpcUrl")
     }
 
     /** Stop the anvil process. */
@@ -147,8 +106,6 @@ class AnvilNode {
             proc.waitFor()
         }
         process = null
-        drainThread?.interrupt()
-        drainThread = null
         _rpcUrl = null
     }
 }

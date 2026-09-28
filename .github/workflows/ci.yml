@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '27'
           cache: 'maven'
 
       - name: Build and run tests
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '27'
           cache: 'maven'
 
       - name: Install Foundry
@@ -41,8 +41,8 @@ jobs:
       - name: Install solc
         run: |
           pip3 install -r requirements-test.txt
-          solc-select install 0.8.31
-          solc-select use 0.8.31
+          solc-select install 0.8.37
+          solc-select use 0.8.37
           solc --version
 
       - name: Build and run Ethereum tests

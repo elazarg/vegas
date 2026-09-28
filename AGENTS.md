@@ -46,10 +46,8 @@
 
 #### Test Environment
 
-- **Java Version**: Project uses Java 25 (User Environment) / Java 21 (Agent Environment)
-  - Default build target is 25.
-  - Agents: Run `mvn test -Djava.version=21` to override if needed.
-  - Ensure `JAVA_HOME` is set to your JDK installation.
+- **Java Version**: Build with JDK 27 (bytecode target 26, the newest Kotlin 2.4 supports).
+  - Ensure `JAVA_HOME` points to a JDK 26+ installation; an older default JDK fails with "release version 26 not supported".
 - **Maven**: Must be available in system PATH
   - If Maven is not in PATH, either add it or use the full path to the `mvn` executable
   - Basic command: `mvn test`
