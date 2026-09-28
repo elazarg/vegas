@@ -117,8 +117,8 @@ The most immediate work items are recorded in the project's
   semantics for any input (the VegasCore-side proof), and a
   per-program certificate emitted alongside each artifact (the
   Diamond DAG route plus a VegasCore-importing backend that
-  emits \TT{WFProgram} values with their well-formedness
-  obligations discharged by elaboration).  These cover
+  emits a \TT{SourceProgram} and \TT{Setup} per program, checked
+  by the Lean elaborator).  These cover
   different audiences: tool authors care about the first, end
   users about the second.
 \item \emph{Bounded extensions.}  Variable deposits, ERC-20

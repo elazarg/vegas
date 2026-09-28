@@ -5,10 +5,6 @@ TODO:
 # * PRISM-games backend (#50): consume per-node
 #   SampleSpec.dist to answer expected-utility / probability-of-winning
 #   queries that Gambit answers awkwardly. IR is ready.
-# * Real entropy-source taxonomy: PrevRandao(k>=1) lock/consume,
-#   Chainlink VRF, drand. Single override point exists at
-#   DEFAULT_SAMPLE_SOURCE in IR.kt; needs CLI surface + emission.
-# * Rejection sampling for non-uniform `~ weighted { ... }` priors on EVM.
 # * Contextual `~ D given <expr>` analysis priors.
 # * Reveal-failure slash policy (commit/reveal `or burn N` handler).
 # * Symbolic / SMT-based pot conservation check (replace the
@@ -18,19 +14,16 @@ TODO:
 
 # Alignment with VegasCore
 
-* Verified compiled artifacts: emit a new backend that imports Vegas.Core.Program
-  from VegasCore and produces a per-program WFProgram value with decide/rfl
-  certificates discharging freshness, reveal-completeness, distribution
-  normalization, and at-least-one-legal-action. This is the per-artifact
-  alternative to a fully verified compiler.
-* Named static obligations: expose the typechecker's well-formedness checks
-  under VegasCore-aligned names (freshness, revealComplete, normalizedDists,
-  legal). Several are already enforced implicitly across TypeChecker/
-  EventGraph.fromGraph/ToIR; lifting them into one named pass would make the
-  cross-references with VegasCore unambiguous.
-* Fair-play liveness pass (the `legal` obligation; see docs/LIVENESS.md):
-  prove guard satisfiability in every reachable configuration, or fall back
-  to conservative `opt T` typing for unprovable cases.
+See docs/DESIGN.md section 0 for the correspondence and deliberate differences.
+
+* Private initial inputs: VegasCore's Setup gives players private types
+  (auctions with private valuations); Vegas has no construct for them.
+* Checked elaboration: emit a VegasCore SourceProgram for a Vegas program and
+  check that it denotes the same game, instead of relying on the design
+  contract in DESIGN.md.
+* Terminal audit for the Vyper backend (Solidity only today), and watcher
+  encoding of blob (type 3) and set-code (type 4) transactions.
+* Adapters from real randomness beacons (drand, Chainlink VRF) to IVegasBeacon.
 
 # MAID
 

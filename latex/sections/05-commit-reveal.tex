@@ -72,13 +72,27 @@ Edges are wired so that
 \begin{itemize}\itemsep1pt
 \item $a^{c}$ has the same predecessors $a$ originally had;
 \item $a^{r}$ has predecessors $\{a^{c}\} \cup \{b^{c} : b \in
-  \mathrm{partners}(a)\} \cup \mathrm{pred}(a)$;
+  \mathrm{partners}(a)\} \cup \{b^{r} : b \in \mathrm{partners}(a),\
+  b \prec a\} \cup \mathrm{pred}(a)$, where $\prec$ is source order;
 \item every node that previously depended on $a$ now depends on
   $a^{r}$ instead.
 \end{itemize}
 
 The second clause is the informational barrier: $a^{r}$ cannot
 fire until \emph{all} of $a$'s risk partners have also committed.
+Its last part orders the openings.  A reveal is a public event, and
+on an asynchronous ledger nothing makes two of them simultaneous:
+whoever opens later has already read the earlier openings when
+choosing whether to open.  A model that treats the openings as
+simultaneous hides exactly the ``last revealer'' option to withhold
+after seeing the others, which is profitable whenever withholding
+pays more than losing (the three-player \TT{RandomLeader} example is
+such a game).  The rewrite therefore orders the openings in source
+order, the analysis sees each later revealer's information, and the
+contract enforces the same order.  This is VegasCore's barrier
+discipline: public events wait for every earlier event, and only
+commitments of different owners are concurrent.  A multi-role
+\TT{reveal} statement is ordered the same way.
 After the rewrite, no \REVEAL node is on the frontier of any
 configuration in which a sibling \COMMIT is still unresolved.
 \Cref{sec:eventgraph:frontier} called this the structural
@@ -129,6 +143,8 @@ reveal nodes that all wait for the full commit phase (right).
 \draw[arr]  (bar) -- (r1);
 \draw[arr]  (bar) -- (r2);
 \draw[arr]  (bar) -- (r3);
+\draw[arr]  (r1) -- (r2);
+\draw[arr]  (r2) -- (r3);
 \end{tikzpicture}
 \end{center}
 
@@ -139,9 +155,11 @@ as a fan-in/fan-out around the conceptual ``commit phase
 complete'' marker instead of as nine crossing arrows.
 
 After the rewrite, each bidder's reveal depends on every bidder's
-commit.  Reading off the new graph: no reveal is enabled on a
-frontier where any commit is missing, so no bidder learns another
-bidder's value before they themselves have committed.
+commit and on the earlier bidders' reveals.  Reading off the new
+graph: no reveal is enabled on a frontier where any commit is
+missing, so no bidder learns another bidder's value before they
+themselves have committed; and B3 decides whether to open knowing
+B1's and B2's bids, as it would on chain.
 
 \subsection{What changes for the backends}
 
@@ -151,8 +169,8 @@ commit-then-reveal pair of contract functions per rewritten
 action; the Solidity backend uses the hidden write's payload as
 the input to a hash and stores the hash, then on reveal verifies
 the hash and assigns the public field.  The Gambit backend reads
-the rewritten graph as two independence-preserving frontier
-stages (commits, then reveals); information sets are computed
+the rewritten graph as a simultaneous commit stage followed by one
+stage per opening; information sets are computed
 from the new graph in the usual way, and they correctly reflect
 the informational barrier.  No backend-specific commit-reveal
 logic exists: the property is paid for once, in the IR, and
@@ -172,7 +190,7 @@ property holds for any binding, hiding commitment.
 
 \paragraph{The rewrite does not address adaptive adversaries
 elsewhere.}  An adversary can still censor a player's transaction
-to force a timeout; the bail-out subgame (\S\ref{sec:liveness})
+to force a timeout; the quit subgame (\S\ref{sec:liveness})
 makes this a strategic choice with explicit payoff, so the game
 model sees it, but censorship-resistance per se is not what the
 commit-reveal pass provides.
@@ -208,14 +226,14 @@ $r = a^r$ has $\{a^c\} \cup \{b^c : b \in \mathrm{partners}(a)\}$
 among its predecessors, so $r$ can only be enabled when every
 named commit is done.
 
-The same property is proved as a theorem in the companion Lean
-library VegasCore as the ``Commit/reveal information barrier''
-result over the canonical event graph
-(\S\ref{sec:vegascore:theorems}): any event graph in which
-commits dominate reveals satisfies the barrier, regardless of
-how it was obtained.  Vegas's rewrite produces such graphs from
-not-yet-canonical input; VegasCore certifies that any such graph
-satisfies the barrier.
+The companion Lean development VegasCore
+(\S\ref{sec:vegascore:theorems}) compiles its source language to
+event graphs with a stronger discipline: every public event waits
+for all earlier events, so commitments of different owners are the
+only concurrent events.  The rewritten graph has this shape: its
+concurrent nodes are commitments, and the openings follow each
+other in source order.  No theorem connects Vegas's rewrite to
+VegasCore's graphs; the correspondence is a design contract.
 
 \subsection{Implementation}
 

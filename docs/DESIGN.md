@@ -8,65 +8,68 @@
 
 ## 0. Alignment with VegasCore
 
-VegasCore is the companion Lean 4 formalization of the Vegas core calculus.
-The two artifacts are independent — VegasCore is a self-contained semantic
-construction; Vegas is the compiler tool — but where they describe the same
-object, we use the same name on both sides.
+VegasCore (`../VegasCore`) is the companion Lean 4 development. Its source
+language, `SourceProgram` with an initial `Setup`, has four constructors:
+`ret`, `sample`, `commit` and `reveal`, where a disclosure has a typed
+publication result (`ok v` or failure). It compiles to a dependency-driven
+`EventGraph` and a pending-message runtime, and proves that equilibria
+survive compilation, up to sequential equilibrium under an audited service.
 
-### 0.1 Aligned vocabulary
+Vegas is a different, richer surface language and a multi-backend compiler,
+not a front end of VegasCore. Where both describe the same object they use
+the same name and, since the fixes recorded below, the same semantics.
 
-| Vegas (this codebase)            | VegasCore (Lean)        |
-|----------------------------------|-------------------------|
-| `EventGraph` (was `ActionDag`)   | `EventGraph`            |
-| `NodeId` (was `ActionId`)        | event/node id           |
-| `NodeMeta` / `Struct` / `Spec`   | per-node payload        |
-| `Guard(scope, expr)`             | per-node guard `R`      |
-| `Visibility {COMMIT, REVEAL, PUBLIC}` | hidden/pub + Commit/Reveal node kinds (encoded jointly here) |
-| `FrontierMachine`                | frontier                |
-| terminal `withdraw`              | `Ret`                   |
-| `random`                         | `Sample`                |
+### 0.1 Correspondence
 
-### 0.2 Vegas-only concepts (deliberate divergence)
+| Vegas | VegasCore |
+|-------|-----------|
+| `EventGraph`, `NodeId` | `EventGraph`, event id |
+| `commit Role(x: T)` | `commit` (a binding owned by the role) |
+| `reveal Role(x: T)` | `reveal` (publication result `ok v` / failure) |
+| public `yield` of one role | a commit whose reveal follows at once |
+| `yield` of several roles in one statement | concurrent commits, then reveals one at a time in source order (`BarrierOrdered`: public events wait for every earlier event) |
+| `sample (x: T ~ D)` | `sample` (public chance from a declared kernel); on EVM realized by a beacon (`EntropySource.Beacon`), because the chance contract forbids choosing, retrying or withholding a draw |
+| `withdraw { ... }` | `ret` |
+| `null`, `|| null`, `or split/burn`, `|| { ... }` | explicit elimination of the publication result; handlers are sugar for the failure branch |
+| `where` guard reading another role's field | a guard is discharged when a publication it reads failed; no value is invented |
+| `join ... $ d` | the `Setup` precondition: a missing join aborts the instance with refunds; money has no core counterpart |
+| readiness-relative deadlines (`TIMEOUT` from readiness) | relative deadlines from the event's readiness |
+| `--audited` terminal audit and watcher (`docs/AUDITED-RUNTIME.md`) | the audited service of `SourceServiceSpec`; bonds as in `rosterAuditDeposit` |
 
-Each of these is Vegas-specific and stays under its current name; the
-reason is given. VegasCore does not need to mirror them.
+### 0.2 Deliberate differences
 
-* **Surface keywords** (`join`, `yield`, `commit`, `reveal`, `random`,
-  `withdraw`, `where`, `||`, `or split/burn/null`, `let!`). User-facing;
-  lower into VegasCore's five core constructors at the IR level.
-* **Macros.** Inlined before IR; no semantic role downstream.
-* **Risk-partner detection and automatic commit-reveal insertion.** A
-  compilation pass, not a semantic notion. VegasCore is post-insertion.
-* **Quit handlers, bail, timeouts, subgames.** Operational/Solidity-side
-  concerns; VegasCore currently treats quit as a strategic move only.
-* **`chanceRoles : Set<RoleId>`** (vs VegasCore's per-node `Sample`
-  carriers). Coarser abstraction kept for backend simplicity.
-* **`FieldRef = (Role, VarId)` as the field identifier.** VegasCore uses
-  a typed-context position; the shapes are isomorphic for checked
-  programs but the Lean encoding bakes typing in. Kept Vegas-side.
-* **Diamond-DAG-Strategy emission** in the Gallina/Lean backends. An
-  original Vegas contribution: emits a `Record ActionDag` (fair-play
-  completeness proof) paired with `Record EventDag` (trace). The
-  Action/Event distinction here is theory-load-bearing and does *not*
-  follow the type-name rename above.
-* **Eight non-VegasCore backends** (Solidity, Vyper, Gambit, SMT,
-  Scribble, Bitcoin/Lightning, MAID, Gallina/Lean). Each has its own
-  internal vocabulary.
+* **Quitting is persistent.** In Vegas a role that fails to act has no later
+  moves; VegasCore's failure is per publication. The Vegas behaviour is
+  expressible in the core: guard each later commitment of the role on "all its
+  earlier publications succeeded", so later publications fail.
+* **Guards on public moves restrict the legal values.** A `where` clause on a
+  `yield` rejects an illegal value outright. On a reveal, an opening that
+  violates its guard is rejected, and the honest client withholds instead;
+  publicly this is the core's publication failure, and it matches the core's
+  emission rule (validate before publishing, never broadcast a failing opening).
+* **`random Role`** is a trusted role that submits chance values. The core has
+  no such construct: an unrestricted controller does not implement chance.
+  Anonymous `sample` is the construct that corresponds to core chance.
+* **No private initial inputs.** VegasCore's `Setup` can give a player a
+  private type; Vegas cannot express this yet.
+* **Surface features** (macros, `let`, handlers, risk-partner detection and
+  commit-reveal insertion) lower before the IR and have no core counterpart.
+* **Money.** Deposits, pot conservation and `burn` are Vegas-only; the core
+  works with utilities.
 
-### 0.3 Known semantic gaps
+### 0.3 Known gaps
 
 * **MAID is gated.** Plain MAIDs cannot encode context-dependent legal
-  action sets (`MaidNode.domain` is a single static list). Vegas now
-  refuses to emit MAID for any program whose guards reference fields
-  written by other nodes; self-only guards (`where x != 2`) are accepted
-  but their domain restriction is currently still discarded — see
-  `backend/maid/FromIR.kt` and TODO.
-* **Static obligations are spread across the pipeline.** The four
-  VegasCore-style well-formedness obligations (freshness, reveal
-  completeness, distribution normalization, at-least-one-legal-action)
-  are enforced today but live in different files under different names
-  (`TypeChecker`, `EventGraph.fromGraph`, `ToIR`). Lifting them under
-  VegasCore's names is on the TODO list.
+  action sets (`MaidNode.domain` is a single static list). Vegas refuses
+  to emit MAID for any program whose guards reference fields written by
+  other nodes; self-only guards are accepted but their domain restriction
+  is still discarded — see `backend/maid/FromIR.kt` and TODO.
+* **No verified elaboration.** Nothing checks that a Vegas program and a core
+  `SourceProgram` denote the same game; the correspondence above is a design
+  contract, tested on examples, not a theorem.
+* **The audited runtime covers Solidity only**, and the watcher encodes
+  legacy, access-list and dynamic-fee transactions (see
+  `docs/AUDITED-RUNTIME.md` for its assumptions).
 
 ---
 

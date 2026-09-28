@@ -65,19 +65,15 @@ the handler is a terminal allocation chosen at the bail point.
 
 \subsection{Operational realisation}
 
-The Solidity backend implements \TT{Quit} via a sliding-window
-timeout described in detail in \S\ref{sec:solidity:bail}.  In
-short: a single global \TT{lastTs} slot advances on every action;
-the \TT{depends(role, id)} modifier bails \TT{role} when the
-named action is still unfinished and the window has expired.
-Bail is one-way, and the bailed role is always one with a
-genuinely outstanding action --- the caller cannot bail
-themselves, and bystanders with no outstanding dependency cannot
-be bailed.  The contract already stores a per-action timestamp
-slot per role (used for off-chain analytics); the bail policy
-consults only the single global \TT{lastTs} window, so tightening
-to per-action deadlines is a policy change against state that
-already exists.
+The Solidity backend implements \TT{Quit} by per-node deadlines,
+described in detail in \S\ref{sec:solidity:depends}.  In short: a
+node that has been ready for \TT{TIMEOUT} seconds without being
+played expires at that deadline, and its owner quits; quitting is
+persistent.  Only a ready node can expire, so the role that quits is
+always one that could have acted: a player waiting on someone else
+is never blamed, and a player cannot make an opponent quit by
+stalling.  Deadlines count from readiness, not from the last action
+anyone took.
 
 \subsection{Liveness in the game model}
 

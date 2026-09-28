@@ -5,10 +5,8 @@ The EVM backends translate the EventGraph into a deployable smart
 contract.  Both languages target the same compilation pass via a
 shared EVM intermediate representation (\TT{evm.EVMIR}); only the
 final pretty-printer differs.  This section describes the actual
-generated code rather than an idealised version: the bail-out
-mechanism in particular is simpler than the language-level story
-might suggest, and a few of its consequences belong in the
-open-questions list rather than the guarantees list.
+generated code rather than an idealised version, including the
+assumptions its guarantees rest on.
 
 \subsection{Threat model}
 \label{sec:solidity:threats}
@@ -20,10 +18,9 @@ liveness-preserving when a participant stops responding.  It is not
 designed against:
 
 \begin{itemize}\itemsep1pt
-\item \emph{Censorship.}  An adversary who indefinitely excludes a
-  participant's transactions is modeled as forcing a timeout, which
-  marks the participant as \TT{bailed} and triggers the language-level
-  quit handler.
+\item \emph{Censorship.}  An adversary who excludes a participant's
+  transactions past a deadline forces that participant to quit, which
+  triggers the language-level quit handler.
 \item \emph{Cross-contract interactions.}  The contract is a closed
   system; no calls into other contracts are emitted (the only
   outbound action is a direct ETH transfer to a registered
@@ -40,21 +37,20 @@ designed against:
   primitive itself is taken as given.
 \end{itemize}
 
-The remainder of this section describes the construction.  The
-design's looser parts --- especially the single global timeout
-window --- are flagged inline as they come up.
+The remainder of this section describes the construction.
 
 \subsection{Storage layout}
 
 The contract's storage is derived directly from the EventGraph.
 There are five families of slots.
 
-\paragraph{Per-node completion.}  A two-level mapping
-\TT{actionDone[role][actionId]} records, for each role and each
-node, whether the node has fired.  A symmetric mapping
-\TT{actionTimestamp[role][actionId]} stores the block timestamp at
-which it fired.  Each node is assigned a deterministic
-topological index; one
+\paragraph{The schedule.}  The contract stores the EventGraph as a
+table over a deterministic topological order of its nodes: each
+node's owner and its predecessors (as a bitmask).  Per node it
+records \TT{readyAt}, when the last predecessor resolved, and
+\TT{resolvedAt}, when the node was played or resolved without a
+value.  Per role it records \TT{quitAt}, the deadline the role missed,
+if any; a flag \TT{aborted} records that some role never joined.  One
 \TT{uint256 constant ACTION\_\textit{Role}\_\textit{n}} is
 emitted per node, where \textit{n} is the node's stable identifier
 (the phase index for nodes lifted directly from source, a fresh
@@ -81,87 +77,52 @@ shadowed by a \TT{done\_\textit{slot}: bool} flag, so the
 contract can distinguish ``never written'' from ``written to
 the default value''.
 
-\paragraph{Per-role bookkeeping.}  Three booleans per role:
-\TT{done\_\textit{Role}} (the role has joined),
+\paragraph{Per-role bookkeeping.}  Two booleans per role:
+\TT{done\_\textit{Role}} (the role has joined) and
 \TT{claimed\_\textit{Role}} (the role has claimed its terminal
-payout), and a private \TT{bailed[\textit{Role}]} (the role has been
-marked inactive after a timeout).
+payout).
 
 \paragraph{Game-wide constants.}  A constant \TT{TIMEOUT} sets the
 inactivity window, in seconds (the default is 24 hours).  A
 constant \TT{COMMIT\_TAG} (a hashed domain-separation tag) and the
 contract's deployed address are folded into every commitment hash.
 
-\subsection{Modifiers and the depends pattern}
+\subsection{Readiness, deadlines and quitting}
 \label{sec:solidity:depends}
 
-The contract has no global step counter.  Each per-node function
-is guarded by a \TT{depends} modifier per predecessor.  The
-modifier does two things: it triggers a bail of the named role
-if the named predecessor is still unfinished after the timeout
-window has elapsed, and it conditionally requires the predecessor
-to have completed.
+The contract has no global step counter.  A node is \emph{ready}
+once every predecessor is resolved, and its readiness time is the
+latest predecessor resolution (deployment, for a source node).  A
+ready node resolves in one of three ways: its owner plays it; its
+owner has already quit, and it resolves without a value; or its
+deadline, \TT{TIMEOUT} seconds after readiness, passes, and its owner
+quits at that deadline.  Quitting is persistent, as in the analysis
+model.  Only a ready node can expire, so a player is never blamed for
+a move it could not yet make; and a move is rejected once its own
+deadline has passed, even if nobody has recorded the expiry yet.
+
+Resolution is lazy.  An internal \TT{\_settle} walks the unresolved
+nodes in topological order and resolves what it can; it runs at the
+start of every move and withdrawal, and anyone may call it through a
+public \TT{settle()}.  A per-node function checks only that its node
+is ready and still open:
 
 \begin{lstlisting}[style=sol]
-modifier depends(Role role, uint256 actionId) {
-    if (!actionDone[role][actionId]
-        && block.timestamp > lastTs + TIMEOUT) {
-        bailed[role] = true;
-        lastTs = block.timestamp;
-    }
-    if (!bailed[role]) {
-        require(actionDone[role][actionId], "dependency not satisfied");
-    }
-    _;
-}
-\end{lstlisting}
-
-The bail check is gated on \TT{!actionDone[role][actionId]}: a
-role is bailed only if the specific predecessor named here is
-still unfinished and the global \TT{lastTs} window has expired.
-A role that has already completed its predecessor cannot be
-bailed by a later caller naming a different predecessor of
-theirs.  If the role is not bailed, the predecessor's completion
-flag is required; if it is bailed, the \TT{require} is skipped
-and the dependent action proceeds.  Two additional modifiers
-complete the gating: \TT{action(role, id)} asserts that the
-action has not yet fired, marks it done, runs the body, and
-updates \TT{actionTimestamp} and \TT{lastTs}; \TT{by(role)}
-asserts that the calling EOA holds the given role and that the
-role is not itself bailed.  \TT{by} does not consult the
-timeout: a fair-playing caller cannot be bailed by their own
-call.
-
-A typical per-node function looks like (taken from the generated
-Monty Hall contract, where node 3 is Guest's public yield of the
-chosen door):
-
-\begin{lstlisting}[style=sol]
-function move_Guest_3(int256 _d)
-    public
-    by(Role.Guest)
-    action(Role.Guest, 3)
-    depends(Role.Host, 2)
-{
+function move_Guest_3(int256 _d) public {
+    _beginMove(3, Role.Guest);  // settle; caller's role; ready; still open
     require(((_d >= 0) && (_d <= 2)), "domain");
     Guest_d = _d;
     done_Guest_d = true;
+    _endMove(3);                // resolvedAt[3] = block.timestamp
 }
 \end{lstlisting}
 
-In this Monty Hall example the function-name suffix
-(topological index) and the modifier arguments (stable node
-identifiers) happen to coincide --- the source is already in
-topological order, and no commit-reveal expansion runs.  In
-games where expansion introduces fresh ids, the two diverge:
-the bidder commit \TT{move\_B1\_4(\ldots) action(Role.B1, 2)}
-in the generated Vickrey contract is a typical example.
-The function's \TT{depends} clauses list exactly the node's
-direct predecessors in the EventGraph (after the commit-reveal
-expansion); for the rest of the chain, the \TT{require} chains
-through transitive predecessors via their own modifiers.
-Concurrent nodes share their predecessor prefix and are otherwise
-free to be called in any order.
+Resolving an expired node at its deadline, rather than when someone
+notices, keeps the timeline independent of who calls first: the next
+node's deadline counts from the moment it could first be played.
+Concurrent nodes share their predecessors and can be played in any
+order; the openings of simultaneous moves are ordered, as described
+in \S\ref{sec:commit-reveal}.
 
 \subsection{Commits and reveals}
 \label{sec:solidity:commit-reveal}
@@ -198,71 +159,52 @@ Vyper emits the analogous construction using the language's
 \TT{assert} idiom and slightly different storage syntax.  The
 generated bytecode is comparable.
 
-\subsection{The single-window timeout and its consequences}
+\subsection{Aborts, missing values and randomness}
 \label{sec:solidity:bail}
 
-The timeout mechanism is simpler than the language-level story
-might suggest, and it is worth describing exactly.
+\paragraph{Joining.}  Joining is a precondition of the game, not a
+move: the analysis model offers no quit at a join.  If a role has not
+joined by its deadline, the instance is \emph{aborted}: no further move
+is accepted, and each role that did join withdraws its deposit.
+Without this rule the remaining players would be paid from a pot that
+was never filled.
 
-The contract maintains a single global \TT{lastTs} slot, updated
-to \TT{block.timestamp} on every successful action.  Bail is
-triggered only inside the \TT{depends(role, id)} modifier
-(\S\ref{sec:solidity:depends}): when
-\TT{actionDone[role][id]} is still false and
-\TT{block.timestamp > lastTs + TIMEOUT}, that role is marked
-\TT{bailed} and the window resets.  There is therefore one
-sliding inactivity window shared across all participants, but the
-bail is attributed precisely to roles whose specific named action
-is unfinished, not to the caller and not to bystanders.
+\paragraph{Missing values.}  When a node resolves without a value, its
+value slot and \TT{done\_} flag keep their defaults (zero and
+\TT{false}).  Nothing is fabricated.  A field declared with an
+\TT{or null} handler is typed \TT{opt T}, and the \TT{withdraw} clause
+must inspect its \TT{done\_} flag.  A \TT{where} guard that reads
+another role's field is discharged when that field is missing, the rule
+VegasCore uses for guards whose required publications failed; the
+analysis model applies the same rule.
 
-Two properties of the emitted code are worth flagging:
+\paragraph{Randomness.}  A \TT{sample} node has no entry point.  The
+contract is deployed with a randomness beacon, and a draw is fixed by
+the first beacon round published after its node becomes ready.  Nobody
+chooses when it is drawn or what it is, and any later call settles it.
+Block-derived randomness is not an option: whoever triggers a draw
+that reads \TT{block.prevrandao} can do so from a contract that reverts
+unless the outcome suits it, and retry in the next block.
 
-\begin{itemize}\itemsep1pt
-\item \emph{Precision of attribution.}  The backend emits
-  \TT{depends(role, id)} clauses whose role is always the owner
-  of the named predecessor, so the only role a bail can mark is
-  one with an outstanding action.  A role that has completed
-  everything required of it cannot be bailed by a later caller,
-  and a fair-playing caller cannot be bailed by their own
-  attempt to act.  These are properties of the \emph{emitter} ---
-  they follow from how Vegas builds the modifier list per node
-  --- and are not separately checked at runtime.
-\item \emph{One-way bail.}  Once \TT{bailed[\textit{R}] = true},
-  the \TT{by(R)} modifier rejects any subsequent action from
-  \TT{R}.  This matches the language-level treatment of
-  \TT{Quit} as a definitive move.  The remaining risk is the
-  ordinary one: a fair-playing role whose connection is unstable
-  for longer than \TT{TIMEOUT} loses their seat even if they
-  intended to play.
-\end{itemize}
-
-When a dependent action runs against a bailed predecessor, the
-\TT{depends} modifier skips its \TT{require}, but it does \emph{not}
-fabricate writes for the missing fields.  Their value slots and
-their \TT{done\_} flags remain in their default state (zero, and
-\TT{false} respectively).  Downstream code that needs to
-distinguish ``never written'' from ``written to the default value''
-relies on the language's \TT{opt T} typing: a field declared with
-an \TT{or null} handler is typed \TT{opt T}, and the \TT{withdraw}
-clause is required to inspect its \TT{done\_} flag.
-
-The fair-play guarantee one would like --- ``every role can drive
-the contract from any reachable configuration to a terminal
-allocation'' --- is plausible for protocols whose \TT{withdraw}
-clause is total on the public state (including \TT{done\_} flags),
-but it is not proved.  Stating and proving it under the explicit
-execution model is the central refinement-theorem target of the
-ongoing VegasCore work; today, the test suite checks that the
-\TT{withdraw} clause type-checks against the optional fields it
-must handle, and that hand-played example traces reach a terminal
-allocation, but no machine-checked proof is shipped.
+The fair-play guarantee one would like --- ``every role can drive the
+contract from any reachable configuration to a terminal allocation''
+--- follows for protocols whose \TT{withdraw} clause is total on the
+public state: every node resolves by its deadline, and settlement then
+pays each role, including roles that quit.  It is not machine-checked.
+The Ethereum test suite replays model traces on chain, including traces
+in which players quit (played as silence past the deadline) and public
+draws (played through a test beacon), and compares every payout with the
+model's.
 
 \subsection{Withdraw and payout}
 
 The terminal \TT{withdraw} clause is compiled into one entry
 point per role.  Each role calls its own
 \TT{withdraw\_\textit{Role}()} to receive their share, guarded by
-a \TT{claimed\_\textit{Role}} flag to prevent double-payment.  The
+a \TT{claimed\_\textit{Role}} flag to prevent double-payment.
+Withdrawal requires every node to be resolved (or the instance to be
+aborted, in which case it refunds the deposit); a role that quit
+still receives what the \TT{withdraw} clause assigns it.  The
 payout expression is lowered to EVM IR by direct structural
 translation; the body computes the expression against the public
 state (including \TT{done\_} flag inspection for optional fields)
@@ -279,11 +221,34 @@ step for games whose state space the enumerator cannot cover
 (unbounded \TT{int} parameters, very deep trees); the current
 check is best-effort on those and tracked in \file{TODO.txt}.
 
+\subsection{Terminal audit}
+\label{sec:solidity:audit}
+
+A contract can enforce who moves, when, and with which values, but not
+what players broadcast.  A pending or reverted transaction publishes
+its calldata, so a player can disclose a hidden choice before the game
+allows it; the opponent reads it and reacts.  In a coordination game
+this lets a player move first and make the other follow, a deviation
+the source game does not have.  With \TT{--audited}, the Solidity
+backend emits the terminal-audit service of VegasCore's
+sequential-equilibrium theorem: every role posts a bond of the pot
+divided by the claimed collection probability; every move carries the
+hash of the block in which its node became ready, so a signed move
+proves it was made afterwards; the contract registers every successful
+call; and after play ends, anyone can submit a transaction signed by a
+game account.  Unless it is a successful call to the contract, the
+signer's bond is burned.  A watcher (\TT{vegas watch}) collects such
+transactions from the chain and from its node's pool.  It is trusted
+for coverage only: it cannot frame a player, whose signature and
+readiness context are checked on chain.  Coverage of traffic that never
+reaches the watched pool, protected inclusion, and finality remain
+assumptions; \file{docs/AUDITED-RUNTIME.md} lists them.
+
 \subsection{Things the backend deliberately leaves alone}
 
 Several real concerns are not addressed by the Solidity emission
 because they are scoped out of the language.  Gas costs as a
-strategic factor; mempool-level censorship beyond what the bail
+strategic factor; mempool-level censorship beyond what the deadline
 mechanism handles; cross-contract interactions and oracle reads;
 admin keys, upgrade proxies, and pausable patterns.  Each is a deliberate restriction, in the same spirit as the
 language's bounded-types-only stance.  Drawing the boundary

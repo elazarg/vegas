@@ -34,7 +34,14 @@ yield Bob(y: int);
 1.  Alice commits `hash(x)`.
 2.  Bob commits `hash(y)`.
 3.  Alice reveals `x`.
-4.  Bob reveals `y`.
+4.  Bob reveals `y`, after Alice's opening (or her deadline).
+
+The commitments are simultaneous; the openings are not. A reveal is a public
+event, and on an asynchronous ledger whoever opens later has already seen the
+earlier openings when deciding whether to open. The compiler therefore orders
+the openings of one statement in source order, and the analysis model gives
+the later revealer that information. A `reveal` statement naming several roles
+opens in the order written, the same way.
 
 ## Language Syntax
 
@@ -60,6 +67,10 @@ Players enter the game. This is implicitly the root of the DAG.
 ```vegas
 join Alice() $ 100; // Join with 100 wei deposit
 ```
+
+Joining is a precondition of the game, not a move within it: it cannot be
+quit and takes no handler. If a role has not joined by its deadline, the
+instance is aborted and every deposit is refunded.
 
 #### `yield`
 
@@ -127,14 +138,17 @@ Concrete trust model:
 A `sample (x: T ~ D);` binding introduces an anonymous public draw
 under the reserved label `Sample`. Concrete trust model:
 
-- No actor identity; the value is computed on-chain from
-  `block.prevrandao` (the chain's RANDAO beacon). Anyone may call the
-  generated function; the value depends on the proposer's beacon, not
-  the caller.
-- `~ D` is allowed but currently only `uniform` priors are
-  implementable at the EVM level (rejection sampling for non-uniform
-  is future work). Non-uniform priors compile for analysis (Gambit,
-  MAID) but EVM emission rejects them.
+- No actor identity and no entry point. The contract is deployed with a
+  randomness beacon (`IVegasBeacon`); when the draw's node becomes ready,
+  its value is fixed by the first beacon round published after that
+  moment. Nobody chooses when it is drawn or what it is, and nobody can
+  withhold it: any later call settles it.
+- The beacon must be unpredictable, unbiased and live (for example drand
+  or a VRF service). Block-derived values do not qualify: whoever
+  triggers a block-derived draw can retry until it suits them.
+- `~ uniform { ... }` and `~ weighted { ... }` are both implemented on
+  chain, by reducing the beacon output modulo the weights' common
+  denominator (bias below `D / 2^256`).
 - References use `Sample.x` in expressions.
 
 #### Distribution annotation `~ D` on strategic actions
@@ -160,32 +174,38 @@ conditioning (`D | phi`).
 
 The abstract DAG is compiled into a Solidity contract that enforces the game rules.
 
-### 1. The `depends` Modifier
+### 1. The Schedule
 
-The generated contract does not use a global "step" counter. Instead, every action is gated by a `depends` modifier:
+The generated contract does not use a global "step" counter. It holds the
+event graph as a table (each node's owner and predecessors, in topological
+order) and records, per node, when it became ready and when it was resolved.
+A move is accepted only while its node is ready and unresolved:
 
 ```solidity
-modifier depends(Role r, uint id) { ... }
+function move_Host_2(bytes32 _hidden_car) public {
+    _beginMove(2, Role.Host);   // settle, then: caller's role, ready, still open
+    ...
+    _endMove(2);
+}
 ```
 
-An action can be performed only if all its ancestors in the DAG are marked as `done`.
-
-### 2. Timeout and Bailing
+### 2. Deadlines and Quitting
 
 Vegas implements a **non-blocking timeout** mechanism to prevent griefing (where one player stops moving to freeze the funds).
 
-- **Global Timeout**: If a player fails to act within `TIMEOUT` seconds of their dependencies being met, any other player can trigger a check.
-- **Bail State**: The non-responsive player is marked as `bailed`.
-- **Fall-Through**: The `depends` modifier is relaxed. If an action depends on a player who has `bailed`, that dependency is ignored. The game proceeds as if the value were `null`.
+- **Readiness**: A node is ready once every predecessor is resolved; its readiness time is the latest predecessor resolution.
+- **Deadline**: A ready node that is not played within `TIMEOUT` seconds of its readiness expires at that deadline, and its owner quits. Only a ready node can expire, so a player is never blamed for a move it could not yet make, and a move after its own deadline is rejected.
+- **Persistent quit**: A role that quit has no further moves; its later nodes resolve without a value, as in the analysis model.
+- **Settlement**: Anyone may call `settle()` to resolve what can be resolved; every move and withdrawal settles first. A role that quit can still withdraw what the `withdraw` clause assigns it.
 
 ### 3. Null Handling
 
-Because any player might bail, all variable reads are potentially nullable (`Opt[T]`). The `withdraw` clause must explicitly handle these cases:
+A field written under a `|| null` handler is nullable (`opt T`) and the `withdraw` clause must handle the missing case. A `where` guard that reads another role's field is discharged when that field is missing: it holds vacuously, and no value is invented for it.
 
 ```vegas
 withdraw (Alice.x != null) 
     ? { Alice -> 10 } 
-    : { Alice -> -10 } // Penalty for bailing
+    : { Alice -> -10 } // Penalty for quitting
 ```
 
 ## Compilation Pipeline
@@ -197,10 +217,10 @@ withdraw (Alice.x != null)
     - Identifies "Risk Partners" (concurrent public moves).
     - **Rewrites DAG**: Inserts Commit and Reveal nodes for risk partners.
 4.  **Backend Generation**:
-    - **Solidity**: Generates functions with `depends` modifiers and bail logic.
+    - **Solidity**: Generates the schedule, one entry point per move, and per-role withdrawals; optionally a terminal audit (see `docs/AUDITED-RUNTIME.md`).
     - **Gambit**: Generates a game tree where concurrent DAG nodes share information sets.
 
-## Related langauges
+## Related languages
 
 https://github.com/marlowe-lang
 

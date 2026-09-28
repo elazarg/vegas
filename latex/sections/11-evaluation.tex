@@ -156,8 +156,8 @@ a commit-reveal protocol.  Reading the Solidity output makes the
 rewriting visible: each bidder gets a pair of functions
 \TT{move\_$B_i$\_$c$(bytes32 \_hidden\_b)} for the commit and
 \TT{move\_$B_i$\_$r$(int256 \_b, uint256 \_salt)} for the reveal
-(with topological indices $c, r$), and the reveal's
-\TT{depends} chain lists every other bidder's commit as a
-prerequisite.  A hand-written equivalent would need careful
+(with topological indices $c, r$), and the reveal's predecessors
+in the emitted schedule are every bidder's commit and the earlier
+bidders' reveals.  A hand-written equivalent would need careful
 attention to make this dependency right; here the IR computes
 it once.

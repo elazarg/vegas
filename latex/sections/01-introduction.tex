@@ -106,9 +106,9 @@ Deliberately out of scope:
 \item interactions with arbitrary other contracts (the protocol
   is a closed system; cross-contract MEV is parameterised, not
   modelled);
-\item randomness from outside oracles, beyond \TT{block.prevrandao}
-  (Chainlink VRF, drand, multi-party commit-reveal aggregation are
-  natural extensions, not implemented);
+\item concrete randomness services: draws read an abstract beacon
+  interface, and adapters for drand or Chainlink VRF are not
+  implemented;
 \item dynamic player counts (the role set is fixed at compile time).
 \end{itemize}
 
@@ -202,10 +202,10 @@ simpler.
 
 Second, the operational behaviour of a Solidity contract is more
 naturally described by a dependency relation than by a global step
-counter.  The Solidity backend emits a \TT{depends} modifier per
-action, the modifier gating execution on the completion flags of
-the action's predecessors in the event graph; concurrent actions
-can arrive in any order.  This matches the on-chain reality (the
+counter.  The Solidity backend stores the event graph and gates
+each action on the resolution of its predecessors, with a deadline
+counted from the moment the action became possible; concurrent
+actions can arrive in any order.  This matches the on-chain reality (the
 transaction ordering is chosen by builders, not by the contract)
 without the contract having to encode a totalisation.
 
@@ -249,8 +249,9 @@ The contributions of this report are:
 
 \item \emph{A family of backends} (\S\S\ref{sec:solidity}--\ref{sec:other-backends})
   that each consume the same EventGraph: Solidity and Vyper for
-  EVM deployment with \TT{depends}-modifier scheduling and a
-  timeout-driven bail-out for non-responsive participants; Gambit
+  EVM deployment with dependency scheduling, readiness-relative
+  deadlines for non-responsive participants, and an optional terminal
+  audit against early disclosure; Gambit
   for extensive-form game generation via frontier exploration;
   SMT-LIB for reachability queries; Scribble for the session-typed
   protocol description; a sketch Bitcoin/Lightning move transcript

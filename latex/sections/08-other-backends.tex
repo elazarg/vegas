@@ -181,9 +181,9 @@ two coexist as different approaches to ``the same protocol viewed
 through a proof assistant'': Diamond DAG ships a standalone
 per-program object whose inhabitation is a witness; VegasCore is
 a reusable library of definitions and theorems.  A third Lean
-backend, emitting a Vegas program as an instance of VegasCore's
-\TT{WFProgram} type, is planned (and listed in
-\file{TODO.txt}) to bridge the two.
+backend, emitting a Vegas program as a VegasCore
+\TT{SourceProgram} with its initial \TT{Setup}, is planned (and
+listed in \file{TODO.txt}) to bridge the two.
 
 The encoding is interesting for two reasons.  First, it is
 self-contained: the Lean object can be passed to a theorem

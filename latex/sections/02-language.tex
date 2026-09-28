@@ -89,9 +89,10 @@ draw with no actor:
 \begin{lstlisting}[style=vg]
 sample (w: ticket);
 \end{lstlisting}
-Anonymous samples live under a reserved label \TT{Sample}; their
-value is computed on chain from \TT{block.prevrandao} with
-domain separation.  No actor identity is required; the field is
+Anonymous samples live under a reserved label \TT{Sample}; on chain
+their value is fixed by a randomness beacon, the first round published
+after the draw becomes ready, so no participant chooses when or what
+is drawn.  No actor identity is required; the field is
 referenced in expressions as \TT{Sample.w}.
 
 A parameter may carry a \emph{distribution annotation}

@@ -28,53 +28,23 @@ and emitting PRISM's `.prism` plus `.props` syntax.
 Tracked as [GitHub issue #50](https://github.com/elazarg/vegas/issues/50)
 and `TODO.txt`.
 
-### Real entropy sources beyond `block.prevrandao`
+### Concrete randomness beacons
 
-`sample` bindings currently use `EntropySource.PrevRandao(0)` as the
-single hard-coded source (`vegas/ir/IR.kt` `DEFAULT_SAMPLE_SOURCE`).
-A future entropy-source taxonomy would offer per-game choice:
+`sample` bindings draw from a beacon fixed at deployment
+(`EntropySource.Beacon`, interface `IVegasBeacon.randomnessAfter`): the
+first round published after the node becomes ready. Block-derived
+randomness was removed because whoever triggers the drawing call can
+choose among outcomes. Remaining work is adapters from real beacons to
+`IVegasBeacon`:
 
-- `PrevRandao(futureBlocks: Int)` with `futureBlocks >= 1` to mitigate
-  proposer bias (two-action lock/consume pattern).
-- Chainlink VRF: request/fulfillRandomWords callback scaffolding.
-- drand beacon: BLS signature verification using `bn254` precompile.
-- Multi-party commit-reveal aggregation with one-honest assumption.
+- drand (quicknet/evmnet): verify the round's BLS signature on chain.
+- Chainlink VRF: request at readiness, fulfil through the callback.
 
-Surface: either a CLI flag (`--entropy=prevrandao+2`) for project-wide
-selection, or per-sample `from prevrandao(+k)` clauses for per-site
-choice. Replacing the single `DEFAULT_SAMPLE_SOURCE` constant with a
-config-driven value is a single-line plumbing change once the surface
-is decided.
-
-### Rejection sampling for non-uniform sample distributions on EVM
-
-`sample (x: T ~ weighted { ... })` analyses correctly in Gambit / MAID
-but is rejected at EVM emission today (the modulo-into-support trick
-is only correct for uniform priors). A rejection-sampling implementation
-in the emitted Solidity would draw repeatedly from prevrandao and accept
-according to the weight, with a bounded retry count.
-
-### Exact-uniform sampling on EVM for non-power-of-two support sizes
-
-The current `keccak256(...) % supportSize` introduces a modulo bias of
-order `supportSize / 2^256` (e.g. `~ 3 / 2^256 ~ 2^-254` for a 3-way
-ticket). This is statistically undetectable but mathematically not
-identical to the analysis-time uniform distribution. Same fix (and
-gas cost): a bounded rejection loop.
-```solidity
-uint256 entropy = uint256(keccak256(abi.encode(block.prevrandao, address(this), idx)));
-uint256 threshold = type(uint256).max - type(uint256).max % N;
-uint256 attempts = 0;
-while (entropy >= threshold) {
-    require(attempts < 8, "exhausted attempts");
-    entropy = uint256(keccak256(abi.encode(entropy, attempts)));
-    attempts++;
-}
-uint256 r = entropy % N;
-```
-Worth doing only if a future deployment needs strict uniformity.
-Production EVM code (Chainlink VRF consumers, NFT mints, raffles) all
-accept the bias.
+Weighted distributions are exact up to the reduction bias: the beacon
+output, domain-separated by contract and node, is reduced modulo the
+common denominator `D` of the weights and mapped through cumulative
+integer weights, with bias below `D / 2^256`. A bounded rejection loop
+would remove even that bias, if a deployment needs it.
 
 ## Language semantics
 
