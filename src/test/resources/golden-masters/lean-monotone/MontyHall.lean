@@ -46,6 +46,26 @@ def lift2 {A B C : Type} (f : A → B → C) : Option A → Option B → Option 
   | some vx, some vy => some (f vx vy)
   | _, _ => none
 
+/-- Disjunction over missing values: a known `true` decides it -/
+def orOpt : Option Bool → Option Bool → Option Bool
+  | some true, _ => some true
+  | _, some true => some true
+  | some false, some false => some false
+  | _, _ => none
+
+/-- Conjunction over missing values: a known `false` decides it -/
+def andOpt : Option Bool → Option Bool → Option Bool
+  | some false, _ => some false
+  | _, some false => some false
+  | some true, some true => some true
+  | _, _ => none
+
+/-- Conditional over a possibly missing condition -/
+def iteOpt {A : Type} : Option Bool → Option A → Option A → Option A
+  | some true, t, _ => t
+  | some false, _, e => e
+  | none, _, _ => none
+
 /- Domain Constraints -/
 def domain_Enum_0 (z : Int) : Prop := 0 ≤ z ∧ z ≤ 2
 
@@ -84,7 +104,7 @@ structure W4
   W4_guard_have_w0 : w0.isHave
   W4_guard_have_w2 : w2.isHave
   W4_guard_domain_goat_Host : domain_Enum_0 goat_Host
-  W4_guard_logic : (lift2 (· || ·) (lift1 (! ·) (some true)) (lift2 (fun x y => decide (x ≠ y)) (some goat_Host) (w3.getVal (fun w => w.d_Guest)))) = some true
+  W4_guard_logic : (orOpt (lift1 (! ·) (some (Option.isSome (w3.getVal (fun w => w.d_Guest))))) (lift2 (fun x y => decide (x ≠ y)) (some goat_Host) (w3.getVal (fun w => w.d_Guest)))) = some true
 
 structure W5
     (w0 : UnlessQuit Role.Host (W0))

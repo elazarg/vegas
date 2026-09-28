@@ -195,6 +195,32 @@ class CoqDagEncoder(private val dag: EventGraph, private val policy: LivenessPol
         appendLine("Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : option C :=")
         appendLine("  match x, y with Some vx, Some vy => Some (f vx vy) | _, _ => None end.")
         appendLine()
+        // Missing values follow Kleene's three-valued logic: a known operand
+        // that decides a connective decides it, so a guard discharged by a
+        // missing field holds even though the field has no value.
+        appendLine("(* Connectives over missing values: a deciding known operand decides them *)")
+        appendLine("Definition orb_opt (x y : option bool) : option bool :=")
+        appendLine("  match x, y with")
+        appendLine("  | Some true, _ => Some true")
+        appendLine("  | _, Some true => Some true")
+        appendLine("  | Some false, Some false => Some false")
+        appendLine("  | _, _ => None")
+        appendLine("  end.")
+        appendLine()
+        appendLine("Definition andb_opt (x y : option bool) : option bool :=")
+        appendLine("  match x, y with")
+        appendLine("  | Some false, _ => Some false")
+        appendLine("  | _, Some false => Some false")
+        appendLine("  | Some true, Some true => Some true")
+        appendLine("  | _, _ => None")
+        appendLine("  end.")
+        appendLine()
+        appendLine("Definition ite_opt {A} (c : option bool) (t e : option A) : option A :=")
+        appendLine("  match c with Some true => t | Some false => e | None => None end.")
+        appendLine()
+        appendLine("Definition is_some {A} (x : option A) : bool :=")
+        appendLine("  match x with Some _ => true | None => false end.")
+        appendLine()
     }
 
     private fun StringBuilder.appendDomainDefinitions() {
@@ -426,6 +452,10 @@ class CoqDagEncoder(private val dag: EventGraph, private val policy: LivenessPol
 
             is Expr.Field -> fieldReadExpr(e.field, currentIndex)
 
+            // Under fair play every field is present.
+            is Expr.IsDefined -> if (policy == LivenessPolicy.FAIR_PLAY) "true"
+            else "(Some (is_some ${fieldReadExpr(e.field, currentIndex)}))"
+
             is Expr.Add -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} + ${translate(e.r)})%Z"
             else "(lift2 Z.add ${translate(e.l)} ${translate(e.r)})"
 
@@ -435,8 +465,12 @@ class CoqDagEncoder(private val dag: EventGraph, private val policy: LivenessPol
             is Expr.Mul -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} * ${translate(e.r)})%Z"
             else "(lift2 Z.mul ${translate(e.l)} ${translate(e.r)})"
 
-            is Expr.Div -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} / ${translate(e.r)})%Z"
-            else "(lift2 Z.div ${translate(e.l)} ${translate(e.r)})"
+            // Division and remainder truncate toward zero, as in the analysis model and on the EVM.
+            is Expr.Div -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.quot ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.quot ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Mod -> if (policy == LivenessPolicy.FAIR_PLAY) "(Z.rem ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Z.rem ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Neg -> if (policy == LivenessPolicy.FAIR_PLAY) "(- ${translate(e.x)})%Z"
             else "(lift1 Z.opp ${translate(e.x)})"
@@ -462,15 +496,16 @@ class CoqDagEncoder(private val dag: EventGraph, private val policy: LivenessPol
 
             // Boolean Logic (bool -> bool)
             is Expr.And -> if (policy == LivenessPolicy.FAIR_PLAY) "(andb ${translate(e.l)} ${translate(e.r)})"
-            else "(lift2 (fun a b => andb a b) ${translate(e.l)} ${translate(e.r)})"
+            else "(andb_opt ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Or -> if (policy == LivenessPolicy.FAIR_PLAY) "(orb ${translate(e.l)} ${translate(e.r)})"
-            else "(lift2 (fun a b => orb a b) ${translate(e.l)} ${translate(e.r)})"
+            else "(orb_opt ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Not -> if (policy == LivenessPolicy.FAIR_PLAY) "(negb ${translate(e.x)})"
             else "(lift1 negb ${translate(e.x)})"
 
-            else -> if (policy == LivenessPolicy.FAIR_PLAY) "true" else "(Some true)"
+            is Expr.Ite -> if (policy == LivenessPolicy.FAIR_PLAY) "(if ${translate(e.c)} then ${translate(e.t)} else ${translate(e.e)})"
+            else "(ite_opt ${translate(e.c)} ${translate(e.t)} ${translate(e.e)})"
         }
         return translate(e)
     }

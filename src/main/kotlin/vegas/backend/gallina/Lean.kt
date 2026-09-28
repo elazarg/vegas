@@ -161,6 +161,30 @@ class LeanDagEncoder(private val dag: EventGraph, private val policy: LivenessPo
         appendLine("  | some vx, some vy => some (f vx vy)")
         appendLine("  | _, _ => none")
         appendLine()
+
+        // Missing values follow Kleene's three-valued logic: a known operand
+        // that decides a connective decides it, so a guard discharged by a
+        // missing field holds even though the field has no value.
+        appendLine("/-- Disjunction over missing values: a known `true` decides it -/")
+        appendLine("def orOpt : Option Bool → Option Bool → Option Bool")
+        appendLine("  | some true, _ => some true")
+        appendLine("  | _, some true => some true")
+        appendLine("  | some false, some false => some false")
+        appendLine("  | _, _ => none")
+        appendLine()
+        appendLine("/-- Conjunction over missing values: a known `false` decides it -/")
+        appendLine("def andOpt : Option Bool → Option Bool → Option Bool")
+        appendLine("  | some false, _ => some false")
+        appendLine("  | _, some false => some false")
+        appendLine("  | some true, some true => some true")
+        appendLine("  | _, _ => none")
+        appendLine()
+        appendLine("/-- Conditional over a possibly missing condition -/")
+        appendLine("def iteOpt {A : Type} : Option Bool → Option A → Option A → Option A")
+        appendLine("  | some true, t, _ => t")
+        appendLine("  | some false, _, e => e")
+        appendLine("  | none, _, _ => none")
+        appendLine()
     }
 
     private fun StringBuilder.appendDomainDefinitions() {
@@ -379,6 +403,10 @@ class LeanDagEncoder(private val dag: EventGraph, private val policy: LivenessPo
 
             is Expr.Field -> fieldReadExpr(e.field, currentIndex)
 
+            // Under fair play every field is present.
+            is Expr.IsDefined -> if (policy == LivenessPolicy.FAIR_PLAY) "true"
+            else "(some (Option.isSome ${fieldReadExpr(e.field, currentIndex)}))"
+
             is Expr.Add -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} + ${translate(e.r)})"
             else "(lift2 (· + ·) ${translate(e.l)} ${translate(e.r)})"
 
@@ -388,8 +416,12 @@ class LeanDagEncoder(private val dag: EventGraph, private val policy: LivenessPo
             is Expr.Mul -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} * ${translate(e.r)})"
             else "(lift2 (· * ·) ${translate(e.l)} ${translate(e.r)})"
 
-            is Expr.Div -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} / ${translate(e.r)})"
-            else "(lift2 (· / ·) ${translate(e.l)} ${translate(e.r)})"
+            // Division and remainder truncate toward zero, as in the analysis model and on the EVM.
+            is Expr.Div -> if (policy == LivenessPolicy.FAIR_PLAY) "(Int.tdiv ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Int.tdiv ${translate(e.l)} ${translate(e.r)})"
+
+            is Expr.Mod -> if (policy == LivenessPolicy.FAIR_PLAY) "(Int.tmod ${translate(e.l)} ${translate(e.r)})"
+            else "(lift2 Int.tmod ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Neg -> if (policy == LivenessPolicy.FAIR_PLAY) "(-${translate(e.x)})"
             else "(lift1 (- ·) ${translate(e.x)})"
@@ -415,15 +447,16 @@ class LeanDagEncoder(private val dag: EventGraph, private val policy: LivenessPo
 
             // Boolean Logic
             is Expr.And -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} && ${translate(e.r)})"
-            else "(lift2 (· && ·) ${translate(e.l)} ${translate(e.r)})"
+            else "(andOpt ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Or -> if (policy == LivenessPolicy.FAIR_PLAY) "(${translate(e.l)} || ${translate(e.r)})"
-            else "(lift2 (· || ·) ${translate(e.l)} ${translate(e.r)})"
+            else "(orOpt ${translate(e.l)} ${translate(e.r)})"
 
             is Expr.Not -> if (policy == LivenessPolicy.FAIR_PLAY) "(!${translate(e.x)})"
             else "(lift1 (! ·) ${translate(e.x)})"
 
-            else -> if (policy == LivenessPolicy.FAIR_PLAY) "true" else "(some true)"
+            is Expr.Ite -> if (policy == LivenessPolicy.FAIR_PLAY) "(if ${translate(e.c)} then ${translate(e.t)} else ${translate(e.e)})"
+            else "(iteOpt ${translate(e.c)} ${translate(e.t)} ${translate(e.e)})"
         }
         return translate(e)
     }

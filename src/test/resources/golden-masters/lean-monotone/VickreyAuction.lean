@@ -48,6 +48,26 @@ def lift2 {A B C : Type} (f : A → B → C) : Option A → Option B → Option 
   | some vx, some vy => some (f vx vy)
   | _, _ => none
 
+/-- Disjunction over missing values: a known `true` decides it -/
+def orOpt : Option Bool → Option Bool → Option Bool
+  | some true, _ => some true
+  | _, some true => some true
+  | some false, some false => some false
+  | _, _ => none
+
+/-- Conjunction over missing values: a known `false` decides it -/
+def andOpt : Option Bool → Option Bool → Option Bool
+  | some false, _ => some false
+  | _, some false => some false
+  | some true, some true => some true
+  | _, _ => none
+
+/-- Conditional over a possibly missing condition -/
+def iteOpt {A : Type} : Option Bool → Option A → Option A → Option A
+  | some true, t, _ => t
+  | some false, _, e => e
+  | none, _, _ => none
+
 /- Domain Constraints -/
 def domain_Enum_0 (z : Int) : Prop := 0 ≤ z ∧ z ≤ 2
 

@@ -35,6 +35,29 @@ Definition lift1 {A B} (f : A -> B) (x : option A) : option B :=
 Definition lift2 {A B C} (f : A -> B -> C) (x : option A) (y : option B) : option C :=
   match x, y with Some vx, Some vy => Some (f vx vy) | _, _ => None end.
 
+(* Connectives over missing values: a deciding known operand decides them *)
+Definition orb_opt (x y : option bool) : option bool :=
+  match x, y with
+  | Some true, _ => Some true
+  | _, Some true => Some true
+  | Some false, Some false => Some false
+  | _, _ => None
+  end.
+
+Definition andb_opt (x y : option bool) : option bool :=
+  match x, y with
+  | Some false, _ => Some false
+  | _, Some false => Some false
+  | Some true, Some true => Some true
+  | _, _ => None
+  end.
+
+Definition ite_opt {A} (c : option bool) (t e : option A) : option A :=
+  match c with Some true => t | Some false => e | None => None end.
+
+Definition is_some {A} (x : option A) : bool :=
+  match x with Some _ => true | None => false end.
+
 (* --- Domain Constraints --- *)
 Definition domain_Enum_0 (z : Z) : Prop :=
   (0%Z <= z)%Z /\ (z <= 2%Z)%Z.
