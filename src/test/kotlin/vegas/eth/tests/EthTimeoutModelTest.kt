@@ -38,8 +38,8 @@ class EthTimeoutModelTest : FunSpec({
      * timing out at each possible point after joins are complete.
      *
      * We play the trace up to move index [timeoutAfter], advance time, then
-     * attempt to execute withdrawals. The contract's `depends` modifier
-     * should set bailed flags and allow bail-out payoffs.
+     * attempt to execute withdrawals. Expired nodes make their owners quit,
+     * and every role can still withdraw.
      */
     fun testTimeoutAt(gameName: String, timeoutAfter: Int) {
         val game = loadGame(gameName)
@@ -68,12 +68,9 @@ class EthTimeoutModelTest : FunSpec({
         // Advance time past timeout
         rpc.advanceTime(EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
 
-        // Try to execute remaining non-join moves that the contract may accept
-        // after timeout (depends modifier sets bailed flags)
+        // Try the remaining moves: those whose deadline has passed are rejected.
         for (i in timeoutAfter until trace.moves.size) {
             val move = trace.moves[i]
-            // Skip — after timeout, the bailed role's actions are skipped by the contract
-            // The depends modifier handles this: if predecessor timed out, bailed[role] = true
             try {
                 ethSession.submitMove(move)
             } catch (_: TxRevertedException) {
@@ -81,7 +78,9 @@ class EthTimeoutModelTest : FunSpec({
             }
         }
 
-        // Verify withdrawals execute (bail-out payoffs should be valid)
+        // Nobody plays on: every remaining deadline passes, then withdrawals
+        // must all succeed (executeWithdrawals throws on a revert).
+        ethSession.letRemainingDeadlinesPass()
         val payoffs = ethSession.executeWithdrawals()
 
         // Basic sanity: total payoffs should not exceed total deposits

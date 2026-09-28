@@ -66,6 +66,9 @@ class LocalSession(private val game: GameIR) : GameSession {
 
     override fun isTerminal(): Boolean = config.isTerminal()
 
+    /** The nodes of the current frontier. */
+    fun enabled(): Set<NodeId> = config.enabled()
+
     override fun payoffs(): Map<RoleId, Int> {
         require(isTerminal()) { "Cannot compute payoffs: game is not terminal" }
 

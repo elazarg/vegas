@@ -2,9 +2,9 @@ package vegas.eth.tests
 
 import io.kotest.core.annotation.EnabledIf
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 import vegas.RoleId
 import vegas.VarId
-import vegas.backend.evm.EvmConstants
 import vegas.eth.*
 import vegas.frontend.compileToIR
 import vegas.frontend.inlineMacros
@@ -14,11 +14,8 @@ import vegas.ir.GameIR
 import vegas.runtime.*
 
 /**
- * Timeout tests: advance Anvil timestamp past TIMEOUT, verify bail-out
- * logic and payoff splits.
- *
- * Uses `evm_increaseTime` and `evm_mine` to manipulate the block timestamp,
- * simulating timeout scenarios where a role fails to act within the deadline.
+ * Timeout tests: a player stays silent past its deadline, which on chain is
+ * how it quits. The payouts must be the model's payouts for that quit.
  */
 @EnabledIf(EthToolsAvailable::class)
 class EthTimeoutTest : FunSpec({
@@ -33,72 +30,52 @@ class EthTimeoutTest : FunSpec({
         return compileToIR(inlineMacros(ast))
     }
 
-    test("Prisoners: B times out after joining - bail-out payoffs") {
+    /**
+     * Play [script] on chain and in the model: each step picks, for a role,
+     * its move with the given value (null: its join; [quit]: its quit).
+     */
+    fun playBoth(game: GameIR, script: List<Pair<String, Expr.Const?>>): Pair<Map<RoleId, Int>, Map<RoleId, Long>> {
         val rpc = EthJsonRpc(anvil.rpcUrl)
-        val game = loadGame("Prisoners")
-        val runtime = EthereumRuntime(rpc, anvil.accounts)
-        val session = runtime.deploy(game) as EthereumSession
-
-        // Both join
-        val moves = session.legalMoves()
-        val joinMoves = moves.filter {
-            game.dag.spec(it.actionId).join != null
+        val chain = EthereumRuntime(rpc, anvil.accounts).deploy(game) as EthereumSession
+        val model = LocalRuntime().deploy(game)
+        for ((role, value) in script) {
+            val move = chain.legalMoves().first { m ->
+                m.role == RoleId(role) && when (value) {
+                    null -> m.assignments.isEmpty()
+                    else -> m.assignments.values.single() == value
+                }
+            }
+            chain.submitMove(move)
+            model.submitMove(move)
         }
-        for (move in joinMoves) {
-            session.submitMove(move)
-        }
-
-        // A commits (cooperate)
-        val afterJoin = session.legalMoves()
-        val aCommit = afterJoin.find { it.role == RoleId("A") }
-        if (aCommit != null) {
-            val commitMove = GameMove(
-                actionId = aCommit.actionId,
-                role = aCommit.role,
-                visibility = aCommit.visibility,
-                assignments = mapOf(VarId("c") to Expr.Const.Hidden(Expr.Const.BoolVal(true))),
-            )
-            session.submitMove(commitMove)
-        }
-
-        // Advance time past TIMEOUT to trigger B's bail-out
-        rpc.advanceTime(EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
-
-        // Now B is bailed — remaining actions should be callable with bailed logic
-        // The contract's `depends` modifier will set bailed[B] = true on timestamp check
+        model.isTerminal() shouldBe true
+        return model.payoffs() to chain.executeWithdrawals()
     }
 
-    test("OddsEvensShort: Even times out - Odd gets split payoff") {
-        val rpc = EthJsonRpc(anvil.rpcUrl)
+    val quit = Expr.Const.Quit
+    fun hidden(b: Boolean) = Expr.Const.Hidden(Expr.Const.BoolVal(b))
+    fun open(b: Boolean) = Expr.Const.BoolVal(b)
+
+    test("Prisoners: B times out at its commitment and forfeits under the split handler") {
+        val game = loadGame("Prisoners")
+        val (model, chain) = playBoth(game, listOf(
+            "A" to null, "B" to null,
+            "A" to hidden(true), "B" to quit,
+            "A" to open(true), "B" to quit,
+        ))
+        chain shouldBe model.mapValues { it.value.toLong() }
+        chain.getValue(RoleId("B")) shouldBe 0L
+        chain.values.sum() shouldBe 200L
+    }
+
+    test("OddsEvensShort: Even times out at its opening and Odd collects") {
         val game = loadGame("OddsEvensShort")
-        val runtime = EthereumRuntime(rpc, anvil.accounts)
-        val session = runtime.deploy(game) as EthereumSession
-
-        // Both join
-        val moves = session.legalMoves()
-        val joinMoves = moves.filter {
-            game.dag.spec(it.actionId).join != null
-        }
-        for (move in joinMoves) {
-            session.submitMove(move)
-        }
-
-        // Odd commits (true)
-        val afterJoin = session.legalMoves()
-        val oddCommit = afterJoin.find { it.role == RoleId("Odd") }
-        if (oddCommit != null) {
-            val commitMove = GameMove(
-                actionId = oddCommit.actionId,
-                role = oddCommit.role,
-                visibility = oddCommit.visibility,
-                assignments = mapOf(VarId("c") to Expr.Const.Hidden(Expr.Const.BoolVal(true))),
-            )
-            session.submitMove(commitMove)
-        }
-
-        // Advance time past TIMEOUT
-        rpc.advanceTime(EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
-
-        // Even is bailed — Odd should get favorable split payoff
+        val (model, chain) = playBoth(game, listOf(
+            "Even" to null, "Odd" to null,
+            "Even" to hidden(true), "Odd" to hidden(false),
+            "Odd" to open(false), "Even" to quit,
+        ))
+        chain shouldBe model.mapValues { it.value.toLong() }
+        (chain.getValue(RoleId("Odd")) > chain.getValue(RoleId("Even"))) shouldBe true
     }
 })

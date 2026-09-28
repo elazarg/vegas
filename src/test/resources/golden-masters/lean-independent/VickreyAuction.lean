@@ -110,6 +110,7 @@ structure W8
     (w4 : Maybe Role.B1 (W4 w0 w1 w2 w3))
     (w5 : Maybe Role.B2 (W5 w0 w1 w2 w3))
     (w6 : Maybe Role.B3 (W6 w0 w1 w2 w3))
+    (w7 : Maybe Role.B1 (W7 w0 w1 w2 w3 w4 w5 w6))
     : Type where
   b_B2 : Int
   W8_guard_domain_b_B2 : domain_Enum_0 b_B2
@@ -124,6 +125,8 @@ structure W9
     (w4 : Maybe Role.B1 (W4 w0 w1 w2 w3))
     (w5 : Maybe Role.B2 (W5 w0 w1 w2 w3))
     (w6 : Maybe Role.B3 (W6 w0 w1 w2 w3))
+    (w7 : Maybe Role.B1 (W7 w0 w1 w2 w3 w4 w5 w6))
+    (w8 : Maybe Role.B2 (W8 w0 w1 w2 w3 w4 w5 w6 w7))
     : Type where
   b_B3 : Int
   W9_guard_domain_b_B3 : domain_Enum_0 b_B3
@@ -139,7 +142,7 @@ structure EventDag : Type where
   event5 : Maybe Role.B2 (W5 event0 event1 event2 event3)
   event6 : Maybe Role.B3 (W6 event0 event1 event2 event3)
   event7 : Maybe Role.B1 (W7 event0 event1 event2 event3 event4 event5 event6)
-  event8 : Maybe Role.B2 (W8 event0 event1 event2 event3 event4 event5 event6)
-  event9 : Maybe Role.B3 (W9 event0 event1 event2 event3 event4 event5 event6)
+  event8 : Maybe Role.B2 (W8 event0 event1 event2 event3 event4 event5 event6 event7)
+  event9 : Maybe Role.B3 (W9 event0 event1 event2 event3 event4 event5 event6 event7 event8)
 
 end GameProtocol

@@ -47,7 +47,7 @@ structure W4
     : Type where
   goat_Host : Int
   W4_guard_domain_goat_Host : domain_Enum_0 goat_Host
-  W4_guard_logic : (decide (goat_Host ≠ w3.d_Guest)) = true
+  W4_guard_logic : ((!true) || (decide (goat_Host ≠ w3.d_Guest))) = true
 
 structure W5
     (w0 : W0)

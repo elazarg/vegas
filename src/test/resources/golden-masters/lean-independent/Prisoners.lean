@@ -81,6 +81,7 @@ structure W5
     (w1 : Maybe Role.B (W1 w0))
     (w2 : Maybe Role.A (W2 w0 w1))
     (w3 : Maybe Role.B (W3 w0 w1))
+    (w4 : Maybe Role.A (W4 w0 w1 w2 w3))
     : Type where
   c_B : Bool
   W5_guard_w3_present : w3.isPresent
@@ -92,6 +93,6 @@ structure EventDag : Type where
   event2 : Maybe Role.A (W2 event0 event1)
   event3 : Maybe Role.B (W3 event0 event1)
   event4 : Maybe Role.A (W4 event0 event1 event2 event3)
-  event5 : Maybe Role.B (W5 event0 event1 event2 event3)
+  event5 : Maybe Role.B (W5 event0 event1 event2 event3 event4)
 
 end GameProtocol

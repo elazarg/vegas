@@ -114,6 +114,7 @@ structure W8
     (w4 : UnlessQuit Role.B1 (W4 w0 w1 w2 w3))
     (w5 : UnlessQuit Role.B2 (W5 w0 w1 w2 w3))
     (w6 : UnlessQuit Role.B3 (W6 w0 w1 w2 w3))
+    (w7 : UnlessQuit Role.B1 (W7 w0 w1 w2 w3 w4 w5 w6))
     : Type where
   b_B2 : Int
   W8_guard_have_w2 : w2.isHave
@@ -129,6 +130,8 @@ structure W9
     (w4 : UnlessQuit Role.B1 (W4 w0 w1 w2 w3))
     (w5 : UnlessQuit Role.B2 (W5 w0 w1 w2 w3))
     (w6 : UnlessQuit Role.B3 (W6 w0 w1 w2 w3))
+    (w7 : UnlessQuit Role.B1 (W7 w0 w1 w2 w3 w4 w5 w6))
+    (w8 : UnlessQuit Role.B2 (W8 w0 w1 w2 w3 w4 w5 w6 w7))
     : Type where
   b_B3 : Int
   W9_guard_have_w3 : w3.isHave
@@ -145,8 +148,8 @@ structure ActionDag : Type where
   action5 : W5 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3)
   action6 : W6 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3)
   action7 : W7 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4) (UnlessQuit.have action5) (UnlessQuit.have action6)
-  action8 : W8 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4) (UnlessQuit.have action5) (UnlessQuit.have action6)
-  action9 : W9 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4) (UnlessQuit.have action5) (UnlessQuit.have action6)
+  action8 : W8 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4) (UnlessQuit.have action5) (UnlessQuit.have action6) (UnlessQuit.have action7)
+  action9 : W9 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4) (UnlessQuit.have action5) (UnlessQuit.have action6) (UnlessQuit.have action7) (UnlessQuit.have action8)
 
 structure EventDag : Type where
   event0 : UnlessQuit Role.Seller (W0)
@@ -157,7 +160,7 @@ structure EventDag : Type where
   event5 : UnlessQuit Role.B2 (W5 event0 event1 event2 event3)
   event6 : UnlessQuit Role.B3 (W6 event0 event1 event2 event3)
   event7 : UnlessQuit Role.B1 (W7 event0 event1 event2 event3 event4 event5 event6)
-  event8 : UnlessQuit Role.B2 (W8 event0 event1 event2 event3 event4 event5 event6)
-  event9 : UnlessQuit Role.B3 (W9 event0 event1 event2 event3 event4 event5 event6)
+  event8 : UnlessQuit Role.B2 (W8 event0 event1 event2 event3 event4 event5 event6 event7)
+  event9 : UnlessQuit Role.B3 (W9 event0 event1 event2 event3 event4 event5 event6 event7 event8)
 
 end GameProtocol

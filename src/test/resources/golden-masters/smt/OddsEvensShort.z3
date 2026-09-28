@@ -22,7 +22,7 @@
 (assert (=> action_Even_4_done Even_c_done))
 (assert (=> action_Odd_3_done (and (and (and (and (and true action_Odd_0_done) action_Even_0_done) action_Odd_2_done) action_Even_4_done) true)))
 (assert (=> action_Odd_3_done Odd_c_done))
-(assert (=> action_Even_5_done (and (and (and (and (and true action_Odd_0_done) action_Even_0_done) action_Even_4_done) action_Odd_2_done) true)))
+(assert (=> action_Even_5_done (and (and (and (and (and (and true action_Odd_0_done) action_Even_0_done) action_Even_4_done) action_Odd_2_done) action_Odd_3_done) true)))
 (assert (=> action_Even_5_done Even_c_done))
 (check-sat)
 (get-model)

@@ -76,6 +76,7 @@ structure W8
     (w4 : W4 w0 w1 w2 w3)
     (w5 : W5 w0 w1 w2 w3)
     (w6 : W6 w0 w1 w2 w3)
+    (w7 : W7 w0 w1 w2 w3 w4 w5 w6)
     : Type where
   b_B2 : Int
   W8_guard_domain_b_B2 : domain_Enum_0 b_B2
@@ -89,6 +90,8 @@ structure W9
     (w4 : W4 w0 w1 w2 w3)
     (w5 : W5 w0 w1 w2 w3)
     (w6 : W6 w0 w1 w2 w3)
+    (w7 : W7 w0 w1 w2 w3 w4 w5 w6)
+    (w8 : W8 w0 w1 w2 w3 w4 w5 w6 w7)
     : Type where
   b_B3 : Int
   W9_guard_domain_b_B3 : domain_Enum_0 b_B3
@@ -103,7 +106,7 @@ structure ActionDag : Type where
   action5 : W5 action0 action1 action2 action3
   action6 : W6 action0 action1 action2 action3
   action7 : W7 action0 action1 action2 action3 action4 action5 action6
-  action8 : W8 action0 action1 action2 action3 action4 action5 action6
-  action9 : W9 action0 action1 action2 action3 action4 action5 action6
+  action8 : W8 action0 action1 action2 action3 action4 action5 action6 action7
+  action9 : W9 action0 action1 action2 action3 action4 action5 action6 action7 action8
 
 end GameProtocol

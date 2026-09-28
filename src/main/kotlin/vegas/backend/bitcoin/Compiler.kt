@@ -303,6 +303,15 @@ object LightningCompiler {
     ): BalanceSplit {
         var currentConfig = config
 
+        // Joining is not a move: if a role does not join, the instance is
+        // aborted and every deposit is refunded.
+        val joining = currentConfig.enabled().any {
+            game.dag.owner(it) == activePlayer && game.dag.spec(it).join != null
+        }
+        if (joining) {
+            return BalanceSplit(game.dag.deposit(roleA).v.toLong(), game.dag.deposit(roleB).v.toLong())
+        }
+
         // 1. Initial Quit by activePlayer
         val initialMoves = semantics.enabledMoves(currentConfig)
         val quitLabel = initialMoves.find {

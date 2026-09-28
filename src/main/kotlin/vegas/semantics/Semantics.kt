@@ -91,6 +91,11 @@ class GameSemantics(val ir: GameIR) {
             val actions = actionsByRole[role] ?: continue
             val allParams = actions.flatMap { ir.dag.params(it) }
 
+            // Joining is a precondition of the game, not a move within it: a
+            // role that never joins aborts the instance and every deposit is
+            // refunded, so there is no strategic quit at a join.
+            if (actions.any { ir.dag.spec(it).join != null }) continue
+
             if (allParams.isNotEmpty()) {
                 val quitDelta = allParametersQuit(ir.dag, role, actions)
                 moves.add(Label.Play(role, quitDelta, PlayTag.Quit))

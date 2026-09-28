@@ -79,6 +79,7 @@ Record W5
   (w1 : UnlessQuit Even (@W1))
   (w2 : UnlessQuit Odd (@W2 w0 w1))
   (w3 : UnlessQuit Even (@W3 w0 w1))
+  (w4 : UnlessQuit Odd (@W4 w0 w1 w2 w3))
  : Type := {
   c_Even : bool;
 
@@ -93,7 +94,7 @@ Record ActionDag : Type := {
   action2 : @W2 (@Have _ _ action0) (@Have _ _ action1);
   action3 : @W3 (@Have _ _ action0) (@Have _ _ action1);
   action4 : @W4 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
-  action5 : @W5 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3);
+  action5 : @W5 (@Have _ _ action0) (@Have _ _ action1) (@Have _ _ action2) (@Have _ _ action3) (@Have _ _ action4);
 }.
 
 Record EventDag : Type := {
@@ -102,7 +103,7 @@ Record EventDag : Type := {
   event2 : UnlessQuit Odd (@W2 event0 event1);
   event3 : UnlessQuit Even (@W3 event0 event1);
   event4 : UnlessQuit Odd (@W4 event0 event1 event2 event3);
-  event5 : UnlessQuit Even (@W5 event0 event1 event2 event3);
+  event5 : UnlessQuit Even (@W5 event0 event1 event2 event3 event4);
 }.
 
 End GameProtocol.

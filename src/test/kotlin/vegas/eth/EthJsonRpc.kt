@@ -51,7 +51,10 @@ class TxRevertedException(
  * - Anvil-specific time manipulation
  */
 class EthJsonRpc(private val rpcUrl: String) {
+    // HTTP/1.1: JSON-RPC needs nothing more, and the default HTTP/2 upgrade
+    // negotiation with anvil's server can leave a request hanging.
     private val client = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
         .connectTimeout(Duration.ofSeconds(10))
         .build()
     private val nextId = AtomicLong(1)
@@ -231,6 +234,55 @@ class EthJsonRpc(private val rpcUrl: String) {
             add(false)
         }).jsonObject
         return block.getValue("timestamp").jsonPrimitive.content.hexToLong()
+    }
+
+    /** Submit without waiting for inclusion; an explicit [nonce] past the account's next one leaves it queued. */
+    fun sendAsync(from: String, to: String, data: String, nonce: Long? = null): String =
+        call("eth_sendTransaction", buildJsonArray {
+            add(buildJsonObject {
+                put("from", from)
+                put("to", to)
+                put("data", data)
+                put("gas", "0x1000000")
+                if (nonce != null) put("nonce", "0x" + nonce.toString(16))
+            })
+        }).jsonPrimitive.content
+
+    /** Whether the transaction succeeded, once it is included. */
+    fun receiptStatus(hash: String): Boolean {
+        repeat(100) {
+            val receipt = call("eth_getTransactionReceipt", buildJsonArray { add(hash) })
+            if (receipt !is JsonNull) return receipt.jsonObject.getValue("status").jsonPrimitive.content == "0x1"
+            Thread.sleep(50)
+        }
+        error("no receipt for $hash")
+    }
+
+    fun txByHash(hash: String): JsonObject =
+        call("eth_getTransactionByHash", buildJsonArray { add(hash) }).jsonObject
+
+    fun nonce(address: String): Long = call("eth_getTransactionCount", buildJsonArray {
+        add(address)
+        add("pending")
+    }).jsonPrimitive.content.hexToLong()
+
+    /** Transactions waiting in the node's pool, pending or queued. */
+    fun txpool(): List<JsonObject> {
+        val content = call("txpool_content", buildJsonArray { }).jsonObject
+        return listOf("pending", "queued").flatMap { section ->
+            content[section]?.jsonObject?.values.orEmpty().flatMap { byNonce -> byNonce.jsonObject.values.map { it.jsonObject } }
+        }
+    }
+
+    fun latestBlockNumber(): Long = call("eth_blockNumber", buildJsonArray { }).jsonPrimitive.content.hexToLong()
+
+    fun blockHash(number: Long): ByteArray {
+        val block = call("eth_getBlockByNumber", buildJsonArray {
+            add("0x" + number.toString(16))
+            add(false)
+        }).jsonObject
+        val hex = block.getValue("hash").jsonPrimitive.content.removePrefix("0x")
+        return ByteArray(32) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
     }
 
     fun setNextBlockTimestamp(timestamp: Long) {

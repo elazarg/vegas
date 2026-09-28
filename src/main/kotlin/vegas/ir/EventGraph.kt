@@ -201,7 +201,16 @@ class EventGraph private constructor(
             return EventGraph(dag = dag, payloads = payloads, reach = reach)
         }
 
-        fun expandCommitReveal(dag: EventGraph): EventGraph {
+        /**
+         * Split concurrent public writes into commit and reveal nodes.
+         *
+         * The commits stay concurrent. The reveals are public events, so they
+         * are ordered by [sourceRank]: each reveal waits for the reveals of its
+         * partners that come earlier in the source. This is the only order an
+         * asynchronous ledger can offer, since a later revealer always gets to
+         * read the earlier openings before choosing whether to open.
+         */
+        fun expandCommitReveal(dag: EventGraph, sourceRank: Map<NodeId, Int>): EventGraph {
             // 1. Identify pure-public actions
             val purePublic: Set<NodeId> = dag.actions.filter { id ->
                 val s = dag.struct(id)
@@ -339,11 +348,14 @@ class EventGraph private constructor(
                 revealPreds.addAll(commitPreds)
                 // must commit itself
                 revealPreds.add(cid)
-                // must wait for all partners' commits
+                // must wait for all partners' commits, and for the reveals of
+                // partners that precede it in disclosure order
                 val partners = riskPartners[a].orEmpty()
                 for (b in partners) {
-                    val bCommit = commitId.getValue(b)
-                    revealPreds.add(bCommit)
+                    revealPreds.add(commitId.getValue(b))
+                    if (sourceRank.getValue(b) < sourceRank.getValue(a)) {
+                        revealPreds.add(revealId.getValue(b))
+                    }
                 }
 
                 newMetas[cid] = commitMeta

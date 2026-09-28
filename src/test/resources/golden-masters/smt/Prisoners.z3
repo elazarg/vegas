@@ -22,7 +22,7 @@
 (assert (=> action_B_5_done B_c_done))
 (assert (=> action_A_4_done (and (and (and (and true action_B_1_done) action_A_3_done) action_B_5_done) true)))
 (assert (=> action_A_4_done A_c_done))
-(assert (=> action_B_6_done (and (and (and (and true action_B_1_done) action_B_5_done) action_A_3_done) true)))
+(assert (=> action_B_6_done (and (and (and (and (and true action_B_1_done) action_B_5_done) action_A_3_done) action_A_4_done) true)))
 (assert (=> action_B_6_done B_c_done))
 (check-sat)
 (get-model)

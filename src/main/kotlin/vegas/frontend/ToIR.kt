@@ -23,7 +23,7 @@ fun compileToIR(ast: GameAst): GameIR {
     val ir = GameIR(
         name = ast.name,
         roles = roles,
-        dag = EventGraph.expandCommitReveal(dag),
+        dag = EventGraph.expandCommitReveal(dag, sourceOrder(phases)),
         payoffs = payoffs.payoffs,
         burn = payoffs.burn,
     )
@@ -179,6 +179,33 @@ private fun findPriorCommit(
 }
 
 /**
+ * A guard is discharged when a publication it reads has failed: it holds
+ * vacuously unless every other role's field it reads was published. No
+ * value is invented for a missing field.
+ */
+private fun dischargedOnFailure(guard: Expr, foreignReads: List<FieldRef>): Expr =
+    if (guard == Expr.Const.BoolVal(true) || foreignReads.isEmpty()) guard
+    else foreignReads.sortedBy { "${it.owner.name}.${it.param.name}" }
+        .map<FieldRef, Expr> { Expr.Not(Expr.IsDefined(it)) }
+        .reduce { a, b -> Expr.Or(a, b) }
+        .let { failed -> Expr.Or(failed, guard) }
+
+/** True when [sig] opens at least one of [role]'s earlier commitments. */
+private fun isDisclosure(role: RoleId, phaseIdx: Int, sig: Signature, phases: List<Phase>): Boolean =
+    sig.parameters.any { p ->
+        p.visible && findPriorCommit(FieldRef(role, p.name), phaseIdx, phases) != null
+    }
+
+/**
+ * Canonical source position of every node: statements in program order,
+ * queries in the order written within a statement.
+ */
+fun sourceOrder(phases: List<Phase>): Map<NodeId, Int> =
+    phases.flatMapIndexed { pIdx, phase -> phase.actions.keys.map { role -> role to pIdx } }
+        .withIndex()
+        .associate { (rank, id) -> id to rank }
+
+/**
  * Build an [EventGraph] from a linear list of [Phase]s, without going
  * through [GameIR].
  *
@@ -234,6 +261,14 @@ fun actionDagFromPhases(
                 }
             }
         }
+
+        // Disclosure order: the reveals of one statement are public events, so
+        // they happen one at a time in source order. A later revealer sees the
+        // earlier openings before deciding whether to open, exactly as it can
+        // on an asynchronous ledger.
+        phase.actions.keys
+            .filter { role -> isDisclosure(role, pIdx, phase.actions.getValue(role), phases) }
+            .zipWithNext { earlier, later -> deps.getValue(later to pIdx) += earlier to pIdx }
     }
 
     // 3) Per-action payloads (spec + struct)
@@ -259,7 +294,7 @@ fun actionDagFromPhases(
             val spec = NodeSpec(
                 params = params,
                 join = sig.join,
-                guardExpr = sig.guard.expr,
+                guardExpr = dischargedOnFailure(sig.guard.expr, guardReads.filter { it.owner != role }),
             )
 
             val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {

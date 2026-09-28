@@ -133,22 +133,25 @@ sealed class EntropySource {
     data class RoleSubmit(val role: RoleId) : EntropySource()
 
     /**
-     * EVM-native randomness derived from `block.prevrandao`, optionally
-     * sampled at a future block (`futureBlocks` >= 1 mitigates the
-     * proposer-bias attack at the cost of latency). Trust assumption:
-     * the block proposer cannot withhold blocks (or, with futureBlocks
-     * >= 1, cannot bias values at future blocks the proposer does not
-     * yet know they will be proposing).
+     * A public randomness beacon (for example drand, or a VRF service)
+     * fixed at deployment. The draw uses the first beacon round published
+     * strictly after the node becomes ready, so it is fixed by the time
+     * the draw's inputs are final and before anyone can know it; nobody
+     * chooses when it is drawn, and nobody can withhold or replace it.
+     *
+     * Trust assumption: the beacon is unpredictable, unbiased, and live.
+     * Block-derived values (`block.prevrandao`, block hashes) do not
+     * qualify: whoever triggers or proposes the drawing block can choose
+     * among outcomes.
      */
-    data class PrevRandao(val futureBlocks: Int) : EntropySource()
+    object Beacon : EntropySource()
 }
 
 /**
- * Default entropy source for anonymous `sample (...)` bindings. Hardcoded
- * for now; a future CLI flag will override it. Strategic-role chance
- * samples (`random Host`) keep [EntropySource.RoleSubmit].
+ * Entropy source for anonymous `sample (...)` bindings. Strategic-role
+ * chance samples (`random Host`) keep [EntropySource.RoleSubmit].
  */
-val DEFAULT_SAMPLE_SOURCE: EntropySource = EntropySource.PrevRandao(0)
+val DEFAULT_SAMPLE_SOURCE: EntropySource = EntropySource.Beacon
 
 /**
  * Per-node classification of a Sample (chance) node.

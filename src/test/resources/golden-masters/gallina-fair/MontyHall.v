@@ -51,7 +51,7 @@ Record W4
   goat_Host : Z;
 
   W4_guard_domain : domain_Enum_0 goat_Host;
-  W4_guard_logic : negb (Z.eqb goat_Host w3.(d_Guest)) = true;
+  W4_guard_logic : orb (negb true) (negb (Z.eqb goat_Host w3.(d_Guest))) = true;
 }.
 
 Record W5 

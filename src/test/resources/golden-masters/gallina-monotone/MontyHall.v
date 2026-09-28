@@ -81,7 +81,7 @@ Record W4
   W4_guard_have_w0 : IsHave w0;
   W4_guard_have_w2 : IsHave w2;
   W4_guard_domain : domain_Enum_0 goat_Host;
-  W4_guard_logic : lift2 (fun x y => negb (Z.eqb x y)) (Some goat_Host) (get_val w3 (fun w => w.(d_Guest))) = Some true;
+  W4_guard_logic : lift2 (fun a b => orb a b) (lift1 negb (Some true)) (lift2 (fun x y => negb (Z.eqb x y)) (Some goat_Host) (get_val w3 (fun w => w.(d_Guest)))) = Some true;
 }.
 
 Record W5 

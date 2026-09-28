@@ -1,0 +1,18 @@
+// Coordination with conflicting preferences ("Battle of the Sexes").
+// Both players want to choose the same venue; Alice prefers the opera, Bob the fight.
+// The choices are simultaneous, so the compiler commits both before either opens.
+//
+// Either common choice is an equilibrium. Moving first would let a player pick its
+// favourite and force the other to follow, so disclosing a choice early is a
+// profitable deviation that the source game does not allow: this is what the
+// terminal audit deters (see docs/AUDITED-RUNTIME.md).
+//
+// Payoffs (pot = 20): meet at the favourite venue 16 / 4; miss each other 1 / 1, burn 18.
+
+game main() {
+  join Alice() $ 10 Bob() $ 10;
+  yield or split Alice(opera: bool) Bob(opera: bool);
+  withdraw (Alice.opera && Bob.opera) ? { Alice -> 16; Bob -> 4 }
+         : (!Alice.opera && !Bob.opera) ? { Alice -> 4; Bob -> 16 }
+         : { Alice -> 1; Bob -> 1; burn 18 }
+}

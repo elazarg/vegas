@@ -82,6 +82,7 @@ structure W5
     (w1 : UnlessQuit Role.Even (W1))
     (w2 : UnlessQuit Role.Odd (W2 w0 w1))
     (w3 : UnlessQuit Role.Even (W3 w0 w1))
+    (w4 : UnlessQuit Role.Odd (W4 w0 w1 w2 w3))
     : Type where
   c_Even : Bool
   W5_guard_have_w1 : w1.isHave
@@ -94,7 +95,7 @@ structure ActionDag : Type where
   action2 : W2 (UnlessQuit.have action0) (UnlessQuit.have action1)
   action3 : W3 (UnlessQuit.have action0) (UnlessQuit.have action1)
   action4 : W4 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3)
-  action5 : W5 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3)
+  action5 : W5 (UnlessQuit.have action0) (UnlessQuit.have action1) (UnlessQuit.have action2) (UnlessQuit.have action3) (UnlessQuit.have action4)
 
 structure EventDag : Type where
   event0 : UnlessQuit Role.Odd (W0)
@@ -102,6 +103,6 @@ structure EventDag : Type where
   event2 : UnlessQuit Role.Odd (W2 event0 event1)
   event3 : UnlessQuit Role.Even (W3 event0 event1)
   event4 : UnlessQuit Role.Odd (W4 event0 event1 event2 event3)
-  event5 : UnlessQuit Role.Even (W5 event0 event1 event2 event3)
+  event5 : UnlessQuit Role.Even (W5 event0 event1 event2 event3 event4)
 
 end GameProtocol

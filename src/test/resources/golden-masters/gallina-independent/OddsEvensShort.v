@@ -79,6 +79,7 @@ Record W5
   (w1 : Maybe Even (@W1))
   (w2 : Maybe Odd (@W2 w0 w1))
   (w3 : Maybe Even (@W3 w0 w1))
+  (w4 : Maybe Odd (@W4 w0 w1 w2 w3))
  : Type := {
   c_Even : bool;
 
@@ -92,7 +93,7 @@ Record EventDag : Type := {
   event2 : Maybe Odd (@W2 event0 event1);
   event3 : Maybe Even (@W3 event0 event1);
   event4 : Maybe Odd (@W4 event0 event1 event2 event3);
-  event5 : Maybe Even (@W5 event0 event1 event2 event3);
+  event5 : Maybe Even (@W5 event0 event1 event2 event3 event4);
 }.
 
 End GameProtocol.

@@ -4,6 +4,7 @@ import vegas.backend.scribble.genScribbleFromIR
 import vegas.backend.gambit.generateExtensiveFormGame
 import vegas.backend.smt.generateSMT
 import vegas.backend.smt.generateDQBF
+import vegas.backend.evm.AuditPolicy
 import vegas.backend.evm.compileToEvm
 import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
@@ -16,6 +17,8 @@ import vegas.frontend.findRoleIds
 import vegas.frontend.compileToIR
 import vegas.frontend.inlineMacros
 import vegas.runtime.GameClient
+import vegas.watcher.JsonRpc
+import vegas.watcher.Watcher
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.Path
@@ -52,6 +55,7 @@ private data class Outputs(
     val vyper: Boolean,
     val maid: Boolean = false,
     val play: Boolean = false,
+    val audit: AuditPolicy? = null,
 )
 
 private fun parseOutputs(flags: List<String>): Outputs {
@@ -67,6 +71,8 @@ private fun parseOutputs(flags: List<String>): Outputs {
     var wantVyper = false
     var wantMaid = false
     var wantPlay = false
+    var audited = false
+    var coverage: Rational? = null
 
     var i = 0
     while (i < flags.size) {
@@ -88,6 +94,14 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--vyper" -> wantVyper = true
             "--maid" -> wantMaid = true
             "--play" -> wantPlay = true
+            "--audited" -> audited = true
+            "--coverage" -> {
+                val value = flags.getOrNull(i + 1) ?: throw IllegalArgumentException("--coverage requires p/q")
+                val parts = value.split("/").map { it.trim().toInt() }
+                coverage = Rational(parts[0], parts.getOrElse(1) { 1 })
+                audited = true
+                i++
+            }
             else -> throw IllegalArgumentException("Unknown flag: $f")
         }
         i++
@@ -97,9 +111,13 @@ private fun parseOutputs(flags: List<String>): Outputs {
         return Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = false, vyper = false, maid = false, play = true)
     }
 
+    val audit = if (audited) AuditPolicy(coverage = coverage ?: Rational(1)) else null
+
     // If the user provided any known output flags, emit only those.
+    // An audit policy applies to Solidity only, so it implies Solidity alone.
     val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper || wantMaid
-    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantMaid)
+    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantMaid, audit = audit)
+    else if (audit != null) Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = true, vyper = false, audit = audit)
     else Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true)
 }
 
@@ -145,7 +163,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     if (outputs.scr) writeFile(outScr.toString()) { genScribbleFromIR(ir) }
 
     // EVM backends use common IR
-    val evmIr = if (outputs.sol || outputs.vyper) compileToEvm(ir) else null
+    val evmIr = if (outputs.sol || outputs.vyper) compileToEvm(ir, outputs.audit) else null
     if (outputs.sol) writeFile(outSol.toString()) { generateSolidity(evmIr!!) }
     if (outputs.vyper) writeFile(outVyper.toString()) { generateVyper(evmIr!!) }
 
@@ -156,7 +174,39 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     println()
 }
 
+/**
+ * Watch an audited contract: collect its game accounts' traffic from a node
+ * until play ends, then report every record the contract classifies as forbidden.
+ */
+internal fun runWatcher(inputPath: Path, flags: List<String>) {
+    fun option(name: String): String =
+        flags.getOrNull(flags.indexOf(name) + 1)?.takeIf { name in flags } ?: throw IllegalArgumentException("watch requires $name")
+    val program = parseFile(inputPath.toString())
+    val roles = compileToIR(inlineMacros(program)).payoffs.keys.map { it.name }
+    val watcher = Watcher(JsonRpc(option("--rpc")), option("--contract"), option("--reporter"), roles)
+    println("Watching ${option("--contract")} for roles $roles ...")
+    while (!watcher.playEnded()) {
+        watcher.observe()
+        Thread.sleep(1000)
+    }
+    for (outcome in watcher.audit()) {
+        println("${outcome.tx.hash} ${outcome.role}: ${if (outcome.charged) "CHARGED" else "not chargeable"} (${outcome.reason})")
+    }
+    if (watcher.unsupported.isNotEmpty()) {
+        println("Not encodable (coverage gap): ${watcher.unsupported}")
+    }
+}
+
 fun main(args: Array<String>) {
+    if (args.size >= 2 && args[0] == "watch") {
+        try {
+            runWatcher(Path.of(args[1]).toAbsolutePath().normalize(), args.drop(2))
+        } catch (e: Throwable) {
+            System.err.println("Error: ${e.message}")
+            exitProcess(1)
+        }
+        return
+    }
     if (args.isEmpty()) {
         System.err.println(
             """
@@ -172,8 +222,15 @@ fun main(args: Array<String>) {
             Additional formats:
               --maid        Multi-Agent Influence Diagram JSON (for Thrones game theory workbench)
 
+            Audited settlement (see docs/AUDITED-RUNTIME.md):
+              --audited             Solidity with bonds, readiness contexts and a terminal audit
+              --coverage p/q        Claimed watcher coverage (default 1); bonds scale as pot / coverage
+
             Interactive mode:
               --play        Play the game interactively in the terminal (local runtime)
+
+            Watcher:
+              vegas watch <file.vg> --rpc <url> --contract <address> --reporter <account>
             """.trimIndent()
         )
         exitProcess(2)

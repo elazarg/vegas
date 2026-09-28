@@ -113,6 +113,7 @@ Record W8
   (w4 : Maybe B1 (@W4 w0 w1 w2 w3))
   (w5 : Maybe B2 (@W5 w0 w1 w2 w3))
   (w6 : Maybe B3 (@W6 w0 w1 w2 w3))
+  (w7 : Maybe B1 (@W7 w0 w1 w2 w3 w4 w5 w6))
  : Type := {
   b_B2 : Z;
 
@@ -129,6 +130,8 @@ Record W9
   (w4 : Maybe B1 (@W4 w0 w1 w2 w3))
   (w5 : Maybe B2 (@W5 w0 w1 w2 w3))
   (w6 : Maybe B3 (@W6 w0 w1 w2 w3))
+  (w7 : Maybe B1 (@W7 w0 w1 w2 w3 w4 w5 w6))
+  (w8 : Maybe B2 (@W8 w0 w1 w2 w3 w4 w5 w6 w7))
  : Type := {
   b_B3 : Z;
 
@@ -146,8 +149,8 @@ Record EventDag : Type := {
   event5 : Maybe B2 (@W5 event0 event1 event2 event3);
   event6 : Maybe B3 (@W6 event0 event1 event2 event3);
   event7 : Maybe B1 (@W7 event0 event1 event2 event3 event4 event5 event6);
-  event8 : Maybe B2 (@W8 event0 event1 event2 event3 event4 event5 event6);
-  event9 : Maybe B3 (@W9 event0 event1 event2 event3 event4 event5 event6);
+  event8 : Maybe B2 (@W8 event0 event1 event2 event3 event4 event5 event6 event7);
+  event9 : Maybe B3 (@W9 event0 event1 event2 event3 event4 event5 event6 event7 event8);
 }.
 
 End GameProtocol.

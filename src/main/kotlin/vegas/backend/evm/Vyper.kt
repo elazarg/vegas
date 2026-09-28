@@ -4,15 +4,28 @@ import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
-import vegas.frontend.SAMPLE_OWNER
 
 /**
- * Render the EVM IR to Vyper source code.
+ * Render the EVM IR to Vyper source code, implementing the same
+ * [EvmSchedule] semantics as the Solidity backend.
  */
 fun generateVyper(contract: EvmContract): String {
+    require(contract.audit == null) {
+        "Terminal audit is implemented for the Solidity backend only; compile without an audit policy for Vyper"
+    }
+    val schedule = contract.schedule
     return buildString {
-        appendLine("# @version 0.4.0")
+        appendLine("#pragma version ^0.4.3")
         appendLine()
+
+        if (schedule.usesBeacon) {
+            appendLine("# A public randomness beacon. randomnessAfter(t) returns the output of the")
+            appendLine("# first round scheduled strictly after t, with that round's time, or zero")
+            appendLine("# while the round is not yet published.")
+            appendLine("interface IVegasBeacon:")
+            appendLine("    def randomnessAfter(timestamp: uint256) -> (bytes32, uint256): view")
+            appendLine()
+        }
 
         // Enums
         contract.enums.forEach { renderEnum(it) }
@@ -23,23 +36,37 @@ fun generateVyper(contract: EvmContract): String {
         if (contract.events.isNotEmpty()) appendLine()
 
         // Storage
-        // Vyper defines storage variables at the top level
         contract.storage.forEach { slot ->
             renderStorage(slot)
         }
-        // Add timeout infrastructure
-        appendLine("TIMEOUT: constant(uint256) = $TIMEOUT_SECONDS  # 24 hours in seconds")
-        appendLine("bailed: HashMap[Role, bool]")
-        // Commitment tag for role/actor-bound commit-reveal (computed at deploy time)
+        appendLine("TIMEOUT: public(constant(uint256)) = $TIMEOUT_SECONDS")
+        appendLine("NODE_COUNT: public(constant(uint256)) = ${schedule.nodes.size}")
+        appendLine("deployedAt: public(immutable(uint256))")
+        if (schedule.usesBeacon) appendLine("BEACON: public(immutable(IVegasBeacon))")
         appendLine("COMMIT_TAG: immutable(bytes32)")
-        if (contract.storage.isNotEmpty()) appendLine()
+        appendLine("# Readiness time of each node: when its last predecessor resolved (0 = not ready).")
+        appendLine("readyAt: public(HashMap[uint256, uint256])")
+        appendLine("# Resolution time of each node: when it was played, or resolved without a value (0 = unresolved).")
+        appendLine("resolvedAt: public(HashMap[uint256, uint256])")
+        appendLine("# When a role quit: the deadline it missed (0 = active). Quitting is persistent.")
+        appendLine("quitAt: public(HashMap[Role, uint256])")
+        appendLine("# Set when a role failed to join: play never starts and deposits are refunded.")
+        appendLine("aborted: public(bool)")
+        appendLine("# Every node below this position is resolved.")
+        appendLine("settledPrefix: public(uint256)")
+        appendLine()
 
         // Constructor
-        renderConstructor(contract.initialization)
+        renderConstructor(schedule, contract.initialization)
         appendLine()
+
+        renderSchedule(schedule)
 
         // Game Actions
         contract.actions.forEach { renderAction(it) }
+
+        // Withdrawals
+        contract.withdrawals.forEach { renderWithdrawal(it) }
 
         // Fallback function (prevent accidental ETH transfers)
         renderDefaultFunction()
@@ -57,9 +84,13 @@ fun generateVyper(contract: EvmContract): String {
 // Structure Rendering
 // =========================================================================
 
+/**
+ * Vyper flags start at 1 and the zero value is `empty(Role)`, which is what
+ * an unassigned address maps to; the IR's `None` member is rendered as that.
+ */
 private fun StringBuilder.renderEnum(e: EvmEnum) {
-    appendLine("enum ${e.name}:")
-    e.values.forEach {
+    appendLine("flag ${e.name}:")
+    e.values.filter { it != roleNone }.forEach {
         appendLine("    $it")
     }
 }
@@ -76,25 +107,149 @@ private fun StringBuilder.renderEvent(e: EvmEvent) {
 }
 
 private fun StringBuilder.renderStorage(s: EvmStorageSlot) {
-    // Vyper storage: name: type
-    // Constants are defined differently, but for simplicity in this backend
-    // we can treat 'immutable' as public constants or just storage variables.
-    // True constants in Vyper are 'NAME: constant(type) = value'
     if (s.isImmutable && s.initialValue != null) {
-        appendLine("${s.name}: constant(${renderType(s.type)}) = ${renderExpr(s.initialValue)}")
+        appendLine("${s.name}: public(constant(${renderType(s.type)})) = ${renderExpr(s.initialValue)}")
     } else {
-        appendLine("${s.name}: ${renderType(s.type)}")
+        appendLine("${s.name}: public(${renderType(s.type)})")
     }
 }
 
-private fun StringBuilder.renderConstructor(init: List<EvmStmt>) {
+private fun StringBuilder.renderConstructor(schedule: EvmSchedule, init: List<EvmStmt>) {
     appendLine("@deploy")
-    appendLine("def __init__():")
+    appendLine(if (schedule.usesBeacon) "def __init__(beacon: IVegasBeacon):" else "def __init__():")
     indent {
-        // Initialize commit tag (computed at deploy time, verifiable from source)
+        appendLine("deployedAt = block.timestamp")
+        if (schedule.usesBeacon) appendLine("BEACON = beacon")
         appendLine("COMMIT_TAG = keccak256(\"VEGAS_COMMIT_V1\")")
         init.forEach { renderStmt(it) }
     }
+}
+
+private fun StringBuilder.renderSchedule(schedule: EvmSchedule) {
+    val nodes = schedule.nodes
+    renderPureTable("_owner", "Role", nodes.map { roleEnumMember(it.owner.name) })
+    renderPureTable("_predecessors", "uint256", nodes.map { it.predecessorMask.toString() })
+    renderPureTable("_isJoin", "bool", nodes.map { if (it.kind == EvmNodeKind.JOIN) "True" else "False" })
+    if (schedule.usesBeacon) {
+        renderPureTable("_isDraw", "bool", nodes.map { if (it.kind == EvmNodeKind.DRAW) "True" else "False" })
+    }
+
+    appendLine("""
+        # Resolve every node that can be resolved now. Anyone may call this.
+        @external
+        def settle():
+            self._settle()
+
+        @internal
+        def _settle():
+            start: uint256 = self.settledPrefix
+            prefix: uint256 = start
+            contiguous: bool = True
+            for i: uint256 in range(start, NODE_COUNT, bound=NODE_COUNT):
+                if self.resolvedAt[i] == 0:
+                    self._resolve(i)
+                if contiguous and self.resolvedAt[i] != 0:
+                    prefix = i + 1
+                else:
+                    contiguous = False
+            self.settledPrefix = prefix
+
+        @internal
+        @view
+        def _readiness(i: uint256) -> uint256:
+            ready: uint256 = deployedAt
+            predecessors: uint256 = self._predecessors(i)
+            for j: uint256 in range(NODE_COUNT):
+                if j >= i:
+                    break
+                if (predecessors >> j) & 1 == 1:
+                    t: uint256 = self.resolvedAt[j]
+                    if t == 0:
+                        return 0
+                    if t > ready:
+                        ready = t
+            return ready
+
+        @internal
+        def _resolve(i: uint256):
+            ready: uint256 = self.readyAt[i]
+            if ready == 0:
+                ready = self._readiness(i)
+                if ready == 0:
+                    return
+                self.readyAt[i] = ready
+            if self.aborted:
+                self.resolvedAt[i] = ready
+                return
+    """.trimIndent())
+    if (schedule.usesBeacon) {
+        appendLine("""
+            |    if self._isDraw(i):
+            |        value: bytes32 = empty(bytes32)
+            |        roundTime: uint256 = 0
+            |        value, roundTime = staticcall BEACON.randomnessAfter(ready)
+            |        if value != empty(bytes32):
+            |            # A resolution time is never in the future, whatever the beacon reports.
+            |            self._draw(i, value)
+            |            self.resolvedAt[i] = max(min(roundTime, block.timestamp), ready)
+            |        return
+        """.trimMargin())
+    }
+    appendLine("""
+        |    owner: Role = self._owner(i)
+        |    quit: uint256 = self.quitAt[owner]
+        |    if quit != 0:
+        |        self.resolvedAt[i] = max(quit, ready)
+        |        return
+        |    if block.timestamp > ready + TIMEOUT:
+        |        self.quitAt[owner] = ready + TIMEOUT
+        |        self.resolvedAt[i] = ready + TIMEOUT
+        |        if self._isJoin(i):
+        |            self.aborted = True
+        |
+        |# Settle, then require that node i is ready, unresolved, and owned by the caller's role.
+        |@internal
+        |def _beginMove(i: uint256, role: Role):
+        |    self._settle()
+        |    assert self.roles[msg.sender] == role, "bad role"
+        |    assert self.readyAt[i] != 0, "not ready"
+        |    assert self.resolvedAt[i] == 0, "not open"
+        |
+        |@internal
+        |def _endMove(i: uint256):
+        |    self.resolvedAt[i] = block.timestamp
+    """.trimMargin())
+    appendLine()
+
+    if (schedule.usesBeacon) {
+        appendLine("@internal")
+        appendLine("def _draw(i: uint256, _${BEACON_VALUE.name}: bytes32):")
+        indent {
+            schedule.draws.forEachIndexed { k, draw ->
+                appendLine("${if (k == 0) "if" else "elif"} i == ${draw.node}:")
+                indent { draw.body.forEach { renderStmt(it) } }
+            }
+        }
+        appendLine()
+    }
+}
+
+/**
+ * A constant lookup `name(i)` over schedule positions, as an if-chain.
+ * Declared `@view`: Vyper does not allow flag members in `@pure` functions.
+ */
+private fun StringBuilder.renderPureTable(name: String, type: String, values: List<String>) {
+    appendLine("@internal")
+    appendLine("@view")
+    appendLine("def $name(i: uint256) -> $type:")
+    indent {
+        values.dropLast(1).forEachIndexed { i, v ->
+            appendLine("if i == $i:")
+            appendLine("    return $v")
+        }
+        appendLine("return ${values.last()}")
+    }
+    appendLine()
 }
 
 private fun StringBuilder.renderAction(a: EvmAction) {
@@ -107,58 +262,34 @@ private fun StringBuilder.renderAction(a: EvmAction) {
     appendLine("def ${a.name}($inputs):")
 
     indent {
-        // 1. Synthesize Assertions (Replacements for Modifiers)
-        // Role Check (inline 'by' modifier). Sample-owned actions have no
-        // actor; emit no role gate so the function is callable.
-        val isSample = a.invokedBy == SAMPLE_OWNER
-        if (!isSample) {
-            val roleCheck = "self.$roleMap[msg.sender] == ${roleEnumMember(a.invokedBy.name)}"
-            appendLine("assert $roleCheck, \"bad role\"")
-
-            // Bail check (inline from 'by' modifier) - bail attribution happens in 'depends'
-            appendLine("assert not self.bailed[${roleEnumMember(a.invokedBy.name)}], \"you bailed\"")
-        }
-
-        // Not Done Check (inline 'action' modifier)
-        val actionRole = roleEnumMember(a.actionId.first.name)
-        val actionIdx = a.actionId.second
-        appendLine("assert not self.actionDone[$actionRole][$actionIdx], \"already done\"")
-
-        // Dependencies (inline 'depends' modifier) - bail attribution gated on the
-        // dependency not being satisfied, so the delinquent role (not the caller)
-        // is the one marked bailed.
-        if (a.dependencies.isNotEmpty()) {
-            appendLine("vegasDependencyOrigin: uint256 = self.lastTs")
-        }
-        a.dependencies.forEach { dep ->
-            val depRole = roleEnumMember(dep.first.name)
-            val depIdx = dep.second
-            appendLine("if (not self.actionDone[$depRole][$depIdx]) and (block.timestamp > vegasDependencyOrigin + TIMEOUT):")
-            appendLine("    self.bailed[$depRole] = True")
-            appendLine("    self.lastTs = block.timestamp")
-            appendLine("if not self.bailed[$depRole]:")
-            // Manual indentation for single assert inside if block
-            appendLine("    assert self.actionDone[$depRole][$depIdx], \"dependency not satisfied\"")
-        }
-
-        if (a.isTerminal) {
-            appendLine("assert self.actionDone[FINAL_ACTION], \"game not over\"")
-            appendLine("assert not self.payoffs_distributed, \"payoffs already sent\"")
-        }
-
-        // Domain guards and where clauses - always checked regardless of bail status
+        appendLine("self._beginMove(${a.node}, ${roleEnumMember(a.invokedBy.name)})")
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
+        a.body.forEach { renderStmt(it) }
+        appendLine("self._endMove(${a.node})")
+    }
+    appendLine()
+}
 
-        // 2. Render Body - always executed
-        if (a.body.isEmpty()) appendLine("pass")
-        else a.body.forEach { renderStmt(it) }
-
-        // 3. Mark action as done (inline end of 'action' modifier)
-        appendLine("self.actionDone[$actionRole][$actionIdx] = True")
-        appendLine("self.actionTimestamp[$actionRole][$actionIdx] = block.timestamp")
-        appendLine("self.lastTs = block.timestamp")
+private fun StringBuilder.renderWithdrawal(w: EvmWithdrawal) {
+    val role = w.role.name
+    appendLine("@external")
+    appendLine("def ${w.name}():")
+    indent {
+        appendLine("self._settle()")
+        appendLine("assert self.$roleMap[msg.sender] == ${roleEnumMember(role)}, \"bad role\"")
+        appendLine("assert not self.claimed_$role, \"already claimed\"")
+        appendLine("payout: int256 = 0")
+        appendLine("if self.aborted:")
+        appendLine("    payout = ${w.refund} if self.${roleJoined(role)} else 0")
+        appendLine("else:")
+        appendLine("    assert self.settledPrefix == NODE_COUNT, \"game not finished\"")
+        appendLine("    payout = ${renderExpr(w.payout)}")
+        appendLine("self.claimed_$role = True")
+        appendLine("if payout > 0:")
+        appendLine("    success: bool = raw_call(self.${roleAddr(role)}, b\"\", value=convert(payout, uint256), revert_on_failure=False)")
+        appendLine("    assert success, \"ETH send failed\"")
     }
     appendLine()
 }
@@ -191,7 +322,7 @@ private fun StringBuilder.renderCheckRevealHelper() {
     appendLine("@view")
     appendLine("def _checkReveal(commitment: bytes32, role: Role, actor: address, payload: Bytes[256]):")
     indent {
-        appendLine("expected: bytes32 = keccak256(_abi_encode(COMMIT_TAG, self, role, actor, keccak256(payload)))")
+        appendLine("expected: bytes32 = keccak256(abi_encode(COMMIT_TAG, self, role, actor, keccak256(payload)))")
         appendLine("assert expected == commitment, \"bad reveal\"")
     }
 }
@@ -234,7 +365,7 @@ private fun StringBuilder.renderStmt(stmt: EvmStmt) {
             // Verify commitment with role/actor binding to prevent copy-commit attacks
             // Actor is always msg.sender (enforced by type system)
             val payload = stmt.payload.joinToString(", ") { renderExpr(it) }
-            appendLine("self._checkReveal(${renderExpr(stmt.commitment)}, Role.${stmt.role.name}, msg.sender, _abi_encode($payload))")
+            appendLine("self._checkReveal(${renderExpr(stmt.commitment)}, Role.${stmt.role.name}, msg.sender, abi_encode($payload))")
         }
     }
 }
@@ -264,7 +395,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
             BinaryOp.ADD -> "+"
             BinaryOp.SUB -> "-"
             BinaryOp.MUL -> "*"
-            BinaryOp.DIV -> "/"
+            BinaryOp.DIV -> "//"
             BinaryOp.MOD -> "%"
             BinaryOp.EQ -> "=="
             BinaryOp.NE -> "!="
@@ -277,7 +408,9 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
         }
         "(${renderExpr(e.left)} $opStr ${renderExpr(e.right)})"
     }
-    is Ternary -> "${renderExpr(e.ifTrue)} if ${renderExpr(e.cond)} else ${renderExpr(e.ifFalse)}"
+    // Parenthesized: a bare Vyper conditional expression binds looser than
+    // arithmetic and comparisons, so `x + a if c else b` means `(x + a) if c else b`.
+    is Ternary -> "(${renderExpr(e.ifTrue)} if ${renderExpr(e.cond)} else ${renderExpr(e.ifFalse)})"
 
     is Call -> {
         // Handle _checkReveal specially if needed, otherwise normal call
@@ -290,7 +423,6 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     is BuiltIn.MsgValue -> "msg.value"
     is BuiltIn.Timestamp -> "block.timestamp"
     is BuiltIn.Self -> "self"
-    is BuiltIn.PrevRandao -> "block.prevrandao"
 
     // Special
     is Keccak256 -> "keccak256(${renderExpr(e.data)})"
@@ -304,11 +436,12 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
             "concat($parts)"
         } else {
             // _abi_encode intrinsic in Vyper
-            "_abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
+            "abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
         }
     }
-    is AbiEncodeRaw -> "_abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
-    is EnumValue -> "${e.enumName}.${e.value}"
+    is AbiEncodeRaw -> "abi_encode(${e.args.joinToString(", ") { renderExpr(it) }})"
+    is EnumValue -> if (e.value == roleNone) "empty(${e.enumName})" else "${e.enumName}.${e.value}"
+    is Cast -> "convert(${renderExpr(e.arg)}, ${renderType(e.type)})"
 }
 
 private fun renderType(t: EvmType): String = when (t) {
@@ -322,7 +455,8 @@ private fun renderType(t: EvmType): String = when (t) {
     is EnumType -> t.name
 }
 
-private fun roleEnumMember(roleName: String) = "Role.$roleName"
+private fun roleEnumMember(roleName: String) =
+    if (roleName == roleNone) "empty($roleEnumName)" else "$roleEnumName.$roleName"
 
 private fun StringBuilder.indent(block: StringBuilder.() -> Unit) {
     val indented = buildString(block).trimEnd().prependIndent("    ")

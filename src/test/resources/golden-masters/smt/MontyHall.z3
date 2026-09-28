@@ -1,10 +1,10 @@
-(declare-const Host_goat Int)
-(declare-const Host_goat_done Bool)
-(assert (and (>= Host_goat 0) (<= Host_goat 2)))
-
 (declare-const Guest_d Int)
 (declare-const Guest_d_done Bool)
 (assert (and (>= Guest_d 0) (<= Guest_d 2)))
+
+(declare-const Host_goat Int)
+(declare-const Host_goat_done Bool)
+(assert (and (>= Host_goat 0) (<= Host_goat 2)))
 
 (declare-const Host_car Int)
 (declare-const Host_car_done Bool)
@@ -30,7 +30,7 @@
 (assert (=> action_Host_2_done Host_car_done))
 (assert (=> action_Guest_3_done (and (and true action_Host_2_done) true)))
 (assert (=> action_Guest_3_done Guest_d_done))
-(assert (=> action_Host_4_done (and (and true action_Guest_3_done) (not (= Host_goat Guest_d)))))
+(assert (=> action_Host_4_done (and (and true action_Guest_3_done) (or (not Guest_d_done) (not (= Host_goat Guest_d))))))
 (assert (=> action_Host_4_done Host_goat_done))
 (assert (=> action_Guest_5_done (and (and true action_Host_4_done) true)))
 (assert (=> action_Guest_5_done Guest_switch_done))

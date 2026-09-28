@@ -48,6 +48,10 @@ object AbiCodec {
         return bigIntToBytes32(BigInteger.valueOf(value))
     }
 
+    /** Encode an address (hex string) as 32 bytes, left-padded. */
+    fun encodeAddress(address: String): ByteArray =
+        bigIntToBytes32(BigInteger(address.removePrefix("0x"), 16))
+
     /** Encode a boolean as 32 bytes (0 or 1). */
     fun encodeBool(value: Boolean): ByteArray =
         encodeUint256(if (value) 1L else 0L)

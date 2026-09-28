@@ -21,8 +21,9 @@ import vegas.ir.NodeId
  *
  * Architecture:
  * - State: Concrete storage slots.
- * - Gameplay: A set of rigid, DAG-based Actions.
- * - Outcome: A terminal payoff calculation map.
+ * - Schedule: The event graph, with readiness-relative deadlines.
+ * - Gameplay: One entry point per player-owned node.
+ * - Outcome: One withdrawal per role.
  */
 data class EvmContract(
     val name: String,
@@ -33,39 +34,125 @@ data class EvmContract(
     val enums: List<EvmEnum>,
     val events: List<EvmEvent>,
 
-    // 2. THE GAMEPLAY (The DAG Implementation)
-    // The explicit, rigid state machine nodes.
+    // 2. THE SCHEDULE (when each node may happen, and what happens if it does not)
+    val schedule: EvmSchedule,
+
+    // 3. THE GAMEPLAY (player entry points, one per player-owned node)
     val actions: List<EvmAction>,
 
-    // Initialization logic (e.g. setting initial timestamps)
+    // 4. THE OUTCOME
+    val withdrawals: List<EvmWithdrawal>,
+
+    // Initialization logic
     val initialization: List<EvmStmt>,
+
+    // 5. TERMINAL AUDIT (null: plain settlement)
+    val audit: EvmAudit? = null,
 )
 
 /**
- * A rigid definition of a Game Move (Action).
+ * Terminal-audit settlement.
+ *
+ * Every role posts [bonds] on top of its stake. Every move is bound to the
+ * hash of the block in which its node became ready (`ctx`), so a signed move
+ * proves it was created after that block. After play ends, anyone may submit
+ * a transaction signed by a game account during [windowSeconds]; if it is not
+ * a successfully executed call to this contract, the signer's bond is burned
+ * (once). Settlement then returns unburned bonds with the payouts.
+ */
+data class EvmAudit(
+    val bonds: Map<RoleId, Int>,
+    val windowSeconds: Int,
+)
+
+/** Name of the readiness-context input of every audited move. */
+val CONTEXT_PARAM = VarId("ctx")
+
+/**
+ * The event graph as the contract enforces it.
+ *
+ * Nodes are listed in a topological order and addressed by their position.
+ * A node is *ready* once every predecessor is resolved; its readiness time
+ * is the latest predecessor resolution (or deployment, for a source node).
+ * It is *resolved* when it completes, or when it is resolved without a value:
+ *  - its owner has already quit, at the later of readiness and the quit time;
+ *  - its deadline `readiness + TIMEOUT` passed, at that deadline, which
+ *    makes the owner quit (persistently, as in the analysis model);
+ *  - the instance was aborted because a role never joined.
+ * Only a ready node can expire, so a player is never blamed for a move it
+ * could not yet make. Draw nodes never expire: they complete from the beacon.
+ */
+data class EvmSchedule(
+    val nodes: List<EvmScheduleNode>,
+    val draws: List<EvmDraw>,
+) {
+    init {
+        nodes.forEachIndexed { i, n ->
+            require(n.predecessors.all { it < i }) { "schedule is not topologically ordered at ${n.actionId}" }
+        }
+        require(nodes.size <= 256) { "schedule predecessor masks support at most 256 nodes" }
+    }
+
+    fun indexOf(id: NodeId): Int = nodes.indexOfFirst { it.actionId == id }.also {
+        require(it >= 0) { "node $id is not scheduled" }
+    }
+
+    val usesBeacon: Boolean get() = draws.isNotEmpty()
+}
+
+enum class EvmNodeKind { JOIN, MOVE, DRAW }
+
+data class EvmScheduleNode(
+    val actionId: NodeId,
+    val owner: RoleId,
+    val predecessors: List<Int>,
+    val kind: EvmNodeKind,
+) {
+    /** Predecessors as a bitmask over schedule positions. */
+    val predecessorMask: java.math.BigInteger
+        get() = predecessors.fold(java.math.BigInteger.ZERO) { m, j -> m.setBit(j) }
+}
+
+/**
+ * The effect of a public draw: [body] stores the drawn value, reading the
+ * beacon output as the local variable [BEACON_VALUE].
+ */
+data class EvmDraw(val node: Int, val body: List<EvmStmt>)
+
+/** Name of the beacon output inside an [EvmDraw] body. */
+val BEACON_VALUE = VarId("value")
+
+/**
+ * A role's withdrawal: [payout] once every node is resolved, or its own
+ * deposit [refund] if the instance was aborted before play began.
+ */
+data class EvmWithdrawal(
+    val role: RoleId,
+    val name: String,
+    val payout: EvmExpr,
+    val refund: Int,
+)
+
+/**
+ * A player entry point for one schedule node.
  * This is the "Atomic Unit" of the state machine.
  *
- * It separates "Structural Constraints" (declarative) from
- * "Imperative Logic" (statements), allowing backends to render
- * them idiomatically (e.g. Modifiers vs. Asserts).
+ * Structural constraints (turn, readiness, deadline) come from the node's
+ * place in the [EvmSchedule] and are rendered by the backend; [guards] and
+ * [body] hold only this move's own logic.
  */
 data class EvmAction(
     val actionId: NodeId,
+    val node: Int,
     val name: String,
     val invokedBy: RoleId,
 
     // The ABI Interface
     val inputs: List<EvmParam>,
     val payable: Boolean,              // True if this action accepts ETH (e.g. Join)
-
-    // The State Machine Constraints (Declarative)
-    val dependencies: List<NodeId>,  // List of ActionIDs that must be DONE
-    val isTerminal: Boolean,           // If true, this action triggers the end-game check
+    val isJoin: Boolean,
 
     // The Imperative Logic
-    // Contains ONLY the logic for this move (guards, storage updates, emits).
-    // Generic logic (like checking 'actionDone' bitmaps) is implied by the
-    // structural constraints above and injected by the renderer.
     val guards: List<EvmExpr>,
     val body: List<EvmStmt>
 )
@@ -171,7 +258,6 @@ sealed class EvmExpr {
         object MsgValue : BuiltIn()       // msg.value
         object Timestamp : BuiltIn()      // block.timestamp
         object Self : BuiltIn()           // address(this) or self
-        object PrevRandao : BuiltIn()     // block.prevrandao
     }
 
     // --- Special EVM Operations ---
@@ -184,12 +270,14 @@ sealed class EvmExpr {
 
     /**
      * abi.encode of arbitrary expressions (not just Vars). Used for
-     * entropy-source seed construction (block.prevrandao, address(this),
-     * node-id literal). Solidity renders as `abi.encode(a, b, c)`; Vyper
-     * renders as concat-like equivalent. Distinct from [AbiEncode] which
-     * is wired to a specific commit-reveal payload pattern.
+     * draw seed construction (beacon output, address(this), node index).
+     * Distinct from [AbiEncode] which is wired to a specific commit-reveal
+     * payload pattern.
      */
     data class AbiEncodeRaw(val args: List<EvmExpr>) : EvmExpr()
+
+    /** Explicit conversion, e.g. of a literal to `int256`. */
+    data class Cast(val type: EvmType, val arg: EvmExpr) : EvmExpr()
 
     data class EnumValue(val enumName: String, val value: String) : EvmExpr()
 }

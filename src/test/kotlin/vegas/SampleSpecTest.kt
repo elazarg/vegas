@@ -720,9 +720,9 @@ class SampleSpecTest : FreeSpec({
         }
     }
 
-    "PrevRandao entropy for anonymous sample (EVM)" - {
+    "Beacon entropy for anonymous sample (EVM)" - {
 
-        "Sample action takes no caller input and reads block.prevrandao" {
+        "a draw has no caller: it completes from the beacon, domain-separated" {
             val src = """
                 type face = {0, 1}
                 game main() {
@@ -735,27 +735,28 @@ class SampleSpecTest : FreeSpec({
             val ir = typedCompile(src)
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
-            // The sample action body reads prevrandao with domain
-            // separation and selects from the dist support via modulo.
-            sol shouldContain "block.prevrandao"
-            sol shouldContain "keccak256(abi.encode(block.prevrandao"
+            // The draw reads the beacon round after the node's readiness and
+            // selects from the dist support by domain-separated reduction.
+            sol shouldContain "BEACON.randomnessAfter(ready)"
+            sol shouldContain "keccak256(abi.encode(_value, address(this), uint256(1)))"
             sol shouldContain "% 2"
-            // No caller-submitted value parameter on the sample function.
-            check(!Regex("""function move_Sample_\d+\(int256""").containsMatchIn(sol)) {
-                "Sample function should take no caller input parameter"
+            // Nobody can trigger the draw with a value or at a chosen time.
+            check(!sol.contains("function move_Sample")) {
+                "A draw must not have a player entry point"
             }
+            check(!sol.contains("prevrandao")) { "Block randomness must not be used" }
         }
 
-        "random Role keeps RoleSubmit (no prevrandao read in its actions)" {
+        "random Role keeps RoleSubmit (no beacon in its actions)" {
             // The Host actor still submits via msg.sender. Only anonymous
-            // `sample (...)` bindings use the chain-derived entropy.
+            // `sample (...)` bindings use the beacon.
             val ir = typedCompileFile("examples/MontyHallChance.vg")
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
-            check(!sol.contains("block.prevrandao")) {
-                "MontyHallChance has no anonymous sample; Solidity should not read prevrandao"
+            check(!sol.contains("BEACON")) {
+                "MontyHallChance has no anonymous sample; Solidity should not use the beacon"
             }
-            sol shouldContain "by(Role.Host)"
+            sol shouldContain ", Role.Host);"
         }
     }
 
@@ -870,7 +871,7 @@ class SampleSpecTest : FreeSpec({
         "Solidity emits no role gate, no actor slots, no withdraw for sample" {
             // Sample bindings have no actor and no payout, so the generated
             // Solidity must not include:
-            //   * by(Role.Sample) modifier (would be uncallable)
+            //   * a player entry point for the Sample role
             //   * address_Sample / done_Sample / claimed_Sample slots
             //   * withdraw_Sample function
             // Strategic role gates are still expected.
@@ -878,7 +879,7 @@ class SampleSpecTest : FreeSpec({
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
             for (forbidden in listOf(
-                "by(Role.Sample)",
+                ", Role.Sample);",
                 "address_Sample",
                 "done_Sample ",
                 "done_Sample;",
@@ -887,8 +888,8 @@ class SampleSpecTest : FreeSpec({
             )) {
                 check(!sol.contains(forbidden)) { "Solidity contains '$forbidden':\n$sol" }
             }
-            check(sol.contains("by(Role.P1)")) {
-                "Expected by(Role.P1) on strategic actions; got Solidity without it"
+            check(sol.contains(", Role.P1);")) {
+                "Expected a Role.P1 turn check on strategic actions"
             }
             // The sampled field storage (Sample_w) is still required.
             check(sol.contains("Sample_w")) {

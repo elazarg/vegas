@@ -4,21 +4,24 @@ import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
-import vegas.frontend.SAMPLE_OWNER
 
 /**
  * Renders the EVM IR directly to Solidity source code.
  *
  * This layer is responsible for:
  * 1. Syntax generation (braces, semicolons, types).
- * 2. Implementing the standard Vegas infrastructure (modifiers, withdraw, etc.).
- * 3. synthesizing 'distributePayoffs' from the declarative payoff map.
+ * 2. Implementing the [EvmSchedule]: readiness, deadlines, quitting and aborts.
+ * 3. Rendering the per-role withdrawals.
  */
 fun generateSolidity(contract: EvmContract): String {
     return buildString {
         appendLine("// SPDX-License-Identifier: MIT")
-        appendLine("pragma solidity ^0.8.31;")
+        appendLine("pragma solidity ^0.8.37;")
         appendLine()
+        if (contract.schedule.usesBeacon) {
+            renderBeaconInterface()
+            appendLine()
+        }
         append("contract ${contract.name}")
 
         block {
@@ -34,16 +37,25 @@ fun generateSolidity(contract: EvmContract): String {
             contract.storage.forEach { renderStorage(it) }
             if (contract.storage.isNotEmpty()) appendLine()
 
-            // 4. Standard Modifiers
-            renderInfrastructureModifiers()
+            // 4. Schedule and commitment infrastructure
+            renderInfrastructure(contract.schedule, contract.audit)
             appendLine()
 
-            // 5. Constructor
-            renderConstructor(contract.initialization)
+            // 5. Terminal audit
+            contract.audit?.let {
+                renderAudit(it, contract.enums.single { e -> e.name == roleEnumName })
+                appendLine()
+            }
+
+            // 6. Constructor
+            renderConstructor(contract.schedule, contract.initialization, contract.audit)
             appendLine()
 
-            // 6. Game Actions
-            contract.actions.forEach { renderAction(it) }
+            // 7. Game Actions
+            contract.actions.forEach { renderAction(it, contract.audit) }
+
+            // 8. Withdrawals
+            contract.withdrawals.forEach { renderWithdrawal(it, contract.audit) }
         }
     }
 }
@@ -51,6 +63,17 @@ fun generateSolidity(contract: EvmContract): String {
 // =========================================================================
 // Structure Rendering
 // =========================================================================
+
+private fun StringBuilder.renderBeaconInterface() {
+    appendLine("""
+        /// A public randomness beacon. `randomnessAfter(t)` returns the output of
+        /// the first round scheduled strictly after `t`, with that round's time,
+        /// or zero while the round is not yet published.
+        interface IVegasBeacon {
+            function randomnessAfter(uint256 timestamp) external view returns (bytes32 value, uint256 roundTime);
+        }
+    """.trimIndent())
+}
 
 private fun StringBuilder.renderEnum(e: EvmEnum) {
     appendLine("enum ${e.name} { ${e.values.joinToString(", ")} }")
@@ -68,93 +91,358 @@ private fun StringBuilder.renderStorage(s: EvmStorageSlot) {
     appendLine("$typeStr$constant public ${s.name}$init;")
 }
 
-private fun StringBuilder.renderInfrastructureModifiers() {
+private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: EvmAudit?) {
+    val nodes = schedule.nodes
     appendLine("""
         receive() external payable {
             revert("direct ETH not allowed");
         }
 
         uint256 constant public TIMEOUT = $TIMEOUT_SECONDS;
+        uint256 constant public NODE_COUNT = ${nodes.size};
+        uint256 public immutable deployedAt;
+    """.trimIndent())
+    if (schedule.usesBeacon) appendLine("IVegasBeacon public immutable BEACON;")
+    appendLine("""
 
-        mapping(Role => bool) private bailed;
+        /// Readiness time of each node: when its last predecessor resolved (0 = not ready).
+        mapping(uint256 => uint256) public readyAt;
+        /// Resolution time of each node: when it was played, or resolved without a value (0 = unresolved).
+        mapping(uint256 => uint256) public resolvedAt;
+        /// When a role quit: the deadline it missed (0 = active). Quitting is persistent.
+        mapping(Role => uint256) public quitAt;
+        /// Set when a role failed to join: play never starts and deposits are refunded.
+        bool public aborted;
+        /// Every node below this position is resolved.
+        uint256 public settledPrefix;
+    """.trimIndent())
+    appendLine()
 
-        modifier action(Role role, uint256 actionId) {
-            require((!actionDone[role][actionId]), "already done");
-            actionDone[role][actionId] = true;
-            _;
-            actionTimestamp[role][actionId] = block.timestamp;
-            lastTs = block.timestamp;
+    renderPureTable("_owner", "Role", nodes.map { "Role.${it.owner.name}" })
+    renderPureTable("_predecessors", "uint256", nodes.map { it.predecessorMask.toString() })
+    renderPureTable("_isJoin", "bool", nodes.map { (it.kind == EvmNodeKind.JOIN).toString() })
+    if (schedule.usesBeacon) {
+        renderPureTable("_isDraw", "bool", nodes.map { (it.kind == EvmNodeKind.DRAW).toString() })
+    }
+
+    appendLine("""
+        /// Resolve every node that can be resolved now. Anyone may call this.
+        function settle() public {
+            _settle();@@SETTLE_RECORD@@
         }
 
-        modifier by(Role role) {
-            require((${roleMap}[msg.sender] == role), "bad role");
-            require(!bailed[role], "you bailed");
-            _;
+        function _settle() internal {
+            uint256 prefix = settledPrefix;
+            bool contiguous = true;
+            for (uint256 i = prefix; i < NODE_COUNT; i++) {
+                if (resolvedAt[i] == 0) _resolve(i);@@SETTLE_ANCHOR@@
+                if (contiguous && resolvedAt[i] != 0) {
+                    prefix = i + 1;
+                } else {
+                    contiguous = false;
+                }
+            }
+            settledPrefix = prefix;@@SETTLE_END@@
         }
 
-        bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
-        
-        function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
-            return keccak256(abi.encode(
-                COMMIT_TAG,
-                address(this),
-                role,
-                actor,
-                keccak256(payload)
-            ));
-        }
-        
-        function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
-            require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+        function _readiness(uint256 i) internal view returns (uint256) {
+            uint256 ready = deployedAt;
+            uint256 predecessors = _predecessors(i);
+            for (uint256 j = 0; j < i; j++) {
+                if ((predecessors >> j) & 1 == 1) {
+                    uint256 t = resolvedAt[j];
+                    if (t == 0) return 0;
+                    if (t > ready) ready = t;
+                }
+            }
+            return ready;
         }
 
+        function _resolve(uint256 i) internal {
+            uint256 ready = readyAt[i];
+            if (ready == 0) {
+                ready = _readiness(i);
+                if (ready == 0) return;
+                readyAt[i] = ready;@@READY_BLOCK@@
+            }
+            if (aborted) {
+                resolvedAt[i] = ready;
+                return;
+            }
+    """.trimIndent().withAudit(audit))
+    if (schedule.usesBeacon) {
+        appendLine("""
+            |    if (_isDraw(i)) {
+            |        (bytes32 value, uint256 roundTime) = BEACON.randomnessAfter(ready);
+            |        if (value != bytes32(0)) {
+            |            // A resolution time is never in the future, whatever the beacon reports.
+            |            if (roundTime > block.timestamp) roundTime = block.timestamp;
+            |            _draw(i, value);
+            |            resolvedAt[i] = roundTime > ready ? roundTime : ready;
+            |        }
+            |        return;
+            |    }
+        """.trimMargin())
+    }
+    appendLine("""
+        |    Role owner = _owner(i);
+        |    uint256 quit = quitAt[owner];
+        |    if (quit != 0) {
+        |        resolvedAt[i] = quit > ready ? quit : ready;
+        |        return;
+        |    }
+        |    if (block.timestamp > ready + TIMEOUT) {
+        |        quitAt[owner] = ready + TIMEOUT;
+        |        resolvedAt[i] = ready + TIMEOUT;
+        |        if (_isJoin(i)) aborted = true;
+        |    }
+        |}
+        |
+        |/// Settle, then require that node `i` is ready, unresolved, and owned by the caller's role.
+        |function _beginMove(uint256 i, Role role) internal {
+        |    _settle();
+        |    require(roles[msg.sender] == role, "bad role");
+        |    require(readyAt[i] != 0, "not ready");
+        |    require(resolvedAt[i] == 0, "not open");
+        |}
+        |
+        |function _endMove(uint256 i) internal {
+        |    resolvedAt[i] = block.timestamp;@@END_MOVE@@
+        |}
+        |
+        |bytes32 private constant COMMIT_TAG = keccak256("VEGAS_COMMIT_V1");
+        |
+        |function _commitmentHash(Role role, address actor, bytes memory payload) internal view returns (bytes32) {
+        |    return keccak256(abi.encode(
+        |        COMMIT_TAG,
+        |        address(this),
+        |        role,
+        |        actor,
+        |        keccak256(payload)
+        |    ));
+        |}
+        |
+        |function _checkReveal(bytes32 commitment, Role role, address actor, bytes memory payload) internal view {
+        |    require(_commitmentHash(role, actor, payload) == commitment, "bad reveal");
+        |}
+    """.trimMargin().withAudit(audit))
+
+    if (schedule.usesBeacon) {
+        appendLine()
+        append("function _draw(uint256 i, bytes32 _${BEACON_VALUE.name}) internal")
+        block {
+            schedule.draws.forEachIndexed { k, draw ->
+                val keyword = if (k == 0) "if" else "} else if"
+                appendLine("$keyword (i == ${draw.node}) {")
+                append(buildString { draw.body.forEach { renderStmt(it) } }.trimEnd().prependIndent("    "))
+                appendLine()
+            }
+            appendLine("}")
+        }
+    }
+}
+
+/**
+ * Fill the audit hooks of the schedule infrastructure: with an audit, play
+ * records readiness blocks, anchors their hashes, registers every successful
+ * call, and notes when play ended; without one, the hooks are empty.
+ */
+private fun String.withAudit(audit: EvmAudit?): String {
+    val hooks = mapOf(
+        "@@SETTLE_RECORD@@" to listOf("executed[msg.sender][keccak256(msg.data)] = true;"),
+        "@@SETTLE_ANCHOR@@" to listOf("if (resolvedAt[i] == 0 && readyAt[i] != 0) _anchor(i);"),
+        "@@SETTLE_END@@" to listOf("if (endedAt == 0 && (prefix == NODE_COUNT || aborted)) endedAt = block.timestamp;"),
+        "@@READY_BLOCK@@" to listOf("readyBlock[i] = block.number;"),
+        "@@END_MOVE@@" to listOf("executed[msg.sender][keccak256(msg.data)] = true;", "_settle();"),
+    )
+    return hooks.entries.fold(this) { text, (hook, code) ->
+        // Each inserted line is indented like the line that holds the hook.
+        text.replace(Regex("(?m)^( *)(.*)" + hook)) { m ->
+            val indent = m.groupValues[1]
+            indent + m.groupValues[2] +
+                if (audit == null) "" else code.joinToString("") { line -> "\n" + indent + line }
+        }
+    }
+}
+
+/** The terminal audit: bonds, readiness contexts, the call registry, and evidence checking. */
+private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
+    appendLine("""
+        uint256 constant public AUDIT_WINDOW = ${audit.windowSeconds};
+        /// Block in which each node became ready, and that block's hash once known.
+        /// A move must carry the hash, so a signed move proves it was made after that block.
+        mapping(uint256 => uint256) public readyBlock;
+        mapping(uint256 => bytes32) public readyHash;
+        /// Calldata hashes of the calls each account made successfully to this contract.
+        mapping(address => mapping(bytes32 => bool)) public executed;
+        /// Whether a role's bond was burned.
+        mapping(Role => bool) public charged;
+        /// When play was seen to end; the audit window starts here (0 = still playing).
+        uint256 public endedAt;
+    """.trimIndent())
+    appendLine()
+    renderPureTable("_bond", "uint256", roleEnum.values.map { v ->
+        audit.bonds.entries.singleOrNull { it.key.name == v }?.value?.toString() ?: "0"
+    }, key = "Role role", index = { i -> "role == Role.${roleEnum.values[i]}" })
+    appendLine("""
+        /// Snapshot the hash of node `i`'s readiness block, once the block is sealed.
+        /// A hash that aged out of `blockhash` is re-anchored at the current block.
+        function _anchor(uint256 i) internal {
+            if (readyHash[i] != bytes32(0) || readyBlock[i] >= block.number) return;
+            bytes32 h = blockhash(readyBlock[i]);
+            if (h != bytes32(0)) {
+                readyHash[i] = h;
+            } else {
+                readyBlock[i] = block.number;
+            }
+        }
+
+        /// Evidence: a transaction signed by a game account. `unsignedTx` is the exact
+        /// payload the signature covers (a legacy RLP list, or a type byte and a list).
+        /// Anything but a successful call to this contract burns the signer's bond, once.
+        function report(bytes calldata unsignedTx, uint8 yParity, bytes32 r, bytes32 s) external {
+            require(endedAt != 0 && block.timestamp <= endedAt + AUDIT_WINDOW, "audit closed");
+            address signer = ecrecover(keccak256(unsignedTx), 27 + yParity, r, s);
+            require(signer != address(0), "bad signature");
+            Role role = roles[signer];
+            uint256 bond = _bond(role);
+            require(bond != 0, "not an audited account");
+            (address to, bytes calldata data) = _callOf(unsignedTx);
+            require(to != address(this) || !executed[signer][keccak256(data)], "permitted traffic");
+            executed[msg.sender][keccak256(msg.data)] = true;
+            if (!charged[role]) {
+                charged[role] = true;
+                (bool ok, ) = payable(address(0)).call{value: bond}("");
+                require(ok, "burn failed");
+            }
+        }
+
+        /// Destination and calldata of a transaction payload. An unknown type is
+        /// never a permitted call, so it maps to no destination.
+        function _callOf(bytes calldata t) internal pure returns (address to, bytes calldata data) {
+            uint8 kind = uint8(t[0]);
+            uint256 list;
+            uint256 toIndex;
+            if (kind >= 0xc0) {
+                (list, toIndex) = (0, 3);
+            } else if (kind == 1) {
+                (list, toIndex) = (1, 4);
+            } else if (kind >= 2 && kind <= 4) {
+                (list, toIndex) = (1, 5);
+            } else {
+                return (address(0), t[0:0]);
+            }
+            (uint256 toStart, uint256 toLength) = _rlpItem(t, list, toIndex);
+            (uint256 dataStart, uint256 dataLength) = _rlpItem(t, list, toIndex + 2);
+            to = toLength == 20 ? address(bytes20(t[toStart:toStart + 20])) : address(0);
+            data = t[dataStart:dataStart + dataLength];
+        }
+
+        /// Content offset and length of item `index` of the RLP list at `list`.
+        function _rlpItem(bytes calldata t, uint256 list, uint256 index) internal pure returns (uint256, uint256) {
+            (uint256 pos, uint256 length) = _rlpHeader(t, list);
+            uint256 end = pos + length;
+            for (uint256 k = 0; ; k++) {
+                require(pos < end, "short list");
+                (uint256 start, uint256 size) = _rlpHeader(t, pos);
+                if (k == index) return (start, size);
+                pos = start + size;
+            }
+        }
+
+        /// Content offset and length of the RLP item at `pos`.
+        function _rlpHeader(bytes calldata t, uint256 pos) internal pure returns (uint256, uint256) {
+            uint256 b = uint8(t[pos]);
+            if (b < 0x80) return (pos, 1);
+            if (b < 0xb8) return (pos + 1, b - 0x80);
+            if (b < 0xc0) return (pos + 1 + (b - 0xb7), _bigEndian(t[pos + 1:pos + 1 + (b - 0xb7)]));
+            if (b < 0xf8) return (pos + 1, b - 0xc0);
+            return (pos + 1 + (b - 0xf7), _bigEndian(t[pos + 1:pos + 1 + (b - 0xf7)]));
+        }
+
+        function _bigEndian(bytes calldata x) internal pure returns (uint256 v) {
+            for (uint256 k = 0; k < x.length; k++) v = (v << 8) | uint8(x[k]);
+        }
     """.trimIndent())
 }
 
-private fun StringBuilder.renderConstructor(init: List<EvmStmt>) {
-    append("constructor()")
+/** A pure lookup `name(i)` over schedule positions, as an if-chain. */
+private fun StringBuilder.renderPureTable(
+    name: String,
+    type: String,
+    values: List<String>,
+    key: String = "uint256 i",
+    index: (Int) -> String = { i -> "i == $i" },
+) {
+    append("function $name($key) internal pure returns ($type)")
     block {
+        values.dropLast(1).forEachIndexed { i, v ->
+            appendLine("if (${index(i)}) return $v;")
+        }
+        appendLine("return ${values.last()};")
+    }
+    appendLine()
+}
+
+private fun StringBuilder.renderConstructor(schedule: EvmSchedule, init: List<EvmStmt>, audit: EvmAudit?) {
+    append(if (schedule.usesBeacon) "constructor(IVegasBeacon beacon)" else "constructor()")
+    block {
+        appendLine("deployedAt = block.timestamp;")
+        if (schedule.usesBeacon) appendLine("BEACON = beacon;")
+        if (audit != null) {
+            // Source nodes are ready at deployment; their moves carry the deployment block's hash.
+            schedule.nodes.withIndex().filter { it.value.predecessors.isEmpty() }.forEach { (i, _) ->
+                appendLine("readyAt[$i] = block.timestamp;")
+                appendLine("readyBlock[$i] = block.number;")
+            }
+        }
         init.forEach { renderStmt(it) }
     }
 }
 
-private fun StringBuilder.renderAction(a: EvmAction) {
+private fun StringBuilder.renderAction(a: EvmAction, audit: EvmAudit?) {
     val inputs = a.inputs.joinToString(", ") { "${renderType(it.type)} ${renderExpr(Var(it.name))}" }
-    val visibility = "public" // Actions are always public entry points
     val mutability = if (a.payable) " payable" else ""
 
-    // Synthesize Modifiers from Declarative Constraints.
-    // Sample-owned actions have no actor (no `join` ever assigns the Sample
-    // label to an address), so emitting `by(Role.Sample)` would make the
-    // function uncallable. Drop the role gate; anyone can call. The
-    // entropy source layer (prevrandao / vrf / drand) will eventually
-    // replace this open access with source-specific scaffolding.
-    val isSample = a.invokedBy == SAMPLE_OWNER
-    val modifiers = buildList {
-        if (!isSample) add("by(${roleEnumName}.${a.invokedBy})")
-        add("action(Role.${a.actionId.first}, ${a.actionId.second})")
-    }.joinToString(" ")
-
-    append("function ${a.name}($inputs) $visibility$mutability $modifiers")
+    append("function ${a.name}($inputs) public$mutability")
     block {
-        if (a.dependencies.isNotEmpty()) {
-            appendLine("{")
-            appendLine("    uint256 vegasDependencyOrigin = lastTs;")
-            a.dependencies.forEach { dep ->
-                appendLine("    if (!actionDone[Role.${dep.first}][${dep.second}] && block.timestamp > vegasDependencyOrigin + TIMEOUT) {")
-                appendLine("        bailed[Role.${dep.first}] = true;")
-                appendLine("        lastTs = block.timestamp;")
-                appendLine("    }")
-                appendLine("    if (!bailed[Role.${dep.first}]) {")
-                appendLine("        require(actionDone[Role.${dep.first}][${dep.second}], \"dependency not satisfied\");")
-                appendLine("    }")
-            }
-            appendLine("}")
+        appendLine("_beginMove(${a.node}, $roleEnumName.${a.invokedBy});")
+        if (audit != null) {
+            appendLine("require(${renderExpr(Var(CONTEXT_PARAM))} == readyHash[${a.node}], \"stale context\");")
         }
         a.guards.forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
         a.body.forEach { renderStmt(it) }
+        appendLine("_endMove(${a.node});")
+    }
+    appendLine()
+}
+
+private fun StringBuilder.renderWithdrawal(w: EvmWithdrawal, audit: EvmAudit?) {
+    append("function ${w.name}() public")
+    block {
+        appendLine("_settle();")
+        appendLine("require(roles[msg.sender] == $roleEnumName.${w.role.name}, \"bad role\");")
+        appendLine("require(!claimed_${w.role.name}, \"already claimed\");")
+        if (audit != null) {
+            appendLine("require(endedAt != 0 && block.timestamp > endedAt + AUDIT_WINDOW, \"audit open\");")
+        }
+        appendLine("int256 payout;")
+        appendLine("if (aborted) {")
+        appendLine("    payout = ${roleJoined(w.role.name)} ? int256(${w.refund}) : int256(0);")
+        appendLine("} else {")
+        appendLine("    require(settledPrefix == NODE_COUNT, \"game not finished\");")
+        appendLine("    payout = ${renderPayoffExpr(w.payout)};")
+        appendLine("}")
+        if (audit != null) {
+            appendLine("if (${roleJoined(w.role.name)} && !charged[$roleEnumName.${w.role.name}]) payout += int256(${audit.bonds.getValue(w.role)});")
+        }
+        appendLine("claimed_${w.role.name} = true;")
+        appendLine("if (payout > 0) {")
+        appendLine("    (bool ok, ) = payable(${roleAddr(w.role.name)}).call{value: uint256(payout)}(\"\");")
+        appendLine("    require(ok, \"ETH send failed\");")
+        appendLine("}")
     }
     appendLine()
 }
@@ -279,7 +567,6 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
     is BuiltIn.MsgValue -> "msg.value"
     is BuiltIn.Timestamp -> "block.timestamp"
     is BuiltIn.Self -> "address(this)"
-    is BuiltIn.PrevRandao -> "block.prevrandao"
 
     // Special
     is Keccak256 -> "keccak256(${renderExpr(e.data)})"
@@ -292,6 +579,7 @@ private fun renderExpr(e: EvmExpr): String = when (e) {
         "abi.encode($args)"
     }
     is EnumValue -> "${e.enumName}.${e.value}"
+    is Cast -> "${renderType(e.type)}(${renderExpr(e.arg)})"
 }
 
 private fun renderType(t: EvmType): String = when (t) {

@@ -13,25 +13,29 @@ import vegas.runtime.*
  *
  * @param rpc JSON-RPC client connected to Anvil
  * @param accounts Pre-funded accounts available for role assignment
+ * @param audit Terminal-audit policy of the deployed contract, if any
  */
 class EthereumRuntime(
     private val rpc: EthJsonRpc,
     private val accounts: List<String>,
+    private val audit: AuditPolicy? = null,
 ) : GameRuntime {
 
     override fun deploy(game: GameIR): GameSession {
         // 1. Compile to Solidity
-        val evmContract = compileToEvm(game)
+        val evmContract = compileToEvm(game, audit)
         val solidity = generateSolidity(evmContract)
 
         // 2. Compile with solc
         val compiled = SolcCompiler.compile(solidity, game.name)
 
-        // 3. Deploy to Anvil
+        // 3. Deploy to Anvil, with a test beacon if the game draws
         val deployer = accounts[0]
+        val beacon = if (evmContract.schedule.usesBeacon) MockBeacon.deploy(rpc, deployer) else null
+        val constructorArgs = beacon?.let { AbiCodec.encodeAddress(it) } ?: byteArrayOf()
         val receipt = rpc.sendAndWait(
             from = deployer,
-            data = compiled.bytecode,
+            data = compiled.bytecode + Hex.encode(constructorArgs).removePrefix("0x"),
             functionName = "constructor(${game.name})",
         )
 
@@ -52,6 +56,8 @@ class EthereumRuntime(
             evmContract = evmContract,
             contractAddress = contractAddress,
             roleAccounts = roleAccounts,
+            beacon = beacon,
+            operator = deployer,
         )
     }
 }
@@ -63,8 +69,10 @@ class EthereumSession(
     val rpc: EthJsonRpc,
     private val game: GameIR,
     private val evmContract: EvmContract,
-    private val contractAddress: String,
-    private val roleAccounts: Map<RoleId, String>,
+    val contractAddress: String,
+    val roleAccounts: Map<RoleId, String>,
+    private val beacon: String?,
+    private val operator: String,
 ) : GameSession {
 
     /** Role enum values: None=0, then roles in declaration order (matching Solidity enum). */
@@ -87,7 +95,29 @@ class EthereumSession(
 
     override fun legalMoves(): List<GameMove> = localSession.legalMoves()
 
+    /** Roles that have quit; their later nodes resolve without a move. */
+    private val quitRoles = mutableSetOf<RoleId>()
+
+    /** Frontier in which a fresh quit happened; its deadline passes once play leaves it. */
+    private var quitFrontier: Set<NodeId>? = null
+
     override fun submitMove(move: GameMove) {
+        // Play leaving a frontier with a fresh quit lets that quitter's deadline pass.
+        quitFrontier?.let { frontier -> if (move.actionId !in frontier) letDeadlinesPass() }
+
+        // A quit is not a transaction: the role stays silent until its deadline.
+        if (move.assignments.values.any { it is Expr.Const.Quit }) {
+            if (quitRoles.add(move.role)) quitFrontier = localSession.enabled()
+            localSession.submitMove(move)
+            return
+        }
+
+        if (evmContract.schedule.nodes[evmContract.schedule.indexOf(move.actionId)].kind == EvmNodeKind.DRAW) {
+            submitDraw(move)
+            localSession.submitMove(move)
+            return
+        }
+
         val action = actionMap[move.actionId]
             ?: error("No EVM action for NodeId ${move.actionId}")
 
@@ -118,11 +148,18 @@ class EthereumSession(
      * Execute withdrawals and return actual payoffs from the contract.
      * Uses balance snapshots to determine exact payout amounts.
      * Accounts for gas costs by using Anvil's zero-base-fee mode.
+     * With a terminal audit, the audit window passes first, and the payoffs
+     * are reported net of the role's bond (the bond is returned unless burned).
      */
     fun executeWithdrawals(): Map<RoleId, Long> {
+        if (quitFrontier != null) letDeadlinesPass()
+        evmContract.audit?.let { audit ->
+            settle()
+            rpc.advanceTime(audit.windowSeconds.toLong() + 1)
+        }
         val payoffs = mutableMapOf<RoleId, Long>()
 
-        for (role in game.roles + game.chanceRoles) {
+        for (role in game.payoffs.keys) {
             val account = roleAccounts[role] ?: continue
 
             val balanceBefore = rpc.getBalance(account)
@@ -130,26 +167,104 @@ class EthereumSession(
             val selector = AbiCodec.functionSelector("withdraw_${role.name}()")
             val calldata = Hex.encode(selector)
 
-            try {
-                rpc.sendAndWait(
-                    from = account,
-                    to = contractAddress,
-                    data = calldata,
-                    functionName = "withdraw_${role.name}()",
-                )
-            } catch (_: TxRevertedException) {
-                // Withdraw may revert if payout is 0 or role didn't play
-                payoffs[role] = 0
-                continue
-            }
+            // Every role joined and every node is resolved, so no withdrawal may revert.
+            rpc.sendAndWait(
+                from = account,
+                to = contractAddress,
+                data = calldata,
+                functionName = "withdraw_${role.name}()",
+            )
 
             val balanceAfter = rpc.getBalance(account)
             // Balance delta may be negative due to gas costs; for small payoffs
             // use BigInteger subtraction then convert to Long
-            payoffs[role] = (balanceAfter - balanceBefore).toLong()
+            payoffs[role] = (balanceAfter - balanceBefore).toLong() - (evmContract.audit?.bonds?.get(role) ?: 0)
         }
 
         return payoffs
+    }
+
+    /** Let every pending deadline pass, so the silent roles' nodes expire. */
+    private fun letDeadlinesPass() {
+        rpc.advanceTime(EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
+        quitFrontier = null
+    }
+
+    /**
+     * Everyone still in the game stops playing: let deadlines pass, one at a
+     * time, until every node is resolved (or the instance is aborted).
+     */
+    fun letRemainingDeadlinesPass() {
+        quitFrontier = null
+        repeat(evmContract.schedule.nodes.size + 1) {
+            settle()
+            if (view("settledPrefix()") == evmContract.schedule.nodes.size.toLong() || view("aborted()") != 0L) return
+            rpc.advanceTime(EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
+        }
+        error("schedule did not resolve")
+    }
+
+    private fun view(signature: String): Long = rpc.ethCall(operator, contractAddress,
+        Hex.encode(AbiCodec.functionSelector(signature))).removePrefix("0x").toBigInteger(16).toLong()
+
+    fun settle() {
+        rpc.sendAndWait(
+            from = operator,
+            to = contractAddress,
+            data = Hex.encode(AbiCodec.functionSelector("settle()")),
+            functionName = "settle()",
+        )
+    }
+
+    fun readyAt(node: Int): Long = viewAt("readyAt(uint256)", node)
+
+    private fun viewAt(signature: String, node: Int): Long = rpc.ethCall(operator, contractAddress,
+        Hex.encode(AbiCodec.functionSelector(signature) + AbiCodec.encodeUint256(node.toLong())))
+        .removePrefix("0x").toBigInteger(16).toLong()
+
+    /**
+     * The readiness context an honest client binds into an audited move: the
+     * hash of the block in which the node became ready, once that block is sealed.
+     */
+    fun contextFor(node: Int): ByteArray {
+        if (viewAt("readyBlock(uint256)", node) == 0L) settle()
+        val block = viewAt("readyBlock(uint256)", node)
+        check(block != 0L) { "node $node is not ready" }
+        if (block >= rpc.latestBlockNumber()) rpc.evmMine()
+        return rpc.blockHash(block)
+    }
+
+    /** Arguments of [action]: the readiness context where required, then [values] for the rest. */
+    private fun arguments(action: EvmAction, values: (EvmParam) -> AbiValue): List<AbiValue> =
+        action.inputs.map { param ->
+            if (param.name == CONTEXT_PARAM) AbiValue.Bytes32(contextFor(action.node)) else values(param)
+        }
+
+    /** The entry point of a node, and its ABI signature (for off-script transactions). */
+    fun action(id: NodeId): EvmAction = actionMap.getValue(id)
+    fun functionSignature(id: NodeId): String = signature(action(id))
+
+    /** The salt and clear value a role committed for [field] (its private knowledge). */
+    fun secret(field: FieldRef): Pair<Long, AbiValue> = commitSecrets.getValue(field)
+
+    private fun signature(action: EvmAction): String =
+        "${action.name}(${action.inputs.joinToString(",") { evmTypeToSolidity(it.type) }})"
+
+    /**
+     * A draw happens without a player: publish a beacon round for the node's
+     * readiness time whose output maps to the model's value, then settle.
+     */
+    private fun submitDraw(move: GameMove) {
+        val node = evmContract.schedule.indexOf(move.actionId)
+        settle()
+        val ready = readyAt(node)
+        check(ready != 0L) { "draw ${move.actionId} is not ready" }
+        val dist = requireNotNull(game.dag.sampleSpec(move.actionId)?.dist) { "draw ${move.actionId} has no distribution" }
+        val value = move.assignments.values.single()
+        val output = MockBeacon.outputDrawing(contractAddress, node, dist, value)
+        MockBeacon.publish(rpc, operator, requireNotNull(beacon), ready, output)
+        if (rpc.latestBlockTimestamp() <= ready) rpc.advanceTime(1)
+        settle()
     }
 
     // ========== Private: Submit methods ==========
@@ -157,13 +272,11 @@ class EthereumSession(
     private fun submitPublicOrJoin(action: EvmAction, move: GameMove, account: String) {
         val isJoin = action.payable
 
-        // Build function signature for selector computation
-        val paramTypes = action.inputs.map { evmTypeToSolidity(it.type) }
-        val funcSig = "${action.name}(${paramTypes.joinToString(",")})"
+        val funcSig = signature(action)
         val selector = AbiCodec.functionSelector(funcSig)
 
         // Encode arguments
-        val args = action.inputs.map { param ->
+        val args = arguments(action) { param ->
             val varId = extractVarId(param.name)
             val value = move.assignments[varId]
                 ?: error("Missing assignment for ${param.name} in move for ${action.name}")
@@ -172,11 +285,12 @@ class EthereumSession(
 
         val calldata = Hex.encode(AbiCodec.encodeCall(selector, *args.toTypedArray()))
 
-        // Compute value (deposit for join actions)
+        // Compute value (deposit, plus the audit bond, for join actions)
         val weiValue = if (isJoin) {
             val deposit = game.dag.spec(move.actionId).join?.deposit?.v
                 ?: error("Join action ${action.name} has no deposit")
-            "0x" + deposit.toLong().toString(16)
+            val bond = evmContract.audit?.bonds?.get(move.role) ?: 0
+            "0x" + (deposit + bond).toLong().toString(16)
         } else {
             "0x0"
         }
@@ -200,10 +314,9 @@ class EthereumSession(
         val roleEnum = roleEnumValues[move.role]
             ?: error("No enum value for role ${move.role}")
 
-        // Build commitment hashes for each parameter
-        val commitmentArgs = mutableListOf<AbiValue>()
-
-        for (param in action.inputs) {
+        // One salt per commit action: its reveal checks every parameter against one salt.
+        val salt = CommitmentManager.generateSalt()
+        val commitmentArgs = arguments(action) { param ->
             val varId = extractVarId(param.name)
             // The semantic model wraps committed values in Hidden()
             val clearValue = when (val hiddenValue = move.assignments[varId]) {
@@ -211,7 +324,6 @@ class EthereumSession(
                 else -> hiddenValue ?: error("Missing assignment for $varId")
             }
 
-            val salt = CommitmentManager.generateSalt()
             val clearAbi = constToAbiValue(clearValue, resolveBaseType(varId, move.role))
             val payload = CommitmentManager.encodePayload(clearAbi, AbiValue.Uint256(salt))
 
@@ -223,12 +335,11 @@ class EthereumSession(
             )
 
             commitSecrets[FieldRef(move.role, varId)] = Pair(salt, clearAbi)
-            commitmentArgs.add(AbiValue.Bytes32(commitment))
+            AbiValue.Bytes32(commitment)
         }
 
         // Build calldata
-        val paramTypes = action.inputs.map { evmTypeToSolidity(it.type) }
-        val funcSig = "${action.name}(${paramTypes.joinToString(",")})"
+        val funcSig = signature(action)
         val selector = AbiCodec.functionSelector(funcSig)
         val calldata = Hex.encode(AbiCodec.encodeCall(selector, *commitmentArgs.toTypedArray()))
 
@@ -244,28 +355,21 @@ class EthereumSession(
         // For reveal actions, we need to submit the clear value + salt
         // The action inputs are: value params + salt param
 
-        val args = mutableListOf<AbiValue>()
-
-        // All params except the last one (which is the salt)
-        val valueParams = action.inputs.dropLast(1)  // Last is always "salt"
         var storedSalt: Long? = null
-
-        for (param in valueParams) {
-            val varId = extractVarId(param.name)
-            val fieldRef = FieldRef(move.role, varId)
-            val (salt, clearAbi) = commitSecrets[fieldRef]
-                ?: error("No stored secret for $fieldRef — was commit submitted?")
-
-            args.add(clearAbi)
-            storedSalt = salt
+        val args = arguments(action) { param ->
+            if (param.name == VarId("salt")) {
+                AbiValue.Uint256(storedSalt ?: error("No salt found for reveal"))
+            } else {
+                val fieldRef = FieldRef(move.role, extractVarId(param.name))
+                val (salt, clearAbi) = commitSecrets[fieldRef]
+                    ?: error("No stored secret for $fieldRef — was commit submitted?")
+                storedSalt = salt
+                clearAbi
+            }
         }
 
-        // Add salt as last argument
-        args.add(AbiValue.Uint256(storedSalt ?: error("No salt found for reveal")))
-
         // Build calldata
-        val paramTypes = action.inputs.map { evmTypeToSolidity(it.type) }
-        val funcSig = "${action.name}(${paramTypes.joinToString(",")})"
+        val funcSig = signature(action)
         val selector = AbiCodec.functionSelector(funcSig)
         val calldata = Hex.encode(AbiCodec.encodeCall(selector, *args.toTypedArray()))
 

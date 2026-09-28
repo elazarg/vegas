@@ -49,6 +49,7 @@ Record W5
   (w1 : @W1)
   (w2 : @W2 w0 w1)
   (w3 : @W3 w0 w1)
+  (w4 : @W4 w0 w1 w2 w3)
  : Type := {
   c_Even : bool;
 
@@ -61,7 +62,7 @@ Record ActionDag : Type := {
   action2 : @W2 action0 action1;
   action3 : @W3 action0 action1;
   action4 : @W4 action0 action1 action2 action3;
-  action5 : @W5 action0 action1 action2 action3;
+  action5 : @W5 action0 action1 action2 action3 action4;
 }.
 
 End GameProtocol.

@@ -12,6 +12,8 @@ import vegas.runtime.*
 /**
  * Model-driven tests: for each example game, enumerate traces,
  * play on both LocalRuntime and EthereumRuntime, and assert payoffs match.
+ * A quit in the model is played on chain by staying silent past the
+ * deadline; a chance draw is played through the test beacon.
  *
  * This is the primary correctness test: the semantic model and the
  * Solidity contract must agree on payoffs for every possible game outcome.
@@ -47,12 +49,7 @@ class EthModelTest : FunSpec({
         require(traces.isNotEmpty()) { "No traces found for $gameName" }
 
         for ((traceIdx, trace) in traces.withIndex()) {
-            // Skip traces with quit moves for now — they involve timeout logic
-            val hasQuit = trace.moves.any {
-                it.assignments.values.any { v -> v is vegas.ir.Expr.Const.Quit }
-            }
-            if (hasQuit) continue
-
+            // Quits are replayed on chain as silence until the deadline passes.
             // Play on LocalRuntime
             val localRuntime = LocalRuntime()
             val localSession = localRuntime.deploy(game)
@@ -152,5 +149,43 @@ class EthModelTest : FunSpec({
 
     test("EscrowContract: sampled traces match") {
         testGameTraces("EscrowContract", sampled = true, sampleCount = 20)
+    }
+
+    // ========== Tier 4: Quitting and deadlines ==========
+    // Random traces pick Quit as often as any other move, so they exercise
+    // expiry, persistent quitting and the handlers' payouts.
+
+    test("Prisoners: sampled traces with quits match") {
+        testGameTraces("Prisoners", sampled = true, sampleCount = 12)
+    }
+
+    test("MontyHall: sampled traces with quits match") {
+        testGameTraces("MontyHall", sampled = true, sampleCount = 12)
+    }
+
+    test("Centipede: sampled traces with quits match") {
+        testGameTraces("Centipede", sampled = true, sampleCount = 12)
+    }
+
+    test("RandomLeader: sampled traces with quits match") {
+        testGameTraces("RandomLeader", sampled = true, sampleCount = 12)
+    }
+
+    test("ThreeWayLottery: sampled traces with quits match") {
+        testGameTraces("ThreeWayLottery", sampled = true, sampleCount = 12)
+    }
+
+    // ========== Tier 5: Public draws from the beacon ==========
+
+    test("Bet: all traces match") {
+        testGameTraces("Bet")
+    }
+
+    test("Insurance: all traces match") {
+        testGameTraces("Insurance", maxTraces = 60)
+    }
+
+    test("Lottery: sampled traces match") {
+        testGameTraces("Lottery", sampled = true, sampleCount = 12)
     }
 })

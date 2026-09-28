@@ -80,7 +80,7 @@ structure W4
     : Type where
   goat_Host : Int
   W4_guard_domain_goat_Host : domain_Enum_0 goat_Host
-  W4_guard_logic : (lift2 (fun x y => decide (x ≠ y)) (some goat_Host) (w3.getVal (fun w => w.d_Guest))) = some true
+  W4_guard_logic : (lift2 (· || ·) (lift1 (! ·) (some true)) (lift2 (fun x y => decide (x ≠ y)) (some goat_Host) (w3.getVal (fun w => w.d_Guest)))) = some true
 
 structure W5
     (w0 : Maybe Role.Host (W0))

@@ -30,4 +30,5 @@ digraph "Prisoners" {
   "n_B_1" -> "n_B_6";
   "n_B_5" -> "n_B_6";
   "n_A_3" -> "n_B_6";
+  "n_A_4" -> "n_B_6";
 }

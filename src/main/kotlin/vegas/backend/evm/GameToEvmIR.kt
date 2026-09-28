@@ -8,51 +8,103 @@ import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
 import vegas.frontend.SAMPLE_OWNER
+import java.math.BigInteger
+
+/**
+ * Terminal-audit policy for [compileToEvm].
+ *
+ * A player's first departure is collected with probability at least
+ * [coverage], so a bond of `range / coverage` deters every departure whose
+ * gain is at most `range` (VegasCore's `rosterAuditDeposit`). The range used
+ * is the whole pot: every payout lies between zero and the pot.
+ */
+data class AuditPolicy(
+    val coverage: vegas.Rational = vegas.Rational(1),
+    val windowSeconds: Int = 7 * 86400,
+) {
+    init {
+        require(coverage.numerator > 0 && coverage.numerator <= coverage.denominator) {
+            "coverage must be in (0, 1], got $coverage"
+        }
+        require(windowSeconds > 0) { "audit window must be positive" }
+    }
+
+    /** The bond for a pot: `ceil(pot / coverage)`. */
+    fun bond(pot: Int): Int =
+        ((pot.toLong() * coverage.denominator + coverage.numerator - 1) / coverage.numerator).toInt()
+}
 
 /**
  * Main entry point: Compiles a GameIR into a generic EVM Contract Model.
  * Assumes the EventGraph has already been transformed (e.g. Commit-Reveal expansion).
  */
-fun compileToEvm(game: GameIR): EvmContract {
+fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
     val dag = game.dag
-    val linearization = linearizeDag(dag)
-    val storage = buildStorage(game, dag, linearization)
-
-    val gameActions = dag.topo().map { actionId ->
-        buildAction(actionId, dag, linearization)
+    val evmAudit = audit?.let { policy ->
+        val pot = game.roles.sumOf { dag.deposit(it).v }
+        EvmAudit(bonds = game.payoffs.keys.associateWith { policy.bond(pot) }, windowSeconds = policy.windowSeconds)
     }
+    val order = scheduleOrder(dag)
+    val position = order.withIndex().associate { (i, id) -> id to i }
 
-    // Build per-role withdraw actions
-    val sinks = dag.sinks()
-    val withdrawActions = buildWithdrawActions(game, sinks, dag)
-
-    val actions = gameActions + withdrawActions
-
-    val init = listOf(
-        Assign(Member(BuiltIn.Self, "lastTs"), BuiltIn.Timestamp)
+    val schedule = EvmSchedule(
+        nodes = order.map { id ->
+            EvmScheduleNode(
+                actionId = id,
+                owner = dag.owner(id),
+                predecessors = dag.prerequisitesOf(id).map { position.getValue(it) }.sorted(),
+                kind = when {
+                    dag.spec(id).join != null -> EvmNodeKind.JOIN
+                    isBeaconDraw(dag, id) -> EvmNodeKind.DRAW
+                    else -> EvmNodeKind.MOVE
+                },
+            )
+        },
+        draws = order.filter { isBeaconDraw(dag, it) }.map { buildDraw(it, dag, position.getValue(it)) },
     )
 
     return EvmContract(
         name = game.name,
         roles = game.roles.toList(),
-        storage = storage,
+        storage = buildStorage(game, dag, order),
         enums = listOf(buildRoleEnum(game)),
         events = emptyList(),
-        actions = actions,
-        initialization = init,
+        schedule = schedule,
+        actions = order.filterNot { isBeaconDraw(dag, it) }.map { buildAction(it, dag, position.getValue(it), evmAudit) },
+        withdrawals = buildWithdrawals(game),
+        initialization = emptyList(),
+        audit = evmAudit,
     )
 }
 
 // =========================================================================
-// 1. Linearization & Naming
+// 1. Schedule order & Naming
 // =========================================================================
 
-private fun linearizeDag(dag: EventGraph): Map<NodeId, Int> =
-    dag.topo()
-        .sortedWith(compareBy<NodeId> { it.second }.thenBy { it.first.name })
-        .mapIndexed { idx, id -> id to idx }
-        .toMap()
+/**
+ * A deterministic topological order: among ready nodes, the one with the
+ * least (step index, role name) goes first.
+ */
+private fun scheduleOrder(dag: EventGraph): List<NodeId> {
+    val byKey = compareBy<NodeId> { it.second }.thenBy { it.first.name }
+    val remaining = dag.actions.associateWith { dag.prerequisitesOf(it).size }.toMutableMap()
+    val ready = java.util.PriorityQueue(byKey).apply { addAll(remaining.filterValues { it == 0 }.keys) }
+    val order = mutableListOf<NodeId>()
+    while (ready.isNotEmpty()) {
+        val id = ready.poll()
+        order += id
+        for (d in dag.dependentsOf(id)) {
+            val left = remaining.getValue(d) - 1
+            remaining[d] = left
+            if (left == 0) ready += d
+        }
+    }
+    check(order.size == dag.actions.size) { "event graph is cyclic" }
+    return order
+}
 
+private fun isBeaconDraw(dag: EventGraph, id: NodeId): Boolean =
+    dag.sampleSpec(id)?.source == EntropySource.Beacon
 
 // =========================================================================
 // 2. Storage Generation
@@ -79,21 +131,17 @@ fun inputParam(param: VarId, hidden: Boolean): String {
     return "$prefix${param.name}"
 }
 
+internal fun actionConst(id: NodeId) = "ACTION_${id.first.name}_${id.second}"
+
 private fun buildStorage(
     g: GameIR,
     dag: EventGraph,
-    linearization: Map<NodeId, Int>
+    order: List<NodeId>,
 ): List<EvmStorageSlot> = buildList {
 
-    // Infrastructure
-    add(EvmStorageSlot("lastTs", Uint256))
-    add(EvmStorageSlot("actionDone", Mapping(EnumType(roleEnumName), Mapping(Uint256, Bool))))
-    add(EvmStorageSlot("actionTimestamp", Mapping(EnumType(roleEnumName), Mapping(Uint256, Uint256))))
-
-    // Action Constants
-    linearization.forEach { (id, idx) ->
-        val constName = "ACTION_${id.first.name}_${id.second}"
-        add(EvmStorageSlot(constName, Uint256, IntLit(idx), isImmutable = true))
+    // Schedule positions
+    order.forEachIndexed { idx, id ->
+        add(EvmStorageSlot(actionConst(id), Uint256, IntLit(idx), isImmutable = true))
     }
 
     // Roles & Balances
@@ -110,14 +158,14 @@ private fun buildStorage(
         add(EvmStorageSlot(roleJoined(role.name), Bool)) // done_Role
     }
 
-    // Per-role claimed flags (replaces payoffs_distributed)
+    // Per-role claimed flags
     actorRoles.forEach { role ->
         add(EvmStorageSlot("claimed_${role.name}", Bool))
     }
 
-    // Game Variables
+    // Game Variables, in schedule order
     val visited = mutableSetOf<FieldRef>()
-    dag.metas.forEach { meta ->
+    order.map { dag.meta(it) }.forEach { meta ->
         meta.struct.visibility.forEach { (field, vis) ->
             if (!visited.add(field)) return@forEach
 
@@ -129,7 +177,6 @@ private fun buildStorage(
 
             // Commit (Hidden values)
             if (vis == Visibility.COMMIT) {
-                // GM doesn't show hidden fields, assuming standard pattern
                 add(EvmStorageSlot(storageName(field.owner, field.param, true), Bytes32))
                 add(EvmStorageSlot(doneFlagName(field.owner, field.param, true), Bool))
             }
@@ -149,53 +196,28 @@ private fun buildRoleEnum(g: GameIR): EvmEnum {
 private fun buildAction(
     id: NodeId,
     dag: EventGraph,
-    linearization: Map<NodeId, Int>
+    idx: Int,
+    audit: EvmAudit?,
 ): EvmAction {
     val meta = dag.meta(id)
-    val idx = linearization.getValue(id)
     val spec = meta.spec
     val kind = meta.kind // PUBLIC, COMMIT, or REVEAL
     val hidden = kind == Visibility.COMMIT
 
-    // Sample nodes whose entropy comes from `block.prevrandao` are
-    // chain-derived: the value is computed inside the function body, not
-    // submitted by a caller. Verify the dist is supported (uniform with
-    // declared values; non-uniform priors need rejection sampling which
-    // is not yet implemented) and reject otherwise.
-    val prevRandao = meta.sample?.source as? EntropySource.PrevRandao
-    if (prevRandao != null) {
-        val dist = meta.sample.dist
-            ?: error("EVM emission for sample requires an explicit Dist; got null for ${meta.id}. Multi-parameter samples are not supported with chain-derived entropy.")
-        val firstWeight = dist.support.first().second
-        val nonUniform = dist.support.any { it.second != firstWeight }
-        if (nonUniform) {
-            error("EVM emission with PrevRandao source supports only uniform priors; got non-uniform dist on ${meta.id}. Rejection sampling for non-uniform priors is not yet implemented.")
-        }
-        if (spec.params.size != 1) {
-            error("EVM emission with PrevRandao source supports only single-parameter samples; got ${spec.params.size} params on ${meta.id}.")
-        }
-    }
-
-    // 3a. Inputs. PrevRandao samples take no caller input - the value is
-    // computed inside the body. All other actions take their params.
     val inputs = buildList {
-        if (prevRandao == null) {
-            spec.params.forEach { p ->
-                val type = if (hidden) Bytes32 else translateType(p.type)
-                val varName = VarId(inputParam(p.name, hidden))
-                add(EvmParam(varName, type))
-            }
-            // Reveals need a salt
-            if (kind == Visibility.REVEAL) {
-                add(EvmParam(VarId("salt"), Uint256))
-            }
+        if (audit != null) add(EvmParam(CONTEXT_PARAM, Bytes32))
+        spec.params.forEach { p ->
+            val type = if (hidden) Bytes32 else translateType(p.type)
+            add(EvmParam(VarId(inputParam(p.name, hidden)), type))
+        }
+        // Reveals need a salt
+        if (kind == Visibility.REVEAL) {
+            add(EvmParam(VarId("salt"), Uint256))
         }
     }
 
-    // 3c. Guards - `where` expressions. PrevRandao samples skip both type
-    // and support guards since the value is computed inside the body (the
-    // modulo construction inherently lands in the declared support).
-    val guards = if (!hidden && prevRandao == null) {
+    // Guards - `where` expressions, checked when the value becomes public.
+    val guards = if (!hidden) {
         translateDomainGuards(spec.params) +
             translateSampleSupportGuards(meta) +
             if (spec.guardExpr != Expr.Const.BoolVal(true)) {
@@ -212,22 +234,20 @@ private fun buildAction(
     } else {
         listOf()
     }
-    // 3c. Body Logic
+
     val body = buildList {
         // Join Logic (Deposit, Role assignment)
         if (spec.join != null) {
             val role = meta.struct.owner
-            val deposit = spec.join.deposit.v
+            val deposit = spec.join.deposit.v + (audit?.bonds?.get(role) ?: 0)
 
-            // require(!joined_Role)
             add(
                 Require(
                     Unary(UnaryOp.NOT, Member(BuiltIn.Self, "done_${role.name}")),
                     "already joined"
                 )
             )
-
-            // Handle Deposit
+            // A zero-deposit join is non-payable, which already rejects value.
             if (deposit > 0) {
                 add(
                     Require(
@@ -236,8 +256,6 @@ private fun buildAction(
                     )
                 )
             }
-
-            // Effects
             add(
                 Assign(
                     Index(Member(BuiltIn.Self, roleMap), BuiltIn.MsgSender),
@@ -259,139 +277,84 @@ private fun buildAction(
             }
         }
 
-        // State Updates (Writing to Storage).
-        if (prevRandao != null) {
-            // Chain-derived entropy. Compute:
-            //   entropy = uint256(keccak256(abi.encode(block.prevrandao,
-            //                                          address(this), idx)))
-            //   r       = entropy % supportSize
-            //   field   = support[r]
-            // The action-index literal domain-separates draws within the
-            // same block / contract, so concurrent samples don't collide.
-            val dist = meta.sample.dist!!
-            val support = dist.support.map { it.first }
-            val supportSize = support.size
-            val p = spec.params.single()
-            val targetName = storageName(meta.struct.owner, p.name, false)
-            val flagName = doneFlagName(meta.struct.owner, p.name, false)
+        spec.params.forEach { p ->
+            val targetName = storageName(meta.struct.owner, p.name, hidden)
+            val flagName = doneFlagName(meta.struct.owner, p.name, hidden)
+            val varName = VarId(inputParam(p.name, hidden))
 
-            val seed = AbiEncodeRaw(listOf(
-                BuiltIn.PrevRandao,
-                BuiltIn.Self,
-                IntLit(idx),
-            ))
-            val entropy = Call("uint256", listOf(Keccak256(seed)))
-            // Modulo into the declared support. Bias is bounded by
-            // supportSize / 2^256, i.e. below 2^-248 for any realistic
-            // supportSize; statistically undetectable. If exact
-            // uniformity is ever needed, rejection sampling is the
-            // standard mitigation (see docs/FUTURE.md).
-            val r = Binary(BinaryOp.MOD, entropy, IntLit(supportSize))
-            val rVar = Var(VarId("r"))
-
-            // Var ref renderer prefixes names with "_" (an input-param
-            // convention); align the local-declaration name so it matches.
-            add(VarDecl("_r", Uint256, r))
-            // Map r to support[r] via nested ternary: avoids emitting a
-            // memory array literal (which Solidity does not allow for
-            // int256 fixed-size arrays as inline literals in all cases).
-            val picked = support.indices.toList().foldRight<Int, EvmExpr>(
-                literalOfConst(support.last())
-            ) { i, acc ->
-                if (i == support.lastIndex) acc
-                else Ternary(
-                    Binary(BinaryOp.EQ, rVar, IntLit(i)),
-                    literalOfConst(support[i]),
-                    acc,
-                )
-            }
-            add(Assign(Member(BuiltIn.Self, targetName), picked))
+            add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
             add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
-        } else {
-            spec.params.forEach { p ->
-                val targetName = storageName(meta.struct.owner, p.name, hidden)
-                val flagName = doneFlagName(meta.struct.owner, p.name, hidden)
-                val varName = VarId(inputParam(p.name, hidden))
-
-                add(Assign(Member(BuiltIn.Self, targetName), Var(varName)))
-                add(Assign(Member(BuiltIn.Self, flagName), BoolLit(true)))
-            }
         }
     }
 
-    // 3c. Dependencies & Metadata
-    val dependencies = dag.prerequisitesOf(id).sortedBy { linearization.getValue(it) }
-    // Simplistic check for terminality: if it's the last index, or explicitly marked in GameIR?
-    // For now, we assume the backend calculates FINAL_ACTION based on max index.
-    val isTerminal = false // The backend calculates this based on DAG topology usually
-    val owner = if (spec.join != null) roleNone else meta.struct.owner.name
+    val join = spec.join
     return EvmAction(
         actionId = id,
+        node = idx,
         name = "move_${meta.struct.owner}_$idx",
-        invokedBy = RoleId(owner),
+        invokedBy = if (join != null) RoleId(roleNone) else meta.struct.owner,
         inputs = inputs,
-        payable = (spec.join?.deposit?.v ?: 0) > 0,
-        dependencies = dependencies,
-        isTerminal = isTerminal,
+        payable = join != null && join.deposit.v + (audit?.bonds?.get(meta.struct.owner) ?: 0) > 0,
+        isJoin = join != null,
         guards = guards,
         body = body
     )
 }
 
-private fun buildWithdrawActions(
-    game: GameIR,
-    sinks: Set<NodeId>,
-    dag: EventGraph
-): List<EvmAction> {
-    // Compute max action ID per role to avoid collisions
-    val maxIdPerRole = mutableMapOf<RoleId, Int>()
-    dag.metas.forEach { meta ->
-        val role = meta.struct.owner
-        val actionSeq = dag.topo().filter { it.first == role }.maxOfOrNull { it.second } ?: 0
-        maxIdPerRole[role] = maxOf(maxIdPerRole.getOrDefault(role, 0), actionSeq)
+/**
+ * The effect of a beacon draw. The beacon output is domain-separated by
+ * contract and node, then mapped onto the declared distribution: with
+ * weights `w_k / D` over a common denominator `D`, the value is `v_k` for
+ * the `k` with `c_{k-1} <= r < c_k`, where `r = seed mod D` and `c` are the
+ * cumulative integer weights. The bias of the reduction is below `D / 2^256`.
+ */
+private fun buildDraw(id: NodeId, dag: EventGraph, idx: Int): EvmDraw {
+    val meta = dag.meta(id)
+    val dist = meta.sample?.dist
+        ?: error("EVM emission for sample requires an explicit distribution; got none for $id. Multi-parameter samples are not supported.")
+    val p = meta.spec.params.singleOrNull()
+        ?: error("EVM emission supports only single-parameter samples; got ${meta.spec.params.size} params on $id.")
+    val denominator = dist.support.fold(BigInteger.ONE) { acc, (_, w) -> lcm(acc, w.denominator.toBigInteger().abs()) }
+    val weights = dist.support.map { (_, w) ->
+        w.numerator.toBigInteger().abs() * (denominator / w.denominator.toBigInteger().abs())
     }
+    val cumulative = weights.runningReduce { a, b -> a + b }
+    check(cumulative.last() == denominator) { "distribution on $id does not sum to one" }
+    require(denominator.bitLength() < 31) { "distribution denominator on $id is too large" }
 
-    return game.payoffs.entries.map { (role, expr) ->
-        // Use next available ID for this role (max + 1)
-        val nextId = (maxIdPerRole[role] ?: 0) + 1
-        maxIdPerRole[role] = nextId  // Update for potential multiple withdraws per role
-        val actionId: NodeId = role to nextId
-        val claimedFlag = "claimed_${role.name}"
+    val seed = AbiEncodeRaw(listOf(Var(BEACON_VALUE), BuiltIn.Self, Cast(Uint256, IntLit(idx))))
+    val r = Var(VarId("r"))
+    val targetType = translateType(p.type)
+    // Integer literals are typed explicitly: Solidity would give a ternary of
+    // small literals the type uint8, which does not convert to int256.
+    val literals = dist.support.map { (v, _) ->
+        literalOfConst(v).let { if (targetType == Int256) Cast(Int256, it) else it }
+    }
+    val picked = literals.indices.toList().dropLast(1).foldRight<Int, EvmExpr>(literals.last()) { k, acc ->
+        Ternary(Binary(BinaryOp.LT, r, IntLit(cumulative[k].toInt())), literals[k], acc)
+    }
+    return EvmDraw(
+        node = idx,
+        body = listOf(
+            VarDecl("_r", Uint256, Binary(BinaryOp.MOD, Cast(Uint256, Keccak256(seed)), IntLit(denominator.toInt()))),
+            Assign(Member(BuiltIn.Self, storageName(meta.struct.owner, p.name, false)), picked),
+            Assign(Member(BuiltIn.Self, doneFlagName(meta.struct.owner, p.name, false)), BoolLit(true)),
+        ),
+    )
+}
 
-        val body = buildList {
-            // require(!claimed_Role, "already claimed")
-            add(Require(
-                Unary(UnaryOp.NOT, Member(BuiltIn.Self, claimedFlag)),
-                "already claimed"
-            ))
+private fun lcm(a: BigInteger, b: BigInteger): BigInteger = a / a.gcd(b) * b
 
-            // claimed_Role = true
-            add(Assign(
-                Member(BuiltIn.Self, claimedFlag),
-                BoolLit(true)
-            ))
-
-            // Send ETH: payable(address_Role).call{value: payout}
-            val payoutExpr = translateExpr(expr, contextOwner = null, contextParams = emptySet())
-            add(SendEth(
-                to = Member(BuiltIn.Self, roleAddr(role.name)),
-                amount = payoutExpr
-            ))
-        }
-
-        EvmAction(
-            actionId = actionId,
+private fun buildWithdrawals(game: GameIR): List<EvmWithdrawal> =
+    game.payoffs.entries.map { (role, expr) ->
+        EvmWithdrawal(
+            role = role,
             name = "withdraw_${role.name}",
-            invokedBy = role,
-            inputs = emptyList(),
-            payable = false,
-            dependencies = sinks.toList(),
-            isTerminal = false,
-            guards = emptyList(),
-            body = body,
+            payout = translateExpr(expr, contextOwner = null, contextParams = emptySet()),
+            refund = game.dag.deposit(role).v,
         )
     }
-}
+
 /** Lift an IR Const literal into an EVM IR expression literal. */
 private fun literalOfConst(c: Expr.Const): EvmExpr = when (c) {
     is Expr.Const.IntVal -> IntLit(c.v)
