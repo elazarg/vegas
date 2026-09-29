@@ -150,6 +150,12 @@ class EventGraph private constructor(
     fun isSampleNode(id: NodeId): Boolean = meta(id).sample != null
 
     /**
+     * A draw only its owner observes (`sample Role(...)`). It belongs to the
+     * analysis model alone: nothing is sent, committed or published for it.
+     */
+    fun isPrivateDraw(id: NodeId): Boolean = meta(id).sample?.source == EntropySource.PrivateDraw
+
+    /**
      * Roles that own at least one sample (chance) node in this DAG.
      * Derived from per-node sample metadata so this set and per-node
      * [isSampleNode] cannot disagree.

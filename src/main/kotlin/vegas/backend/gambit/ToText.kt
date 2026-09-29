@@ -7,6 +7,9 @@ import vegas.ir.Expr.Const
 
 private const val EFG_VERSION = "EFG 2 R"
 private const val EMPTY_NAME = "\"\""
+
+/** Key under which chance nodes, whoever owns the draw, share information-set numbers. */
+private val CHANCE_PLAYER = vegas.RoleId("__chance__")
 private const val QUIT_ACTION = "Quit"
 
 /**
@@ -51,7 +54,9 @@ internal class EfgWriter(
         val nodeType = if (node.isChance) "c" else "p"
         val nodeName = EMPTY_NAME
         val owner = if (node.isChance) "" else playerList.indexOf(node.owner) + 1
-        val infosetMap = infosetIdNormalized.getOrPut(node.owner) { mutableMapOf() }
+        // Chance nodes all belong to Gambit's single chance player, so their
+        // information sets share one numbering whichever role owns the draw.
+        val infosetMap = infosetIdNormalized.getOrPut(if (node.isChance) CHANCE_PLAYER else node.owner) { mutableMapOf() }
         val infosetNum = infosetMap.getOrPut(node.infosetId) { infosetMap.size + 1 }
         val infosetName = EMPTY_NAME
 

@@ -96,6 +96,10 @@ class GameSemantics(val ir: GameIR) {
             // refunded, so there is no strategic quit at a join.
             if (actions.any { ir.dag.spec(it).join != null }) continue
 
+            // A chance draw (such as a private draw the role observes) is not
+            // the role's choice, so it cannot be quit.
+            if (actions.all { ir.dag.isSampleNode(it) }) continue
+
             if (allParams.isNotEmpty()) {
                 val quitDelta = allParametersQuit(ir.dag, role, actions)
                 moves.add(Label.Play(role, quitDelta, PlayTag.Quit))

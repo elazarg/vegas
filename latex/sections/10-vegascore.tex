@@ -114,8 +114,12 @@ guarding each later commitment of the player on the success of its
 earlier disclosures.  Both use deadlines relative to readiness.
 
 \paragraph{Private inputs.}  VegasCore's \TT{Setup} gives players
-private initial types, as in auctions with private valuations; Vegas
-has no such construct yet.
+private initial types, as in auctions with private valuations.  In
+Vegas these are private draws, \TT{sample A(v: T $\sim$ D)}, and the
+players' utilities over them are stated by a \TT{utility} clause.
+A private draw that precedes its owner's first move is a \TT{Setup}
+type; Vegas also admits later ones, which have no core counterpart,
+since core chance is public.
 
 \paragraph{Backends.}  Vegas emits Solidity, Vyper, Gambit,
 SMT-LIB, Scribble, MAID, GraphViz, the Diamond DAG witness

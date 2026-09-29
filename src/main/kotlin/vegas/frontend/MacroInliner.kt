@@ -44,7 +44,8 @@ private fun inlineMacrosInExt(ext: Ext, macroEnv: Map<VarId, MacroDec>): Ext = w
     )
 
     is Ext.Value -> ext.copy(
-        outcome = inlineMacrosInOutcome(ext.outcome, macroEnv)
+        outcome = inlineMacrosInOutcome(ext.outcome, macroEnv),
+        utility = ext.utility?.mapValues { (_, e) -> inlineMacrosInExp(e, macroEnv) },
     )
 }
 

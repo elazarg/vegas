@@ -26,6 +26,7 @@ fun compileToIR(ast: GameAst): GameIR {
         dag = EventGraph.expandCommitReveal(dag, sourceOrder(phases)),
         payoffs = payoffs.payoffs,
         burn = payoffs.burn,
+        utilities = extractUtilities(ast.game, typeEnv, payoffs.payoffs),
     )
 
     // IMPORTANT: Verify that IR contains no frontend Exp.Let nodes
@@ -297,7 +298,12 @@ fun actionDagFromPhases(
                 guardExpr = dischargedOnFailure(sig.guard.expr, guardReads.filter { it.owner != role }),
             )
 
-            val sample: SampleSpec? = if (role in chanceRoles && sig.join == null) {
+            val sample: SampleSpec? = if (sig.privateDraw) {
+                SampleSpec(
+                    dist = sig.parameters.singleOrNull()?.dist ?: inferUniformDist(params),
+                    source = EntropySource.PrivateDraw,
+                )
+            } else if (role in chanceRoles && sig.join == null) {
                 val explicit = sig.parameters.singleOrNull()?.dist
                 // Anonymous `sample (...)` bindings use the configured
                 // chain-derived source; `random Role` keeps the legacy
@@ -371,7 +377,24 @@ private fun collectPhases(ext: Ext, typeEnv: Map<AstType.TypeId, AstType>): List
             listOf(Phase(phase)) + collectPhases(ext.ext, typeEnv)
         }
 
-        is Ext.Sample -> {
+        is Ext.Sample -> if (ext.owner != null) {
+            // A private draw: one phase per binding, owned by the role that
+            // observes it, hidden from everyone else and never revealed.
+            ext.bindings.map { vd ->
+                val sig = Signature(
+                    join = null,
+                    parameters = listOf(Parameter(
+                        name = vd.v.id,
+                        type = lowerType(vd.type, typeEnv),
+                        visible = false,
+                        dist = vd.dist?.let { lowerDist(it) },
+                    )),
+                    guard = Guard(emptySet(), Expr.Const.BoolVal(true)),
+                    privateDraw = true,
+                )
+                Phase(mapOf(ext.owner.id to sig))
+            } + collectPhases(ext.ext, typeEnv)
+        } else {
             // Each binding becomes its own independent phase, owned by the
             // synthetic sample owner. No deposit, no guard, public visibility.
             val samplePhases = ext.bindings.map { vd ->
@@ -788,6 +811,7 @@ private fun computeAliveExpr(role: RoleId, phases: List<Phase>): Expr {
     phases.forEach { phase ->
         val sig = phase.actions[role] ?: return@forEach
         if (sig.join != null) return@forEach  // skip join actions (can't timeout)
+        if (sig.privateDraw) return@forEach   // nature's draw, not the role's move
 
         sig.parameters.forEach { param ->
             // Check ALL params (including hidden commits) for split/burn alive computation
@@ -896,6 +920,53 @@ private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
 }
 
 private data class DesugaredOutcome(val payoffs: Map<RoleId, Expr>, val burn: Expr)
+
+/**
+ * Lower the `utility` clause, if any. `Role.payout` reads the role's
+ * settlement, so it is replaced by the role's lowered payoff expression.
+ */
+private fun extractUtilities(
+    ext: Ext,
+    typeEnv: Map<AstType.TypeId, AstType>,
+    payoffs: Map<RoleId, Expr>,
+): Map<RoleId, Expr> {
+    val value = generateSequence(ext) { e ->
+        when (e) {
+            is Ext.Bind -> e.ext
+            is Ext.BindSingle -> e.ext
+            is Ext.Sample -> e.ext
+            is Ext.Value -> null
+        }
+    }.last() as Ext.Value
+    val utility = value.utility ?: return emptyMap()
+    return utility.entries.associate { (role, exp) ->
+        role.id to substitutePayouts(lowerExpr(exp, typeEnv), payoffs)
+    }
+}
+
+private fun substitutePayouts(e: Expr, payoffs: Map<RoleId, Expr>): Expr {
+    fun go(x: Expr): Expr = when (x) {
+        is Expr.Field -> if (x.field.param == PAYOUT_FIELD) payoffs[x.field.owner] ?: Expr.Const.IntVal(0) else x
+        is Expr.Const, is Expr.IsDefined -> x
+        is Expr.Add -> Expr.Add(go(x.l), go(x.r))
+        is Expr.Sub -> Expr.Sub(go(x.l), go(x.r))
+        is Expr.Mul -> Expr.Mul(go(x.l), go(x.r))
+        is Expr.Div -> Expr.Div(go(x.l), go(x.r))
+        is Expr.Mod -> Expr.Mod(go(x.l), go(x.r))
+        is Expr.Neg -> Expr.Neg(go(x.x))
+        is Expr.Eq -> Expr.Eq(go(x.l), go(x.r))
+        is Expr.Ne -> Expr.Ne(go(x.l), go(x.r))
+        is Expr.Lt -> Expr.Lt(go(x.l), go(x.r))
+        is Expr.Le -> Expr.Le(go(x.l), go(x.r))
+        is Expr.Gt -> Expr.Gt(go(x.l), go(x.r))
+        is Expr.Ge -> Expr.Ge(go(x.l), go(x.r))
+        is Expr.And -> Expr.And(go(x.l), go(x.r))
+        is Expr.Or -> Expr.Or(go(x.l), go(x.r))
+        is Expr.Not -> Expr.Not(go(x.x))
+        is Expr.Ite -> Expr.Ite(go(x.c), go(x.t), go(x.e))
+    }
+    return go(e)
+}
 
 private fun extractPayoffs(
     ext: Ext,

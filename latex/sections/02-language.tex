@@ -95,6 +95,26 @@ after the draw becomes ready, so no participant chooses when or what
 is drawn.  No actor identity is required; the field is
 referenced in expressions as \TT{Sample.w}.
 
+Naming a role makes the draw \emph{private}: nature draws a value
+that only that role observes, its type in the game-theoretic sense.
+\begin{lstlisting}[style=vg]
+sample A(v: worth ~ uniform { 1, 3 });
+\end{lstlisting}
+A private draw exists only in the analysis model.  The role's later
+choices are made knowing it, but it has no transaction, commitment or
+message, so neither a guard nor \TT{withdraw} may read it: the contract
+could not evaluate them.  Its reader is a \TT{utility} clause after
+\TT{withdraw}, which gives each strategic role its analysis utility and
+may read private draws and each role's settlement \TT{Role.payout}:
+\begin{lstlisting}[style=vg]
+withdraw (A.b >= B.b) ? { Seller -> A.b; A -> 2 - A.b; B -> 2 }
+                      : { Seller -> B.b; A -> 2; B -> 2 - B.b }
+utility { A -> (A.b != null && B.b != null && A.b >= B.b)
+                 ? A.payout - 2 + A.v : A.payout - 2; ... }
+\end{lstlisting}
+Without a clause a role's utility is its payout net of its deposit.
+Pot conservation concerns the settlement, never the utilities.
+
 A parameter may carry a \emph{distribution annotation}
 \TT{$\sim$ \textit{D}} declaring its analysis prior.  Two surface
 forms are available, both finite-support and rational-weighted:
@@ -307,8 +327,8 @@ roughly:
 \mathit{program} &::= (\mathit{typeDec} \mid \mathit{macroDec})^*\ \TT{game}\ \mathit{ident}\ \TT{()}\ \TT{\{}\ \mathit{ext}\ \TT{\}}\\
 \mathit{ext} &::= \mathit{kind}\ (\texttt{or}\ \mathit{handler})?\ \mathit{query}^+\ \TT{;}\ \mathit{ext}\\
              &\mid \TT{random}\ \mathit{role}\ (\TT{()})?\ \TT{;}\ \mathit{ext}\\
-             &\mid \TT{sample}\ \TT{(}\ \mathit{varDec}^+\ \TT{)}\ \TT{;}\ \mathit{ext}\\
-             &\mid \kwithdraw\ \mathit{outcome}\\
+             &\mid \TT{sample}\ \mathit{role}^?\ \TT{(}\ \mathit{varDec}^+\ \TT{)}\ \TT{;}\ \mathit{ext}\\
+             &\mid \kwithdraw\ \mathit{outcome}\ (\TT{utility}\ \TT{\{}\ (\mathit{role}\ \TT{->}\ \mathit{exp}\ \TT{;})^+\ \TT{\}})^?\\
 \mathit{kind} &::= \kjoin \mid \kyield \mid \kreveal \mid \kcommit\\
 \mathit{query} &::= \mathit{role}\ \TT{(}\ \mathit{paramDec}^*\ \TT{)}\ (\$\,\mathit{int})?\ (\kwhere\ \mathit{exp})?\ (\TT{||}\ \mathit{queryHandler})?\\
 \mathit{paramDec} &::= \mathit{name}\ \TT{:}\ \mathit{type}\ (\TT{$\sim$}\ \mathit{dist})?\\

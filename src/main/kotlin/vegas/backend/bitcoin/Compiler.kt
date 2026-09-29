@@ -43,6 +43,11 @@ object LightningCompiler {
         if (game.roles.size != 2) {
             throw CompilationException("Lightning backend requires exactly 2 strategic roles. Found: ${game.roles}")
         }
+        // A channel state is common knowledge between the two parties, so a
+        // type only one of them observes has no place in it.
+        if (game.dag.actions.any { game.dag.isPrivateDraw(it) }) {
+            throw CompilationException("Lightning backend does not support private draws (sample Role(...))")
+        }
 
         // Stable player ordering used everywhere (A,B)
         val playersSorted = game.roles.sortedBy { it.name }

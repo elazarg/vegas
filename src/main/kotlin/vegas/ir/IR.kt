@@ -145,6 +145,14 @@ sealed class EntropySource {
      * among outcomes.
      */
     object Beacon : EntropySource()
+
+    /**
+     * A private draw (`sample Role(x: T ~ D)`): nature draws the value and only
+     * its owner observes it, like a type in a Bayesian game. It has no on-chain
+     * presence; the distribution is an analysis assumption about the players'
+     * types, and settlement cannot read the value.
+     */
+    object PrivateDraw : EntropySource()
 }
 
 /**
@@ -213,6 +221,7 @@ data class Signature(
     val join: Join?,              // non-null if this is the role's "join" step
     val parameters: List<Parameter>,
     val guard: Guard,             // precondition for this action (snapshot semantics)
+    val privateDraw: Boolean = false, // nature draws the parameters; only the role observes them
 )
 
 /**
@@ -235,6 +244,19 @@ data class GameIR(
     val dag: EventGraph,
     val payoffs: Map<RoleId, Expr>,
     val burn: Expr = Expr.Const.IntVal(0),
+    /** Analysis utilities given by a `utility` clause; `Role.payout` is already substituted. */
+    val utilities: Map<RoleId, Expr> = emptyMap(),
 ) {
-    val chanceRoles: Set<RoleId> get() = dag.chanceRoles
+    /** Roles whose moves are all chance draws; a strategic role owning a private draw is not one. */
+    val chanceRoles: Set<RoleId> get() = dag.chanceRoles - roles
+
+    /**
+     * The utility the analysis assigns [role]: its utility clause, or else
+     * its payout net of its deposit.
+     */
+    fun utilityOf(role: RoleId): Expr =
+        utilities[role] ?: Expr.Sub(payoffs[role] ?: Expr.Const.IntVal(0), dag.deposit(role))
+
+    /** Whether any node is a private draw. */
+    val hasPrivateDraws: Boolean get() = dag.actions.any { dag.sampleSpec(it)?.source == EntropySource.PrivateDraw }
 }

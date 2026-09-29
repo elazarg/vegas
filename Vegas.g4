@@ -28,8 +28,8 @@ typeExp
 
 ext : kind=('join' | 'yield' | 'reveal' | 'commit') ('or' handler=groupHandler)? query+ ';' ext  # ReceiveExt
     | 'random' randomQuery+ ';' ext                                                               # RandomExt
-    | 'sample' '(' bindings+=varDec (',' bindings+=varDec)* ')' ';' ext                           # SampleExt
-    | 'withdraw' outcome                                                                          # WithdrawExt
+    | 'sample' (owner=roleId)? '(' bindings+=varDec (',' bindings+=varDec)* ')' ';' ext           # SampleExt
+    | 'withdraw' outcome ('utility' '{' utilities+=utilityItem+ '}')?                             # WithdrawExt
     ;
 
 // Per-query handlers: only brace-wrapped outcomes (not split/burn keywords)
@@ -64,6 +64,9 @@ outcome
     | '(' outcome ')'                                               # ParenOutcome
     | '{' items+=item+ '}'                                          # OutcomeExp
     ;
+
+// Analysis utility of a role: may read private samples and `Role.payout`.
+utilityItem : role=roleId '->' exp ';'? ;
 
 item
     : role=roleId '->' exp ';'?    # RoleItem

@@ -7,7 +7,7 @@
  * - Roles → Agents
  * - Action parameters → Decision/Chance nodes
  * - guardReads → Information edges
- * - Payoffs → Utility nodes + CPDs
+ * - Utilities (net payouts, or a `utility` clause) → Utility nodes + CPDs
  * - Visibility (COMMIT/REVEAL/PUBLIC) → Information flow timing
  *
  * ## Expressiveness limit: self-only guards
@@ -96,6 +96,9 @@ private class MaidConverter(private val ir: GameIR) {
 
     // Track all utility node IDs for later edge creation
     private val utilityNodeIds = mutableMapOf<RoleId, String>()
+
+    // Utility tables, computed together with the utility nodes
+    private val utilityTables = linkedMapOf<RoleId, TabularCPD>()
 
     fun convert(): MaidGame {
         val agents = ir.roles.filterNot { it in ir.chanceRoles }.map { it.name }
@@ -188,11 +191,15 @@ private class MaidConverter(private val ir: GameIR) {
     }
 
     /**
-     * Create utility nodes from payoff expressions. Iterate strategic
-     * roles (not `ir.payoffs` keys) so that a depositor omitted from
-     * `withdraw` still gets a modeled utility (preference for getting
-     * back their deposit), matching the conservation-check semantics
-     * that already counts their net loss.
+     * Create a utility node for every strategic role. Its value is
+     * [GameIR.utilityOf]: the role's `utility` clause when it has one,
+     * otherwise its payout net of its deposit (so a depositor omitted from
+     * `withdraw` still gets a modeled utility, its lost deposit). This is the
+     * same quantity the Gambit tree carries at its leaves.
+     *
+     * The table is computed here, by enumerating the values of the fields
+     * the utility reads, so that the node's domain is exactly the set of
+     * utilities that occur.
      */
     private fun createUtilityNodes() {
         for (role in ir.roles) {
@@ -201,8 +208,21 @@ private class MaidConverter(private val ir: GameIR) {
             val utilId = "U_${role.name}"
             utilityNodeIds[role] = utilId
 
-            val expr = ir.payoffs[role]
-            val domain = if (expr != null) extractPayoffDomain(expr) else listOf<Any>(0)
+            val expr = ir.utilityOf(role)
+            val dependencies = extractFieldRefs(expr).distinct().filter { it in fieldToNodeId }
+            val combinations = cartesianProduct(dependencies.map { getFieldDomain(it) })
+            val values = combinations.map { combo ->
+                val fieldValues = dependencies.zip(combo).toMap()
+                val readField: (FieldRef) -> Expr.Const = { field ->
+                    when (val v = fieldValues[field]) {
+                        is Int -> Expr.Const.IntVal(v)
+                        is Boolean -> Expr.Const.BoolVal(v)
+                        else -> Expr.Const.IntVal(0)
+                    }
+                }
+                eval(readField, expr).asInt()
+            }
+            val domain = values.distinct().sorted()
 
             nodes.add(MaidNode(
                 id = utilId,
@@ -210,6 +230,16 @@ private class MaidConverter(private val ir: GameIR) {
                 agent = role.name,
                 domain = domain
             ))
+            // Rows are domain values, columns are parent value combinations;
+            // each column puts probability 1 on the utility it yields.
+            utilityTables[role] = TabularCPD(
+                node = utilId,
+                parents = dependencies.map { fieldToNodeId.getValue(it) },
+                values = domain.map { d -> values.map { if (it == d) 1.0 else 0.0 } }
+            )
+            for (dep in dependencies) {
+                edges.add(MaidEdge(source = fieldToNodeId.getValue(dep), target = utilId))
+            }
         }
     }
 
@@ -240,114 +270,11 @@ private class MaidConverter(private val ir: GameIR) {
                 }
             }
         }
-
-        // Edges to utility nodes (based on payoff dependencies). For
-        // roles omitted from `ir.payoffs` the utility is a constant
-        // (-deposit), so there are no parents.
-        for (role in ir.roles) {
-            if (role in ir.chanceRoles) continue
-            val expr = ir.payoffs[role] ?: continue
-            val utilNodeId = utilityNodeIds[role] ?: continue
-            val dependencies = extractFieldRefs(expr)
-            for (dep in dependencies) {
-                val srcNodeId = fieldToNodeId[dep] ?: continue
-                edges.add(MaidEdge(source = srcNodeId, target = utilNodeId))
-            }
-        }
     }
 
-    /**
-     * Create tabular CPDs for utility nodes by enumerating all strategy profiles.
-     *
-     * CPD format for utility nodes:
-     * - Rows correspond to domain values (possible payoffs)
-     * - Columns correspond to parent value combinations
-     * - Values are probabilities (1.0 for the actual payoff, 0.0 otherwise)
-     */
+    /** Emit the utility tables computed by [createUtilityNodes]. */
     private fun createUtilityCPDs() {
-        for (role in ir.roles) {
-            if (role in ir.chanceRoles) continue
-            val utilNodeId = utilityNodeIds[role] ?: continue
-
-            // A role omitted from `ir.payoffs` has gross payout 0 by
-            // default; emit a constant-0 CPD so the MAID has a complete
-            // utility table for every strategic agent.
-            val expr = ir.payoffs[role] ?: run {
-                val utilNode = nodes.find { it.id == utilNodeId } ?: continue
-                val cpdValues = utilNode.domain.map { domainVal ->
-                    listOf(if (toInt(domainVal) == 0) 1.0 else 0.0)
-                }
-                cpds.add(TabularCPD(node = utilNodeId, parents = emptyList(), values = cpdValues))
-                continue
-            }
-            val dependencies = extractFieldRefs(expr).distinct()
-
-            // Get the utility node to access its domain
-            val utilNode = nodes.find { it.id == utilNodeId } ?: continue
-            val utilDomain = utilNode.domain
-
-            // Get parent node IDs (decision nodes that affect this utility)
-            val parents = dependencies.mapNotNull { fieldToNodeId[it] }
-
-            // Get domains for each parent
-            val parentDomains = dependencies.map { field ->
-                getFieldDomain(field)
-            }
-
-            if (parents.isEmpty() || parentDomains.isEmpty()) {
-                // No dependencies - constant payoff
-                val constantValue = try {
-                    eval({ Expr.Const.IntVal(0) }, expr).asInt()
-                } catch (_: Exception) {
-                    0
-                }
-                // Create probability distribution over domain values
-                val cpdValues = utilDomain.map { domainVal ->
-                    listOf(if (toInt(domainVal) == constantValue) 1.0 else 0.0)
-                }
-                cpds.add(TabularCPD(
-                    node = utilNodeId,
-                    parents = emptyList(),
-                    values = cpdValues
-                ))
-                continue
-            }
-
-            // Enumerate all parent value combinations
-            val allCombinations = cartesianProduct(parentDomains)
-
-            // Evaluate payoff for each combination
-            val payoffValues = allCombinations.map { combo ->
-                val fieldValues = dependencies.zip(combo).toMap()
-                try {
-                    val readField: (FieldRef) -> Expr.Const = { field ->
-                        when (val v = fieldValues[field]) {
-                            is Int -> Expr.Const.IntVal(v)
-                            is Boolean -> Expr.Const.BoolVal(v)
-                            else -> Expr.Const.IntVal(0)
-                        }
-                    }
-                    eval(readField, expr).asInt()
-                } catch (_: Exception) {
-                    0
-                }
-            }
-
-            // Build CPD table: rows = domain values, columns = parent combinations
-            // Each column is a probability distribution (1.0 for actual payoff, 0.0 otherwise)
-            val cpdValues = utilDomain.map { domainVal ->
-                val domainInt = toInt(domainVal)
-                payoffValues.map { payoff ->
-                    if (payoff == domainInt) 1.0 else 0.0
-                }
-            }
-
-            cpds.add(TabularCPD(
-                node = utilNodeId,
-                parents = parents,
-                values = cpdValues
-            ))
-        }
+        cpds.addAll(utilityTables.values)
     }
 
     /**
@@ -498,50 +425,6 @@ private class MaidConverter(private val ir: GameIR) {
             }
         }
         return listOf(0, 1) // Fallback
-    }
-
-    /**
-     * Extract domain values that appear in a payoff expression.
-     * Returns a reasonable default domain if extraction fails.
-     */
-    private fun extractPayoffDomain(expr: Expr): List<Any> {
-        // For utility nodes, domain is the set of possible payoff values
-        // We could enumerate all combinations and compute, but for simplicity
-        // return a placeholder. The actual values are in the CPD.
-        val values = mutableSetOf<Int>()
-        collectIntConstants(expr, values)
-        return if (values.isEmpty()) listOf(0) else values.sorted()
-    }
-
-    /**
-     * Recursively collect integer constants from expression.
-     */
-    private fun collectIntConstants(expr: Expr, values: MutableSet<Int>) {
-        when (expr) {
-            is Expr.Const.IntVal -> values.add(expr.v)
-            is Expr.Const.BoolVal -> { values.add(0); values.add(1) }
-            is Expr.Add -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Sub -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Mul -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Div -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Mod -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Neg -> collectIntConstants(expr.x, values)
-            is Expr.Ite -> {
-                collectIntConstants(expr.c, values)
-                collectIntConstants(expr.t, values)
-                collectIntConstants(expr.e, values)
-            }
-            is Expr.Eq -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Ne -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Lt -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Le -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Gt -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Ge -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.And -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Or -> { collectIntConstants(expr.l, values); collectIntConstants(expr.r, values) }
-            is Expr.Not -> collectIntConstants(expr.x, values)
-            else -> { /* Field, IsDefined, Hidden, Opaque, Quit - no constants */ }
-        }
     }
 
     /**

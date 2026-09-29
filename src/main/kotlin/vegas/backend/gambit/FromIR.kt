@@ -167,7 +167,7 @@ internal class ConservationViolation(message: String) : StaticError(message)
 fun verifyConservation(ir: GameIR) {
     val tree = try {
         val semantics = GameSemantics(ir)
-        val unroller = TreeUnroller(semantics, ir, failOnDeadChoices = true)
+        val unroller = TreeUnroller(semantics, ir, failOnDeadChoices = true, money = true)
         val initial = Configuration(
             frontier = FrontierMachine.from(ir.dag),
             history = History(),
@@ -255,10 +255,16 @@ fun generateExtensiveFormGame(
  * It handles tree-specific concerns like quit-only decision nodes for roles with
  * no parameters or roles that have already quit (abandonment persistence).
  */
+/**
+ * @param money if true, terminals carry each role's payout net of its
+ *   deposit (what pot conservation is about); otherwise the analysis
+ *   utilities ([GameIR.utilityOf]), which may be non-monetary.
+ */
 internal class TreeUnroller(
     private val semantics: GameSemantics,
     private val ir: GameIR,
-    private val failOnDeadChoices: Boolean = true
+    private val failOnDeadChoices: Boolean = true,
+    private val money: Boolean = false,
 ) {
     private val infosetManager = InfosetManager(ir.roles)
 
@@ -449,7 +455,7 @@ internal class TreeUnroller(
         // does not appear in the `withdraw` clause has gross payout 0
         // and net utility -deposit; conservation must see that loss,
         // otherwise an omitted depositor is invisible to the check.
-        fun computeUtility(role: RoleId, expr: Expr?): Expr.Const.IntVal {
+        fun netPayout(role: RoleId, expr: Expr?): Expr.Const.IntVal {
             val deposit: Expr.Const.IntVal = ir.dag.deposit(role)
             val outcome: Expr.Const.IntVal = if (expr != null) {
                 eval({ config.history.get(it) }, expr).toOutcome()
@@ -458,7 +464,11 @@ internal class TreeUnroller(
             }
             return Expr.Const.IntVal(outcome.v - deposit.v)
         }
-        return ir.roles.associateWith { role -> computeUtility(role, ir.payoffs[role]) }
+        return ir.roles.associateWith { role ->
+            if (money) netPayout(role, ir.payoffs[role])
+            // Utilities are the analyst's view: a private draw counts at its drawn value.
+            else eval({ config.history.get(it).let { v -> if (v is Expr.Const.Hidden) v.inner else v } }, ir.utilityOf(role)).toOutcome()
+        }
     }
 
     /**

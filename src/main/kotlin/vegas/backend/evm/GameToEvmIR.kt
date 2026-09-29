@@ -50,15 +50,21 @@ fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
             windowSeconds = policy.windowSeconds,
         )
     }
-    val order = scheduleOrder(dag)
+    // Private draws are the players' own knowledge and have no on-chain
+    // presence: they leave the schedule, and a node that waited for one
+    // waits for its predecessors instead.
+    val order = scheduleOrder(dag).filterNot { dag.isPrivateDraw(it) }
     val position = order.withIndex().associate { (i, id) -> id to i }
+    fun onChainPredecessors(id: NodeId): Set<NodeId> = dag.prerequisitesOf(id).flatMap { p ->
+        if (dag.isPrivateDraw(p)) onChainPredecessors(p) else setOf(p)
+    }.toSet()
 
     val schedule = EvmSchedule(
         nodes = order.map { id ->
             EvmScheduleNode(
                 actionId = id,
                 owner = dag.owner(id),
-                predecessors = dag.prerequisitesOf(id).map { position.getValue(it) }.sorted(),
+                predecessors = onChainPredecessors(id).map { position.getValue(it) }.sorted(),
                 kind = when {
                     dag.spec(id).join != null -> EvmNodeKind.JOIN
                     isBeaconDraw(dag, id) -> EvmNodeKind.DRAW

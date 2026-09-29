@@ -86,7 +86,7 @@ class GameClient(
                 append(": join")
                 if (deposit > 0) append($$" (deposit $$$deposit)")
             } else {
-                val kindLabel = when (meta.kind) {
+                val kindLabel = if (game.dag.isPrivateDraw(move.actionId)) "private draw" else when (meta.kind) {
                     Visibility.COMMIT -> "commit"
                     Visibility.REVEAL -> "reveal"
                     Visibility.PUBLIC -> "yield"

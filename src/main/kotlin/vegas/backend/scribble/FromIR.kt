@@ -30,7 +30,8 @@ private fun generateScribbleFromIR(g: GameIR): Sast.Protocol {
 
 private fun dagToScribble(dag: EventGraph, allRoles: Set<RoleId>): List<Sast.Action> {
     // Use topological sort to ensure dependencies are respected (e.g. commit-reveal ordering)
-    return dag.topo().flatMap { id ->
+    // A private draw is never communicated, so it has no message.
+    return dag.topo().filterNot { dag.isPrivateDraw(it) }.flatMap { id ->
         actionToScribble(dag.meta(id), allRoles)
     }
 }

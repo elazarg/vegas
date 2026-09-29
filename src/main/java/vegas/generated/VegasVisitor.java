@@ -206,6 +206,12 @@ public interface VegasVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitOutcomeExp(VegasParser.OutcomeExpContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link VegasParser#utilityItem}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitUtilityItem(VegasParser.UtilityItemContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code RoleItem}
 	 * labeled alternative in {@link VegasParser#item}.
 	 * @param ctx the parse tree

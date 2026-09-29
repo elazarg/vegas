@@ -188,4 +188,11 @@ class EthModelTest : FunSpec({
     test("Lottery: sampled traces match") {
         testGameTraces("Lottery", sampled = true, sampleCount = 12)
     }
+
+    // ========== Tier 6: Private draws ==========
+    // A private draw happens only in the model; the contract never sees it.
+
+    test("PrivateValueAuction: sampled traces match") {
+        testGameTraces("PrivateValueAuction", sampled = true, sampleCount = 16)
+    }
 })

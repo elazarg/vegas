@@ -112,6 +112,12 @@ class EthereumSession(
             return
         }
 
+        // A private draw is the player's own knowledge: nothing happens on chain.
+        if (evmContract.schedule.nodes.none { it.actionId == move.actionId }) {
+            localSession.submitMove(move)
+            return
+        }
+
         if (evmContract.schedule.nodes[evmContract.schedule.indexOf(move.actionId)].kind == EvmNodeKind.DRAW) {
             submitDraw(move)
             localSession.submitMove(move)

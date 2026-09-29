@@ -29,7 +29,9 @@ the same name and, since the fixes recorded below, the same semantics.
 | public `yield` of one role | a commit whose reveal follows at once |
 | `yield` of several roles in one statement | concurrent commits, then reveals one at a time in source order (`BarrierOrdered`: public events wait for every earlier event) |
 | `sample (x: T ~ D)` | `sample` (public chance from a declared kernel); on EVM realized by a beacon (`EntropySource.Beacon`), because the chance contract forbids choosing, retrying or withholding a draw |
+| `sample Role(x: T ~ D)` before the role's first move | a private type drawn by the `Setup` and observed by that player alone |
 | `withdraw { ... }` | `ret` |
+| `utility { Role -> e }` | the player's utility (defaults to the payout net of the deposit) |
 | `null`, `|| null`, `or split/burn`, `|| { ... }` | explicit elimination of the publication result; handlers are sugar for the failure branch |
 | `where` guard reading another role's field | a guard is discharged when a publication it reads failed; no value is invented |
 | `join ... $ d` | the `Setup` precondition: a missing join aborts the instance with refunds; money has no core counterpart |
@@ -50,12 +52,17 @@ the same name and, since the fixes recorded below, the same semantics.
 * **`random Role`** is a trusted role that submits chance values. The core has
   no such construct: an unrestricted controller does not implement chance.
   Anonymous `sample` is the construct that corresponds to core chance.
-* **No private initial inputs.** VegasCore's `Setup` can give a player a
-  private type; Vegas cannot express this yet.
+* **Private draws may come mid-game.** `sample Role(...)` is typed wherever
+  the role has joined. Only a draw that precedes the role's first move is a
+  `Setup` type; a later one has no core counterpart (core chance is public).
+  Private draws exist only in the analysis model: the contract never sees
+  them, so neither guards nor `withdraw` may read them.
 * **Surface features** (macros, `let`, handlers, risk-partner detection and
   commit-reveal insertion) lower before the IR and have no core counterpart.
 * **Money.** Deposits, pot conservation and `burn` are Vegas-only; the core
-  works with utilities.
+  works with utilities. A `utility` clause states them, reading the
+  settlement as `Role.payout`; without one, a role's utility is its net
+  payout.
 
 ### 0.3 Known gaps
 

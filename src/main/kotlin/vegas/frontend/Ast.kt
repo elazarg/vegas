@@ -22,13 +22,23 @@ sealed class Ext : Ast() {
     data class Bind(val kind: Kind, val qs: List<Query>, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
     data class BindSingle(val kind: Kind, val q: Query, val handler: Outcome? = null, val ext: Ext) : Ext(), Step
     /**
-     * Anonymous public sample: each binding declares a value drawn at this
-     * point from the compiler-configured entropy source. No actor identity,
-     * no deposit, no payoff. Bindings live under the reserved synthetic
-     * owner [SAMPLE_OWNER] at the IR layer.
+     * A chance draw. Without an [owner] it is an anonymous public sample:
+     * each binding is drawn at this point from the compiler-configured
+     * entropy source and lives under the reserved synthetic owner
+     * [SAMPLE_OWNER]. With an owner it is a private draw (a private type):
+     * nature draws each binding and only the owner observes it. A private
+     * draw has no on-chain presence and can be read only by a utility clause.
      */
-    data class Sample(val bindings: List<VarDec>, val ext: Ext) : Ext(), Step
-    data class Value(val outcome: Outcome) : Ext()
+    data class Sample @JvmOverloads constructor(val bindings: List<VarDec>, val ext: Ext, val owner: Role? = null) : Ext(), Step
+
+    /**
+     * The terminal settlement [outcome], and optionally each role's analysis
+     * [utility]. Settlement pays money; utilities are what the analysis
+     * backends optimize, and may also read private draws and `Role.payout`
+     * (the role's settlement). Without a utility clause a role's utility is
+     * its payout net of its deposit.
+     */
+    data class Value @JvmOverloads constructor(val outcome: Outcome, val utility: Map<Role, Exp>? = null) : Ext()
 }
 
 /**
@@ -177,9 +187,12 @@ internal fun findChanceRoleIds(ext: Ext): Set<RoleId> = when (ext) {
 internal fun hasSampleBinding(ext: Ext): Boolean = when (ext) {
     is Ext.Bind -> hasSampleBinding(ext.ext)
     is Ext.BindSingle -> hasSampleBinding(ext.ext)
-    is Ext.Sample -> true
+    is Ext.Sample -> ext.owner == null || hasSampleBinding(ext.ext)
     is Ext.Value -> false
 }
+
+/** Name of the pseudo-field `Role.payout` that a utility clause may read. */
+val PAYOUT_FIELD = VarId("payout")
 
 // Free *names* in an Exp, given a set of bound variables.
 // Includes:

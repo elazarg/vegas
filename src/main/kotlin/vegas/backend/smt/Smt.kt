@@ -78,6 +78,15 @@ private class SmtGenerator(
         }
     }
 
+    /**
+     * Whether a node's variables are universally quantified: it belongs to a
+     * role outside the coalition, or it is a draw. A draw is nature's, even a
+     * private one that only its owner observes, so the coalition never
+     * chooses it.
+     */
+    fun isUniversal(id: NodeId): Boolean =
+        coalition != null && (dag.owner(id) !in coalition || dag.isSampleNode(id))
+
     fun run(): String {
         val sortedActions = dag.topo()
         val universalVars = mutableListOf<String>()
@@ -98,8 +107,7 @@ private class SmtGenerator(
         } else {
             // Strategy Mode Declarations
             sortedActions.forEach { id ->
-                val owner = dag.owner(id)
-                val isUniversal = coalition != null && owner !in coalition
+                val isUniversal = isUniversal(id)
                 val deps = actionDependencies[id] ?: emptyList()
 
                 if (isUniversal) {
@@ -142,8 +150,7 @@ private class SmtGenerator(
 
             val constraint = "(=> $actDone (and $prereqExpr $guardExpr))"
 
-            val owner = dag.owner(id)
-            val isUniversal = coalition != null && owner !in coalition
+            val isUniversal = isUniversal(id)
 
             if (isUniversal) assumptions.add(constraint) else guarantees.add(constraint)
 
@@ -197,10 +204,7 @@ private class SmtGenerator(
         if (mode == SmtMode.SATISFIABILITY) return fieldName(field)
 
         val writerId = fieldWriter[field] ?: error("Unknown writer for $field")
-        val owner = dag.owner(writerId)
-        val isUniversal = coalition != null && owner !in coalition
-
-        if (isUniversal) return fieldName(field)
+        if (isUniversal(writerId)) return fieldName(field)
 
         val writerDeps = actionDependencies[writerId] ?: emptyList()
         val args = writerDeps.joinToString(" ") { dep ->
@@ -213,10 +217,7 @@ private class SmtGenerator(
          if (mode == SmtMode.SATISFIABILITY) return doneFieldName(field)
 
          val writerId = fieldWriter[field] ?: error("Unknown writer for $field")
-         val owner = dag.owner(writerId)
-         val isUniversal = coalition != null && owner !in coalition
-
-         if (isUniversal) return doneFieldName(field)
+         if (isUniversal(writerId)) return doneFieldName(field)
 
          val writerDeps = actionDependencies[writerId] ?: emptyList()
          val args = writerDeps.joinToString(" ") { dep ->
@@ -228,9 +229,7 @@ private class SmtGenerator(
     fun resolveActionDone(id: NodeId, contextId: NodeId?): String {
         if (mode == SmtMode.SATISFIABILITY) return actionDoneName(id)
 
-        val owner = dag.owner(id)
-        val isUniversal = coalition != null && owner !in coalition
-        if (isUniversal) return actionDoneName(id)
+        if (isUniversal(id)) return actionDoneName(id)
 
         val deps = actionDependencies[id] ?: emptyList()
         val args = deps.joinToString(" ") { dep ->

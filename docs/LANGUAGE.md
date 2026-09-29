@@ -151,6 +151,46 @@ under the reserved label `Sample`. Concrete trust model:
   denominator (bias below `D / 2^256`).
 - References use `Sample.x` in expressions.
 
+#### `sample Role(...)` (private draw) and `utility`
+
+`sample Role(x: T ~ D);` draws a value for a strategic role that only
+that role observes: its private type, in the game-theoretic sense (a
+bidder's valuation, a player's hand). `~ D` may be omitted when `T` is
+finite, meaning uniform over `T`. The role must already have joined.
+
+- The draw belongs to the analysis alone. Nature makes it; the owner
+  observes it; the other roles never do. The owner's later decisions
+  are made knowing it (Gambit information sets, MAID information edges),
+  and in DQBF it is universally quantified even inside the coalition.
+- Nothing about it reaches the contract, the Scribble protocol or a
+  channel: it has no transaction, commitment or message, and the
+  schedule contracts through it. The Lightning backend refuses it.
+- No `where` clause and no `withdraw` can read it, since the contract
+  could not evaluate them. A private type affects money only through
+  the owner's choices.
+- Its only reader is a `utility` clause after `withdraw`, which gives
+  each strategic role its analysis utility:
+
+  ```vegas
+  withdraw (A.b >= B.b) ? { Seller -> A.b; A -> 2 - A.b; B -> 2 }
+                        : { Seller -> B.b; A -> 2; B -> 2 - B.b }
+  utility {
+      A -> (A.b != null && B.b != null && A.b >= B.b) ? A.payout - 2 + A.v : A.payout - 2;
+      B -> (A.b != null && B.b != null && A.b < B.b) ? B.payout - 2 + B.v : B.payout - 2;
+      Seller -> Seller.payout;
+  }
+  ```
+
+  A utility may read every field in scope, private draws included, and
+  `Role.payout`, that role's settlement under the `withdraw` (so the
+  name `payout` is reserved). Fields a role could quit before setting
+  are optional here, as in `withdraw`. A role without a utility gets its
+  payout net of its deposit, which is also the default when there is no
+  clause. Pot conservation is checked on the settlement, never on the
+  utilities.
+
+See `examples/PrivateValueAuction.vg`.
+
 #### Distribution annotation `~ D` on strategic actions
 
 A `commit P1(x: int ~ uniform { 0, 1, 2 })` on a *strategic* role is

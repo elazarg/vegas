@@ -49,7 +49,8 @@ fun EventGraph.toGraphviz(
 
             // Determine attributes based on Visibility and Role
             val kind = kind(id)
-            val shape = if (isChance) "diamond" else "box"
+            // Nature draws a private type too, though only its owner sees it.
+            val shape = if (isChance || isPrivateDraw(id)) "diamond" else "box"
 
             // Color Palette
             val fillColor = when(kind) {

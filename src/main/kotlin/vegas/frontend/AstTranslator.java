@@ -6,6 +6,7 @@ import vegas.generated.VegasParser.*;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.ParserRuleContext;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -177,7 +178,7 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
     public Ext visitSampleExt(SampleExtContext ctx) {
         Ext ext = ext(ctx.ext());
         List<VarDec> bindings = list(ctx.bindings, this::vardec);
-        return new Ext.Sample(bindings, ext);
+        return withSpan(new Ext.Sample(bindings, ext, ctx.owner == null ? null : role(ctx.owner)), ctx);
     }
 
     private Query query(QueryContext ctx) {
@@ -278,7 +279,15 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public Ext.Value visitWithdrawExt(WithdrawExtContext ctx) {
-        return new Ext.Value(outcome(ctx.outcome()));
+        if (ctx.utilities.isEmpty()) return new Ext.Value(outcome(ctx.outcome()));
+        Map<Role, Exp> utility = new LinkedHashMap<>();
+        for (UtilityItemContext item : ctx.utilities) {
+            Role role = role(item.role);
+            if (utility.put(role, exp(item.exp())) != null) {
+                throw new StaticError("Duplicate utility for " + role, role);
+            }
+        }
+        return withSpan(new Ext.Value(outcome(ctx.outcome()), utility), ctx);
     }
 
     @Override

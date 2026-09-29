@@ -9,6 +9,8 @@ import vegas.frontend.Ext
 import vegas.frontend.Kind
 import vegas.frontend.MacroDec
 import vegas.frontend.Outcome
+import vegas.frontend.PAYOUT_FIELD
+import vegas.frontend.Role
 import vegas.frontend.Query
 import vegas.frontend.SAMPLE_OWNER
 import vegas.frontend.TypeExp
@@ -296,6 +298,8 @@ internal data class View(
     val whereOwner: RoleId? = null,
     val facts: Facts = Facts.empty(),
     val randomRoles: Set<RoleId> = emptySet(),
+    /** Private draws in scope but not readable here (everywhere except a utility clause). */
+    val privateFields: Set<FieldRef> = emptySet(),
 )
 
 internal class ExprTyper(
@@ -362,6 +366,9 @@ internal class ExprTyper(
         if (f.owner !in view.roles && f.owner !in view.randomRoles) {
             throw StaticError("${f.owner} is not a role", node)
         }
+        if (f !in view.fields && f in view.privateFields) {
+            throw StaticError("'$f' is a private draw: only its owner observes it, and only a utility clause can read it", node)
+        }
         val raw = view.fields[f] ?: throw StaticError("Field '$f' is undefined", node)
 
         // 1) Contextual unhide (ONLY in where(owner))
@@ -420,7 +427,14 @@ internal class ExprTyper(
 
     private fun typeBinOp(e: Exp.BinOp, view: View): TypeExp {
         val l = type(e.left, view)
-        val r = type(e.right, view)
+        // `&&` and `||` short-circuit in every evaluator (the model, Solidity,
+        // Vyper), so the right operand is typed knowing how the left one went.
+        val rightView = when (e.op) {
+            "&&" -> view.copy(facts = view.facts.merge(extractFacts(e.left)))
+            "||" -> view.copy(facts = view.facts.merge(extractFacts(e.left).negate()))
+            else -> view
+        }
+        val r = type(e.right, rightView)
 
         return when (e.op) {
             "+", "-", "*", "/", "%" -> {
@@ -580,7 +594,11 @@ internal class ProtocolTyper(
         val randomRoles: Set<RoleId> = emptySet(),  // Roles joined with 'random' - they can never quit
         val fields: Map<FieldRef, TypeExp> = emptyMap(),
         // Track committed fields that haven't been revealed yet, with their source node for error reporting
-        val unrevealedCommits: Map<FieldRef, Ast> = emptyMap()
+        val unrevealedCommits: Map<FieldRef, Ast> = emptyMap(),
+        // Private draws: observed by their owner, readable only in a utility clause
+        val privateFields: Map<FieldRef, TypeExp> = emptyMap(),
+        // Fields a strategic role may leave missing by quitting
+        val quittable: Set<FieldRef> = emptySet(),
     )
 
     fun typeGame(game: Ext) {
@@ -601,8 +619,10 @@ internal class ProtocolTyper(
                     fields = st.fields,
                     vars = emptyMap(),
                     randomRoles = st.randomRoles,
+                    privateFields = st.privateFields.keys,
                 )
                 typeOutcome(ext.outcome, view)
+                ext.utility?.let { typeUtility(it, st) }
             }
             is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.handler, ext.ext), st)
             is Ext.Bind -> {
@@ -674,6 +694,10 @@ internal class ProtocolTyper(
                         )
                     }
 
+                    q.params.firstOrNull { it.v.id == PAYOUT_FIELD }?.let {
+                        throw StaticError("'${PAYOUT_FIELD.name}' is reserved: utility clauses read a role's settlement as Role.${PAYOUT_FIELD.name}", q)
+                    }
+
                     val m = q.params.associate { (k, tRaw) ->
                         val fr = FieldRef(role, k.id)
                         // Nullable only if explicit `|| null` handler is used
@@ -743,9 +767,17 @@ internal class ProtocolTyper(
                     }
                 }
 
-                typeExt(ext.ext, State(roles = roles2, randomRoles = randomRoles2, fields = newFields, unrevealedCommits = newUnrevealed))
+                val quittable = if (ext.kind == Kind.JOIN || ext.kind == Kind.JOIN_CHANCE) emptySet() else
+                    ext.qs.filter { it.role.id !in randomRoles2 }.flatMap { q -> q.params.map { FieldRef(q.role.id, it.v.id) } }
+                typeExt(ext.ext, st.copy(
+                    roles = roles2,
+                    randomRoles = randomRoles2,
+                    fields = newFields,
+                    unrevealedCommits = newUnrevealed,
+                    quittable = st.quittable + quittable,
+                ))
             }
-            is Ext.Sample -> {
+            is Ext.Sample -> if (ext.owner != null) typePrivateSample(ext, ext.owner, st) else {
                 // Anonymous public samples bind fields under the synthetic
                 // SAMPLE_OWNER. No deposit, no actor, no guard. Each binding
                 // optionally carries an analysis dist (~ D). Reject sample
@@ -774,6 +806,53 @@ internal class ProtocolTyper(
                     fields = newFields,
                 ))
             }
+        }
+    }
+
+    /**
+     * `sample Role(x: T ~ D);` - nature draws each binding for [owner], who
+     * alone observes it. The draw must have finite support (a finite type or
+     * a distribution), since the analysis branches over it.
+     */
+    private fun typePrivateSample(ext: Ext.Sample, owner: Role, st: State) {
+        if (owner.id !in st.roles) throw StaticError("${owner.id} is not a role", owner)
+        if (owner.id in st.randomRoles) {
+            throw StaticError("'${owner.id.name}' is a random role; a private draw belongs to a strategic role", owner)
+        }
+        val drawn = st.privateFields.toMutableMap()
+        for (vd in ext.bindings) {
+            universe.validateDefined(vd.type, ext)
+            if (vd.v.id == PAYOUT_FIELD) throw StaticError("'${PAYOUT_FIELD.name}' is reserved", ext)
+            val type = universe.resolve(vd.type)
+            if (vd.dist != null) validateDistSupport(vd.dist, vd.type, ext)
+            else if (type == INT) throw StaticError("A private draw over an unbounded int needs a distribution '~ ...'", ext)
+            val fr = FieldRef(owner.id, vd.v.id)
+            if (fr in st.fields || fr in drawn) throw StaticError("'$fr' is already defined", ext)
+            drawn[fr] = type
+        }
+        typeExt(ext.ext, st.copy(privateFields = drawn))
+    }
+
+    /**
+     * A utility clause may read every field in scope, including private draws
+     * and each strategic role's settlement `Role.payout`. A field a role can
+     * leave missing by quitting is nullable here, whatever its handler: the
+     * utility is defined on every way the game can end.
+     */
+    private fun typeUtility(utility: Map<Role, Exp>, st: State) {
+        val strategic = st.roles - st.randomRoles
+        for (role in utility.keys) {
+            if (role.id !in strategic) {
+                throw StaticError("A utility is given only to strategic roles; '${role.id.name}' is not one", role)
+            }
+        }
+        val fields = st.fields.mapValues { (f, t) ->
+            if (f in st.quittable && universe.resolve(t) !is Opt) Opt(universe.resolve(t)) else t
+        } + st.privateFields + strategic.associate { FieldRef(it, PAYOUT_FIELD) to INT }
+        val view = View(roles = st.roles, fields = fields, vars = emptyMap(), randomRoles = st.randomRoles)
+        for ((_, e) in utility) {
+            val t = expr.type(e, view)
+            if (!expr.isSubtype(t, INT)) throw StaticError("Utility must be int, got ${Pretty.type(t)}", e)
         }
     }
 
@@ -811,6 +890,7 @@ internal class ProtocolTyper(
             whereOwner = q.role.id,
             facts = Facts(nonNull = locallyDefinedByActor),
             randomRoles = st.randomRoles,
+            privateFields = st.privateFields.keys,
         )
 
         val t = expr.type(q.where, view)
