@@ -3,7 +3,7 @@
  *
  * Emits, for a Vegas game, the VegasCore `SourceProgram` over `simpleExpr`
  * that has the same event structure, so that Lean checks the correspondence
- * of `docs/DESIGN.md` §0 instead of taking it on trust.
+ * of `docs/DESIGN.md` section 0 instead of taking it on trust.
  *
  * The emitted program is exact in its structure: the sequence of draws,
  * commitments and disclosures (a linearization of the event graph), each
@@ -49,7 +49,8 @@ open Vegas Vegas.SourceProgram
 /**
  * The Lean declarations, in namespace [namespace], of the VegasCore program
  * corresponding to [ir]: an inductive `Player`, the initial `context` of
- * private inputs, and `program : SourceProgram Player simpleExpr context ∅`.
+ * private inputs, and `program`, a `SourceProgram Player simpleExpr context` with
+ * no outstanding commitment.
  *
  * Refused, with the reason, when the game uses:
  * - a `random` role (a trusted chance actor; core chance has no controller);

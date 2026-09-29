@@ -4,11 +4,11 @@
  * Converts Vegas GameIR to MAID format. The key insight is that Vegas's
  * EventGraph and VisibilityDag already encode MAID-like structures:
  *
- * - Roles → Agents
- * - Action parameters → Decision/Chance nodes
- * - guardReads → Information edges
- * - Utilities (net payouts, or a `utility` clause) → Utility nodes + CPDs
- * - Visibility (COMMIT/REVEAL/PUBLIC) → Information flow timing
+ * - Roles -> Agents
+ * - Action parameters -> Decision/Chance nodes
+ * - guardReads -> Information edges
+ * - Utilities (net payouts, or a `utility` clause) -> Utility nodes + CPDs
+ * - Visibility (COMMIT/REVEAL/PUBLIC) -> Information flow timing
  *
  * ## Expressiveness limit: self-only guards
  *
