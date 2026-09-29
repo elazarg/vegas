@@ -17,11 +17,15 @@ import java.math.BigInteger
  * The watcher is trusted only for coverage. It cannot frame a player: the
  * contract recovers the signer, and the readiness context bound into every
  * move makes early moves self-evidently early. Its observation scope is the
- * pools of the nodes it polls plus the chain; traffic handed to an opponent
- * through any other channel is outside it.
+ * chain plus the pools of the nodes in [pools]; a transaction that only ever
+ * reaches other nodes, or is handed to an opponent off-chain, is outside it.
  *
+ * @param rpc the node whose chain is audited and which receives reports.
  * @param roles the contract's strategic roles; their accounts are read from
  *   the contract's `address_<Role>()` getters once they join.
+ * @param pools nodes whose pending and queued transactions are observed;
+ *   more nodes (different peers, regions, private relays that expose their
+ *   pool) cover more routes a deviator could choose.
  */
 class Watcher(
     private val rpc: JsonRpc,
@@ -29,6 +33,7 @@ class Watcher(
     private val reporter: String,
     private val roles: List<String>,
     private val fromBlock: Long = 0,
+    private val pools: List<JsonRpc> = listOf(rpc),
 ) {
     /** Game-account address (lowercase) to role. */
     private val accounts = mutableMapOf<String, String>()
@@ -39,13 +44,13 @@ class Watcher(
     /** Every game-account transaction seen so far. */
     val recorded: Collection<SignedTransaction> get() = records.values
 
-    /** Game-account transactions of a type the watcher cannot encode yet: a coverage gap. */
+    /** Game-account transactions of an unknown type, which cannot be encoded: a coverage gap. */
     val unsupported: Set<String> get() = unencodable
 
     /** What happened to one record at audit time. */
     data class Outcome(val tx: SignedTransaction, val role: String, val charged: Boolean, val reason: String)
 
-    /** Poll the chain and the node's pool once. */
+    /** Poll the chain and every observed pool once. */
     fun observe() {
         refreshAccounts()
         val latest = rpc.blockNumber()
@@ -54,7 +59,7 @@ class Watcher(
             block["transactions"]?.let { txs -> (txs as JsonArray).forEach { keep(it as JsonObject) } }
             nextBlock++
         }
-        rpc.txpool().forEach(::keep)
+        pools.forEach { pool -> pool.txpool().forEach(::keep) }
     }
 
     private fun refreshAccounts() {

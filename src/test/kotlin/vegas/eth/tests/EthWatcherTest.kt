@@ -161,6 +161,58 @@ class EthWatcherTest : FunSpec({
         payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
     }
 
+    test("blob and set-code transactions are classified like any other") {
+        val m = start()
+        m.play(alice); m.play(bob)
+        m.play(alice, true)
+        // Alice discloses in a set-code transaction and again in a blob transaction.
+        val setCode = Cast.sendSetCode(anvil.rpcUrl, Cast.key(1), m.contract, m.earlyRevealCalldata(),
+            delegate = "0x0000000000000000000000000000000000000abc")
+        val blob = Cast.sendBlob(anvil.rpcUrl, Cast.key(1), m.contract, m.earlyRevealCalldata(), "opening".toByteArray())
+        m.watcher.observe()
+        m.play(bob, true)
+        // Bob re-sends his executed commitment call inside a set-code transaction: an alias, not evidence.
+        val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
+        val alias = Cast.sendSetCode(anvil.rpcUrl, Cast.key(2), m.contract,
+            m.rpc.txByHash(bobsCommit.hash)["input"]!!.jsonPrimitive.content, delegate = "0x0000000000000000000000000000000000000abc")
+        m.watcher.observe()
+        m.play(alice, true); m.play(bob, true)
+
+        val (outcomes, payoffs) = m.finish()
+        m.watcher.unsupported.shouldBeEmpty()
+        outcomes.single { it.tx.hash == setCode }.charged shouldBe true
+        outcomes.single { it.tx.hash == blob }.charged shouldBe true
+        outcomes.single { it.tx.hash == alias }.reason shouldContain "permitted traffic"
+        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
+    }
+
+    test("a disclosure that reaches only another node is caught only if that node's pool is watched") {
+        val m = start()
+        val other = AnvilNode()
+        other.start(forkUrl = anvil.rpcUrl)
+        try {
+            m.play(alice); m.play(bob)
+            m.play(alice, true)
+            // The leak goes to the other node only, and waits there (nonce gap).
+            val otherRpc = EthJsonRpc(other.rpcUrl)
+            val leak = otherRpc.sendAsync(m.account(alice), m.contract, m.earlyRevealCalldata(),
+                nonce = otherRpc.nonce(m.account(alice)) + 100)
+            val wide = Watcher(JsonRpc(anvil.rpcUrl), m.contract, anvil.accounts[0], listOf("Alice", "Bob"),
+                pools = listOf(JsonRpc(anvil.rpcUrl), JsonRpc(other.rpcUrl)))
+            m.watcher.observe(); wide.observe()
+            m.watcher.recorded.none { it.hash == leak } shouldBe true
+            wide.recorded.any { it.hash == leak } shouldBe true
+
+            m.play(bob, true)
+            m.play(alice, true); m.play(bob, true)
+            m.session.settle()
+            m.watcher.audit().none { it.charged } shouldBe true
+            wide.audit().single { it.tx.hash == leak }.charged shouldBe true
+        } finally {
+            other.stop()
+        }
+    }
+
     test("replaying an executed call is not chargeable, and outsiders' traffic is not evidence") {
         val m = start()
         m.play(alice); m.play(bob)

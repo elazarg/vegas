@@ -47,9 +47,11 @@ class AnvilNode {
      * Listens on a free port chosen here; its output is discarded.
      * Performs a strict readiness probe via eth_chainId.
      *
+     * @param forkUrl if given, the node forks that node's chain (same chain id,
+     *   state and accounts) but has its own transaction pool.
      * @throws IllegalStateException if anvil doesn't respond within 10 seconds
      */
-    fun start() {
+    fun start(forkUrl: String? = null) {
         // Pick a free port here rather than parsing anvil's output: its output
         // is discarded by the OS, so no pipe can fill up and stall the node.
         val port = java.net.ServerSocket(0).use { it.localPort }
@@ -62,6 +64,7 @@ class AnvilNode {
             "--balance", "10000",  // 10000 ETH per account
             "--base-fee", "0",    // Zero base fee for deterministic balance comparisons
             "--gas-price", "0",   // Zero gas price for legacy transactions
+            *(forkUrl?.let { arrayOf("--fork-url", it) } ?: emptyArray()),
         ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD)
 
         process = pb.start()

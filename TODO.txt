@@ -21,9 +21,9 @@ See docs/DESIGN.md section 0 for the correspondence and deliberate differences.
 * Checked elaboration: emit a VegasCore SourceProgram for a Vegas program and
   check that it denotes the same game, instead of relying on the design
   contract in DESIGN.md.
-* Terminal audit for the Vyper backend (Solidity only today), and watcher
-  encoding of blob (type 3) and set-code (type 4) transactions.
-* Adapters from real randomness beacons (drand, Chainlink VRF) to IVegasBeacon.
+* Terminal audit for the Vyper backend (Solidity only today).
+* A drand (evmnet) beacon adapter with on-chain BLS verification; test the
+  VRF adapter (contracts/VrfBeacon.sol) against Chainlink's contracts.
 
 # MAID
 

@@ -64,11 +64,14 @@ evidence.
 
 ## What the watcher does
 
-`vegas.watcher.Watcher` polls a node. It reads the game accounts from the
-contract, keeps every transaction they sign that it sees in blocks or in the
-node's pool (`txpool_content`: pending and queued), and after play ends asks
-the contract to classify each record (`eth_call` of `report`). It submits the
-chargeable ones. The watcher is trusted only for **coverage**:
+`vegas.watcher.Watcher` reads the game accounts from the contract and keeps
+every transaction they sign that it sees: in blocks (included, successful or
+reverted) and in the pools (`txpool_content`: pending and queued) of every node
+it is given. A transaction that reaches only some nodes is caught only if one
+of them is watched, so a deployment should watch several, well-connected
+nodes. After play ends the watcher asks the contract to classify each record
+(`eth_call` of `report`) and submits the chargeable ones; `vegas watch` runs
+it. The watcher is trusted only for **coverage**:
 
 - It cannot frame a player: the contract recovers the signer, and an honest
   player's only signatures are successful calls.
@@ -76,11 +79,11 @@ chargeable ones. The watcher is trusted only for **coverage**:
 - It can fail to collect. That is the coverage assumption, and it is not
   established by a test.
 
-Encoded transaction types: legacy (with or without EIP-155), access-list (1)
-and dynamic-fee (2). Blob (3) and set-code (4) transactions signed by a game
-account are listed in `Watcher.unsupported`: a known coverage gap of this
-prototype, not silently dropped. The contract already classifies all five
-types.
+All five transaction types are encoded: legacy (with or without EIP-155),
+access-list (1), dynamic-fee (2), blob (3) and set-code (4). The encoding is
+checked exactly: the rebuilt signed envelope hashes to the node's transaction
+hash. A transaction of an unknown future type is listed in
+`Watcher.unsupported` rather than dropped.
 
 ## Assumptions, as the spec asks
 
@@ -96,7 +99,11 @@ types.
 Public chance (`sample`) uses a beacon fixed at deployment
 (`EntropySource.Beacon`): the draw uses the first round after the node becomes
 ready, so nobody chooses its time or outcome. The beacon must be
-unpredictable, unbiased and live. Block-derived randomness does not qualify:
+unpredictable, unbiased and live. `contracts/VrfBeacon.sol` adapts Chainlink
+VRF v2.5: anyone may request the round for a readiness time once it has
+passed, each is requested and fulfilled once, and only the coordinator can
+fulfil it. It is tested against a stand-in coordinator with the same
+interface, not against Chainlink's deployed contracts. Block-derived randomness does not qualify:
 before this runtime, anyone could trigger a draw through a contract that
 reverted unless the outcome suited them.
 
@@ -104,9 +111,14 @@ reverted unless the outcome suited them.
 
 - `EthWatcherTest`: honest play is never charged; an opening disclosed early
   is caught whether it stays queued in the pool or is included and reverted,
-  and the burned bond exceeds the deviation's gain; replays of executed calls
-  and outsiders' transactions are not evidence; a signed early move cannot be
-  replayed once the node is ready.
+  also in blob and set-code transactions, and the burned bond exceeds the
+  deviation's gain; replays of executed calls and outsiders' transactions are
+  not evidence; a signed early move cannot be replayed once the node is
+  ready; a leak that reaches only another node is caught only if that node's
+  pool is watched.
+- `EthTransactionTypesTest`: the watcher rebuilds all five transaction types
+  exactly.
+- `EthVrfBeaconTest`: a draw served by the VRF adapter.
 - `EthAdversarialTest`: timeouts blame only nodes that were ready, quitters
   keep their payouts, missing joins abort with refunds, and draws cannot be
   chosen.

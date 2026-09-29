@@ -34,11 +34,9 @@ and `TODO.txt`.
 (`EntropySource.Beacon`, interface `IVegasBeacon.randomnessAfter`): the
 first round published after the node becomes ready. Block-derived
 randomness was removed because whoever triggers the drawing call can
-choose among outcomes. Remaining work is adapters from real beacons to
-`IVegasBeacon`:
-
-- drand (quicknet/evmnet): verify the round's BLS signature on chain.
-- Chainlink VRF: request at readiness, fulfil through the callback.
+choose among outcomes. `contracts/VrfBeacon.sol` adapts Chainlink VRF v2.5. Remaining: a drand
+adapter (evmnet), which must verify each round's BLS signature on BN254 on
+chain, and a test of the VRF adapter against Chainlink's own contracts.
 
 Weighted distributions are exact up to the reduction bias: the beacon
 output, domain-separated by contract and node, is reduced modulo the
