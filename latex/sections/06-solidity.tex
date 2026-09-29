@@ -231,7 +231,8 @@ allows it; the opponent reads it and reacts.  In a coordination game
 this lets a player move first and make the other follow, a deviation
 the source game does not have.  With \TT{--audited}, the Solidity
 backend emits the terminal-audit service of VegasCore's
-sequential-equilibrium theorem: every role posts a bond of the pot
+sequential-equilibrium theorem: every role posts a bond of its payout
+range (over every way the game can end, including quits and aborts)
 divided by the claimed collection probability; every move carries the
 hash of the block in which its node became ready, so a signed move
 proves it was made afterwards; the contract registers every successful

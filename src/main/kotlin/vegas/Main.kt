@@ -224,7 +224,7 @@ fun main(args: Array<String>) {
 
             Audited settlement (see docs/AUDITED-RUNTIME.md):
               --audited             Solidity with bonds, readiness contexts and a terminal audit
-              --coverage p/q        Claimed watcher coverage (default 1); bonds scale as pot / coverage
+              --coverage p/q        Claimed watcher coverage (default 1); bond = payout range / coverage
 
             Interactive mode:
               --play        Play the game interactively in the terminal (local runtime)

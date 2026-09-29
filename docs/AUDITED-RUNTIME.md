@@ -29,10 +29,12 @@ Compile with an audit policy (`compileToEvm(game, AuditPolicy(...))`, or
 an audit policy rather than emitting an unaudited contract.
 
 1. **Bond.** Every strategic role joins with its stake plus a bond
-   `ceil(range / coverage)`. The range used is the whole pot, since every payout
-   lies between zero and the pot. This is VegasCore's `rosterAuditDeposit` with
-   a conservative range bound; `coverage` is the collection-probability lower
-   bound the deployment claims for its watcher.
+   `ceil(range / coverage)`, where `range` is the role's payout range over
+   every way the game can end: every terminal history of the model, including
+   quits and all chance outcomes, and an aborted instance (refund). A game too
+   large to enumerate falls back to the whole pot, which bounds every payout.
+   This is VegasCore's `rosterAuditDeposit`; `coverage` is the
+   collection-probability lower bound the deployment claims for its watcher.
 2. **Authenticated phase.** Every move carries `ctx`, the hash of the block in
    which its node became ready. Nobody knows a block hash before the block is
    sealed, so a signed move proves it was created after its node was ready. An
@@ -94,7 +96,7 @@ hash. A transaction of an unknown future type is listed in
 | Authentic evidence | Signed payloads; phase bound by the readiness block hash. | Final inclusion: a reorganization of a readiness block would invalidate honest contexts. Clients should wait for finality. |
 | Sound conformance checks | Permitted = successful call; no hidden values inspected; quitting is never charged. | None beyond the above. |
 | Uniform partial coverage | The chain is complete for included traffic; the watcher polls the pool for the rest. | The claimed `coverage` for traffic that is never included must hold for every route and timing a deviator can choose. Traffic handed to the opponent off-chain (a direct message, a private relay) is outside the covered medium: closed communication is assumed. |
-| Terminal audit and settlement | Evidence only after play; fixed bond from the pot; burn on a first charge. | Utilities are quasi-linear in the paid amounts; bonds are collectible because they are escrowed at join. Capital cost of the bond is not modelled. |
+| Terminal audit and settlement | Evidence only after play; fixed bond from the role's payout range; burn on a first charge. | Utilities are quasi-linear in the paid amounts; bonds are collectible because they are escrowed at join. Capital cost of the bond is not modelled. |
 
 Public chance (`sample`) uses a beacon fixed at deployment
 (`EntropySource.Beacon`): the draw uses the first round after the node becomes

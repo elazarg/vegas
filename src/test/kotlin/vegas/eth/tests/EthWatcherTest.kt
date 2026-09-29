@@ -47,7 +47,7 @@ class EthWatcherTest : FunSpec({
     val bob = RoleId("Bob")
     val policy = AuditPolicy()
     val game: GameIR = compileToIR(inlineMacros(parseExample("Coordination")))
-    val bond = policy.bond(20).toLong()
+    val bond = vegas.backend.evm.compileToEvm(game, policy).audit!!.bonds.getValue(alice).toLong()
 
     class Match(val rpc: EthJsonRpc, val session: EthereumSession, val watcher: Watcher) {
         val contract get() = session.contractAddress

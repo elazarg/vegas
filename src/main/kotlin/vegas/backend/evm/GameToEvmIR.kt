@@ -8,6 +8,7 @@ import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
 import vegas.frontend.SAMPLE_OWNER
+import vegas.semantics.payoutRanges
 import java.math.BigInteger
 
 /**
@@ -15,8 +16,9 @@ import java.math.BigInteger
  *
  * A player's first departure is collected with probability at least
  * [coverage], so a bond of `range / coverage` deters every departure whose
- * gain is at most `range` (VegasCore's `rosterAuditDeposit`). The range used
- * is the whole pot: every payout lies between zero and the pot.
+ * gain is at most `range` (VegasCore's `rosterAuditDeposit`). The range is the
+ * role's payout range over every way the game can end ([payoutRanges]); for a
+ * game too large to enumerate it is the whole pot, which bounds every payout.
  */
 data class AuditPolicy(
     val coverage: vegas.Rational = vegas.Rational(1),
@@ -29,9 +31,9 @@ data class AuditPolicy(
         require(windowSeconds > 0) { "audit window must be positive" }
     }
 
-    /** The bond for a pot: `ceil(pot / coverage)`. */
-    fun bond(pot: Int): Int =
-        ((pot.toLong() * coverage.denominator + coverage.numerator - 1) / coverage.numerator).toInt()
+    /** The bond for a payout range: `ceil(range / coverage)`. */
+    fun bond(range: Int): Int =
+        ((range.toLong() * coverage.denominator + coverage.numerator - 1) / coverage.numerator).toInt()
 }
 
 /**
@@ -42,7 +44,11 @@ fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
     val dag = game.dag
     val evmAudit = audit?.let { policy ->
         val pot = game.roles.sumOf { dag.deposit(it).v }
-        EvmAudit(bonds = game.payoffs.keys.associateWith { policy.bond(pot) }, windowSeconds = policy.windowSeconds)
+        val ranges = payoutRanges(game)
+        EvmAudit(
+            bonds = game.payoffs.keys.associateWith { role -> policy.bond(ranges?.get(role)?.width ?: pot) },
+            windowSeconds = policy.windowSeconds,
+        )
     }
     val order = scheduleOrder(dag)
     val position = order.withIndex().associate { (i, id) -> id to i }
