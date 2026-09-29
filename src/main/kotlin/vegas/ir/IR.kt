@@ -58,6 +58,30 @@ fun Expr.Const.asBool(): Boolean = when (this) {
     else -> false
 }
 
+/** The fields an expression reads, by value or by testing whether they are defined. */
+fun Expr.fieldsRead(): Set<FieldRef> = when (this) {
+    is Expr.Const.Hidden -> inner.fieldsRead()
+    is Expr.Const -> emptySet()
+    is Expr.Field -> setOf(field)
+    is Expr.IsDefined -> setOf(field)
+    is Expr.Add -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Sub -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Mul -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Div -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Mod -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Neg -> x.fieldsRead()
+    is Expr.Eq -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Ne -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Lt -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Le -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Gt -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Ge -> l.fieldsRead() + r.fieldsRead()
+    is Expr.And -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Or -> l.fieldsRead() + r.fieldsRead()
+    is Expr.Not -> x.fieldsRead()
+    is Expr.Ite -> c.fieldsRead() + t.fieldsRead() + e.fieldsRead()
+}
+
 fun Expr.Const.asInt(): Int = when (this) {
     is Expr.Const.IntVal -> v
     is Expr.Const.BoolVal -> if (v) 1 else 0

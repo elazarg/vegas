@@ -10,6 +10,9 @@ import vegas.backend.evm.generateSolidity
 import vegas.backend.evm.generateVyper
 import vegas.backend.maid.generateMaid
 import vegas.backend.maid.maidToJson
+import vegas.backend.vegascore.CORE_PRELUDE
+import vegas.backend.vegascore.UnsupportedCoreElaboration
+import vegas.backend.vegascore.generateCoreSourceProgram
 import vegas.client.GameRepl
 import vegas.frontend.parseFile
 import vegas.frontend.GameAst
@@ -54,6 +57,7 @@ private data class Outputs(
     val sol: Boolean,
     val vyper: Boolean,
     val maid: Boolean = false,
+    val core: Boolean = false,
     val play: Boolean = false,
     val audit: AuditPolicy? = null,
 )
@@ -70,6 +74,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
     var wantSol = false
     var wantVyper = false
     var wantMaid = false
+    var wantCore = false
     var wantPlay = false
     var audited = false
     var coverage: Rational? = null
@@ -93,6 +98,7 @@ private fun parseOutputs(flags: List<String>): Outputs {
             "--sol" -> wantSol = true
             "--vyper" -> wantVyper = true
             "--maid" -> wantMaid = true
+            "--core" -> wantCore = true
             "--play" -> wantPlay = true
             "--audited" -> audited = true
             "--coverage" -> {
@@ -115,8 +121,8 @@ private fun parseOutputs(flags: List<String>): Outputs {
 
     // If the user provided any known output flags, emit only those.
     // An audit policy applies to Solidity only, so it implies Solidity alone.
-    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper || wantMaid
-    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantMaid, audit = audit)
+    val any = wantZ3 || wantDqbf || wantEfg || wantScr || wantSol || wantVyper || wantMaid || wantCore
+    return if (any) Outputs(wantZ3, wantDqbf, coalition, wantEfg, wantScr, wantSol, wantVyper, wantMaid, wantCore, audit = audit)
     else if (audit != null) Outputs(z3 = false, dqbf = false, coalition = null, efg = false, scr = false, sol = true, vyper = false, audit = audit)
     else Outputs(z3 = true, dqbf = false, coalition = null, efg = true, scr = true, sol = true, vyper = true)
 }
@@ -151,6 +157,7 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
     val outSol = outDir.resolve("$baseName.sol")
     val outVyper = outDir.resolve("$baseName.vy")
     val outMaid = outDir.resolve("$baseName.maid.json")
+    val outCore = outDir.resolve("$baseName.core.lean")
 
     if (outputs.z3) writeFile(outZ3.toString()) { generateSMT(ir) }
 
@@ -169,6 +176,16 @@ private fun runFile(inputPath: Path, outputs: Outputs) {
 
     // MAID backend
     if (outputs.maid) writeFile(outMaid.toString()) { maidToJson(generateMaid(ir)) }
+
+    // VegasCore elaboration, checked with `lake env lean` inside a VegasCore checkout
+    if (outputs.core) {
+        try {
+            val source = CORE_PRELUDE + "\n" + generateCoreSourceProgram(ir, baseName)
+            writeFile(outCore.toString()) { source }
+        } catch (e: UnsupportedCoreElaboration) {
+            println("Not in the VegasCore fragment: ${e.message}")
+        }
+    }
 
     println("Done")
     println()
@@ -210,7 +227,7 @@ fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println(
             """
-            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--maid] [--play]
+            Usage: vegas <path/to/file.vg> [--efg] [--z3] [--dqbf] [--coalition Role1,Role2] [--scr] [--sol] [--vyper] [--maid] [--core] [--play]
 
             If no format flags are given, all standard outputs (excluding experimental DQBF and MAID) are generated alongside the input:
               - <file>.z3   (SMT)
@@ -221,6 +238,8 @@ fun main(args: Array<String>) {
 
             Additional formats:
               --maid        Multi-Agent Influence Diagram JSON (for Thrones game theory workbench)
+              --core        VegasCore SourceProgram (<file>.core.lean); check it with
+                            `lake env lean <file>.core.lean` in a built VegasCore checkout
 
             Audited settlement (see docs/AUDITED-RUNTIME.md):
               --audited             Solidity with bonds, readiness contexts and a terminal audit

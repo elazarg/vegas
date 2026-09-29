@@ -116,9 +116,10 @@ The most immediate work items are recorded in the project's
   for-all proof that the compiler refines the EventGraph
   semantics for any input (the VegasCore-side proof), and a
   per-program certificate emitted alongside each artifact (the
-  Diamond DAG route plus a VegasCore-importing backend that
-  emits a \TT{SourceProgram} and \TT{Setup} per program, checked
-  by the Lean elaborator).  These cover
+  Diamond DAG route, and the \TT{--core} backend, which emits a
+  \TT{SourceProgram} per program for Lean to check; it checks
+  structure today, and carrying value semantics needs a richer
+  core expression language).  These cover
   different audiences: tool authors care about the first, end
   users about the second.
 \item \emph{Bounded extensions.}  Variable deposits, ERC-20

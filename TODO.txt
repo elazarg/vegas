@@ -16,9 +16,11 @@ TODO:
 
 See docs/DESIGN.md section 0 for the correspondence and deliberate differences.
 
-* Checked elaboration: emit a VegasCore SourceProgram for a Vegas program and
-  check that it denotes the same game, instead of relying on the design
-  contract in DESIGN.md.
+* Checked elaboration carries value semantics: the emitted SourceProgram
+  (--core) has placeholder guard and payoff code, because simpleExpr lacks
+  integer subtraction, multiplication and comparison. Either extend
+  simpleExpr in VegasCore or supply an IExpr mirroring Vegas expressions.
+  Also compare the Vegas event graph with the core compiler's.
 * Terminal audit for the Vyper backend (Solidity only today).
 * A drand (evmnet) beacon adapter with on-chain BLS verification; test the
   VRF adapter (contracts/VrfBeacon.sol) against Chainlink's contracts.

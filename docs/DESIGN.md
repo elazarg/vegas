@@ -71,12 +71,21 @@ the same name and, since the fixes recorded below, the same semantics.
   to emit MAID for any program whose guards reference fields written by
   other nodes; self-only guards are accepted but their domain restriction
   is still discarded — see `backend/maid/FromIR.kt` and TODO.
-* **No verified elaboration.** Nothing checks that a Vegas program and a core
-  `SourceProgram` denote the same game; the correspondence above is a design
-  contract, tested on examples, not a theorem.
-* **The audited runtime covers Solidity only**, and the watcher encodes
-  legacy, access-list and dynamic-fee transactions (see
-  `docs/AUDITED-RUNTIME.md` for its assumptions).
+* **The elaboration is checked for structure, not values.** `--core`
+  (`backend/vegascore/SourceProgram.kt`) emits each game as a VegasCore
+  `SourceProgram` over `simpleExpr`, with private draws as setup inputs.
+  Lean checks the event sequence, the commit/reveal accounting, and the read
+  discipline of guards and payoffs: a guard reads only public cells and its
+  author's own commitments, in scope where it is declared, and payoffs read
+  only public cells. Every example except `MontyHallChance` (a `random`
+  role) elaborates and checks (`SourceProgramLeanTest`, which needs a
+  VegasCore checkout built with the installed toolchain, found through
+  `VEGASCORE_DIR`). Guard and payoff *code* are placeholders reading the same
+  cells, because `simpleExpr` has no integer subtraction, multiplication or
+  comparison, so value semantics is not checked. Nor is the dependency graph
+  compared with the core compiler's, whose definitions are noncomputable.
+* **The audited runtime covers Solidity only.** The watcher encodes all five
+  transaction types (see `docs/AUDITED-RUNTIME.md` for its assumptions).
 
 ---
 

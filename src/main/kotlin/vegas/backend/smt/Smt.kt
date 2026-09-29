@@ -5,6 +5,7 @@ import vegas.RoleId
 import vegas.ir.GameIR
 import vegas.ir.NodeId
 import vegas.ir.Expr
+import vegas.ir.fieldsRead
 import vegas.ir.Type
 import vegas.ir.Visibility
 
@@ -37,8 +38,8 @@ private class SmtGenerator(
 
     // 2. Identify all fields referenced
     val referencedFields = mutableSetOf<FieldRef>().apply {
-        dag.metas.forEach { meta -> addAll(collectFields(meta.spec.guardExpr)) }
-        ir.payoffs.values.forEach { expr -> addAll(collectFields(expr)) }
+        dag.metas.forEach { meta -> addAll(meta.spec.guardExpr.fieldsRead()) }
+        ir.payoffs.values.forEach { expr -> addAll(expr.fieldsRead()) }
         dag.actions.forEach { id -> addAll(dag.writes(id)) }
     }
 
@@ -280,31 +281,6 @@ private fun smtType(type: Type): String = when (type) {
     is Type.BoolType -> "Bool"
     is Type.IntType -> "Int"
     is Type.RangeType -> "Int"
-}
-
-private fun collectFields(expr: Expr): Set<FieldRef> = when (expr) {
-    is Expr.Const.IntVal, is Expr.Const.BoolVal -> emptySet()
-    is Expr.Const.Hidden -> collectFields(expr.inner)
-    Expr.Const.Opaque -> emptySet()
-    Expr.Const.Quit -> emptySet()
-    is Expr.Field -> setOf(expr.field)
-    is Expr.IsDefined -> setOf(expr.field)
-    is Expr.Add -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Sub -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Mul -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Div -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Mod -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Neg -> collectFields(expr.x)
-    is Expr.Eq -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Ne -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Lt -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Le -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Gt -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Ge -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.And -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Or -> collectFields(expr.l) + collectFields(expr.r)
-    is Expr.Not -> collectFields(expr.x)
-    is Expr.Ite -> collectFields(expr.c) + collectFields(expr.t) + collectFields(expr.e)
 }
 
 private fun fieldName(field: FieldRef): String = "${field.owner}_${field.param}"

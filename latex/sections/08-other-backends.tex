@@ -181,9 +181,18 @@ two coexist as different approaches to ``the same protocol viewed
 through a proof assistant'': Diamond DAG ships a standalone
 per-program object whose inhabitation is a witness; VegasCore is
 a reusable library of definitions and theorems.  A third Lean
-backend, emitting a Vegas program as a VegasCore
-\TT{SourceProgram} with its initial \TT{Setup}, is planned (and
-listed in \file{TODO.txt}) to bridge the two.
+backend (\TT{--core}) bridges the two: it emits a Vegas program
+as a VegasCore \TT{SourceProgram}, with private draws as the
+setup's private inputs, and Lean checks it against the library.
+The check covers structure, not values: the sequence of draws,
+commitments and disclosures, that every commitment is resolved
+exactly once, that a guard reads only public cells and its
+author's own commitments in scope where it is declared, and
+that payoffs read only public cells.  Guard and payoff code are
+placeholders reading the same cells, since VegasCore's concrete
+expression language has no integer subtraction or comparison.
+Every example except one using a \TT{random} role elaborates and
+checks.
 
 The encoding is interesting for two reasons.  First, it is
 self-contained: the Lean object can be passed to a theorem

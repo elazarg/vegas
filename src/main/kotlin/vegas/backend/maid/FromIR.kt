@@ -37,6 +37,7 @@ import vegas.ir.NodeMeta
 import vegas.ir.Type
 import vegas.ir.asBool
 import vegas.ir.asInt
+import vegas.ir.fieldsRead
 import vegas.ir.observableFieldsAt
 import vegas.semantics.eval
 import java.util.UUID
@@ -209,7 +210,7 @@ private class MaidConverter(private val ir: GameIR) {
             utilityNodeIds[role] = utilId
 
             val expr = ir.utilityOf(role)
-            val dependencies = extractFieldRefs(expr).distinct().filter { it in fieldToNodeId }
+            val dependencies = expr.fieldsRead().filter { it in fieldToNodeId }
             val combinations = cartesianProduct(dependencies.map { getFieldDomain(it) })
             val values = combinations.map { combo ->
                 val fieldValues = dependencies.zip(combo).toMap()
@@ -425,43 +426,6 @@ private class MaidConverter(private val ir: GameIR) {
             }
         }
         return listOf(0, 1) // Fallback
-    }
-
-    /**
-     * Recursively extract field references from expression.
-     */
-    private fun extractFieldRefs(expr: Expr): List<FieldRef> {
-        val refs = mutableListOf<FieldRef>()
-        collectFieldRefs(expr, refs)
-        return refs
-    }
-
-    private fun collectFieldRefs(expr: Expr, refs: MutableList<FieldRef>) {
-        when (expr) {
-            is Expr.Field -> refs.add(expr.field)
-            is Expr.IsDefined -> refs.add(expr.field)
-            is Expr.Add -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Sub -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Mul -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Div -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Mod -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Neg -> collectFieldRefs(expr.x, refs)
-            is Expr.Eq -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Ne -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Lt -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Le -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Gt -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Ge -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.And -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Or -> { collectFieldRefs(expr.l, refs); collectFieldRefs(expr.r, refs) }
-            is Expr.Not -> collectFieldRefs(expr.x, refs)
-            is Expr.Ite -> {
-                collectFieldRefs(expr.c, refs)
-                collectFieldRefs(expr.t, refs)
-                collectFieldRefs(expr.e, refs)
-            }
-            else -> { /* Constants - no field refs */ }
-        }
     }
 
     /**
