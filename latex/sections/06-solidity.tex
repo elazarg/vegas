@@ -180,8 +180,13 @@ analysis model applies the same rule.
 
 \paragraph{Randomness.}  A \TT{sample} node has no entry point.  The
 contract is deployed with a randomness beacon, and a draw is fixed by
-the first beacon round published after its node becomes ready.  Nobody
-chooses when it is drawn or what it is, and any later call settles it.
+the first beacon round published a fixed delay after its node becomes
+ready.  The delay outlasts the chain's finality, so no proposer can see
+the round while it can still decide whether the draw becomes ready.
+Nobody chooses when it is drawn or what it is, and any later call
+settles it.  The beacon must also keep each round secret until it
+publishes it: a threshold beacon such as drand does, while a VRF
+operator computes each output first and is trusted not to withhold one.
 Block-derived randomness is not an option: whoever triggers a draw
 that reads \TT{block.prevrandao} can do so from a contract that reverts
 unless the outcome suits it, and retry in the next block.
@@ -231,19 +236,31 @@ allows it; the opponent reads it and reacts.  In a coordination game
 this lets a player move first and make the other follow, a deviation
 the source game does not have.  With \TT{--audited}, the Solidity
 backend emits the terminal-audit service of VegasCore's
-sequential-equilibrium theorem: every role posts a bond of its payout
+sequential-equilibrium theorem.  Every role posts a bond of its payout
 range (over every way the game can end, including quits and aborts)
-divided by the claimed collection probability; every move carries the
-hash of the block in which its node became ready, so a signed move
-proves it was made afterwards; the contract registers every successful
-call; and after play ends, anyone can submit a transaction signed by a
-game account.  Unless it is a successful call to the contract, the
-signer's bond is burned.  A watcher (\TT{vegas watch}) collects such
-transactions from the chain and from its node's pool.  It is trusted
-for coverage only: it cannot frame a player, whose signature and
-readiness context are checked on chain.  Coverage of traffic that never
-reaches the watched pool, protected inclusion, and finality remain
-assumptions; \file{docs/AUDITED-RUNTIME.md} lists them.
+divided by the claimed collection probability.  Events are granted one
+at a time, in schedule order.  Every move carries the hash of the block
+in which its node became ready, so a signed move proves it was made
+once its node was granted.  A role that lets its own commitment expire
+loses its bond; withholding an opening costs nothing.  After play ends,
+anyone can submit a transaction signed by a game account, and the
+contract judges it by its content in the phase it names.  A move of the
+signer's own node, carrying that node's readiness hash and passing the
+move's domain, guard and opening checks, is permitted whether or not it
+was included in time; so are \TT{settle()} and the signer's own
+withdrawal.  Anything else burns the bond: an early or wrong opening, a
+move of another role's node, appended calldata, a transaction to
+another address, and any blob or set-code transaction, whose side data
+could carry a secret.  A watcher (\TT{vegas watch}) collects the game
+accounts' transactions from the chain and from the pools of the nodes
+it watches.  It is trusted for coverage only: it cannot frame a player,
+whose signature, readiness context and content are checked on chain.
+Coverage of traffic that never reaches a watched pool, protected
+inclusion, finality, and the fee fields every sender chooses freely
+remain assumptions; \file{docs/AUDITED-RUNTIME.md} lists them.
+Public draws read the first beacon round after readiness plus a delay
+longer than the chain's finality, so no proposer can see the round
+while it can still decide whether the draw becomes ready.
 
 \subsection{Things the backend deliberately leaves alone}
 

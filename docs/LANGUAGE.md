@@ -139,13 +139,17 @@ A `sample (x: T ~ D);` binding introduces an anonymous public draw
 under the reserved label `Sample`. Concrete trust model:
 
 - No actor identity and no entry point. The contract is deployed with a
-  randomness beacon (`IVegasBeacon`); when the draw's node becomes ready,
-  its value is fixed by the first beacon round published after that
-  moment. Nobody chooses when it is drawn or what it is, and nobody can
-  withhold it: any later call settles it.
-- The beacon must be unpredictable, unbiased and live (for example drand
-  or a VRF service). Block-derived values do not qualify: whoever
-  triggers a block-derived draw can retry until it suits them.
+  randomness beacon (`IVegasBeacon`); its value is fixed by the first
+  beacon round published `BEACON_DELAY` after the draw's node becomes
+  ready. The delay outlasts the chain's finality, so the block that made
+  the draw ready is final before anyone can know the round. Nobody chooses
+  when it is drawn or what it is, and no player can withhold it: any later
+  call settles it.
+- The beacon must be unpredictable, unbiased and live, and nobody may see a
+  round before it is published. A threshold beacon (drand) meets this under
+  its threshold assumption; a VRF service's operator sees each output first
+  and is trusted not to withhold one. Block-derived values do not qualify:
+  whoever triggers a block-derived draw can retry until it suits them.
 - `~ uniform { ... }` and `~ weighted { ... }` are both implemented on
   chain, by reducing the beacon output modulo the weights' common
   denominator (bias below `D / 2^256`).

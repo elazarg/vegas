@@ -4,6 +4,7 @@ import io.kotest.core.annotation.EnabledIf
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import vegas.backend.evm.EvmConstants
 import vegas.backend.evm.compileToEvm
 import vegas.backend.evm.generateSolidity
 import vegas.eth.*
@@ -76,17 +77,17 @@ class EthVrfBeaconTest : FunSpec({
         val node = evm.schedule.nodes.indexOfFirst { it.kind == vegas.backend.evm.EvmNodeKind.DRAW }
         val ready = view(rpc, game, "readyAt(uint256)", AbiCodec.encodeUint256(node.toLong())).toLong()
 
-        // A round can be requested only after readiness; then anyone may request it, once,
+        // The draw reads the round after its readiness plus the beacon delay. That round
+        // can be requested only once its time has passed; then anyone may request it, once,
         // and nobody can fulfil it in the coordinator's place.
-        if (rpc.latestBlockTimestamp() <= ready) {
-            call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(ready)) shouldContain "too early"
-            rpc.advanceTime(1)
-        }
-        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(ready)) shouldBe "ok"
-        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(ready)) shouldContain "already requested"
+        val round = ready + EvmConstants.BEACON_DELAY_SECONDS
+        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(round)) shouldContain "too early"
+        rpc.advanceTime(round - rpc.latestBlockTimestamp() + 1)
+        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(round)) shouldBe "ok"
+        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(round)) shouldContain "already requested"
         call(rpc, gambler, beacon, "rawFulfillRandomWords(uint256,uint256[])", AbiCodec.encodeUint256(1),
             AbiCodec.encodeUint256(64), AbiCodec.encodeUint256(1), AbiCodec.encodeUint256(5)) shouldContain "only coordinator"
-        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(ready + 1000)) shouldContain "too early"
+        call(rpc, anvil.accounts[3], beacon, "request(uint256)", AbiCodec.encodeUint256(round + 1000)) shouldContain "too early"
         // The request carries VRF v2.5's ExtraArgsV1 tag.
         val extra = rpc.ethCall(deployer, coordinator, Hex.encode(AbiCodec.functionSelector("lastExtraArgs()"))).removePrefix("0x")
         extra.drop(128).take(8) shouldBe Hex.encode(AbiCodec.keccak256("VRF ExtraArgsV1")).removePrefix("0x").take(8)

@@ -1,5 +1,6 @@
 package vegas.backend.evm
 
+import vegas.backend.evm.EvmConstants.BEACON_DELAY_SECONDS
 import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
@@ -42,8 +43,8 @@ fun generateSolidity(contract: EvmContract): String {
             appendLine()
 
             // 5. Terminal audit
-            contract.audit?.let {
-                renderAudit(it, contract.enums.single { e -> e.name == roleEnumName })
+            if (contract.audit != null) {
+                renderAudit(contract, contract.audit)
                 appendLine()
             }
 
@@ -102,7 +103,12 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
         uint256 constant public NODE_COUNT = ${nodes.size};
         uint256 public immutable deployedAt;
     """.trimIndent())
-    if (schedule.usesBeacon) appendLine("IVegasBeacon public immutable BEACON;")
+    if (schedule.usesBeacon) {
+        appendLine("IVegasBeacon public immutable BEACON;")
+        appendLine("/// A draw takes the first beacon round after its readiness plus this delay,")
+        appendLine("/// by which time the block that made it ready is final.")
+        appendLine("uint256 constant public BEACON_DELAY = $BEACON_DELAY_SECONDS;")
+    }
     appendLine("""
 
         /// Readiness time of each node: when its last predecessor resolved (0 = not ready).
@@ -128,7 +134,7 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
     appendLine("""
         /// Resolve every node that can be resolved now. Anyone may call this.
         function settle() public {
-            _settle();@@SETTLE_RECORD@@
+            _settle();
         }
 
         function _settle() internal {
@@ -173,7 +179,7 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
     if (schedule.usesBeacon) {
         appendLine("""
             |    if (_isDraw(i)) {
-            |        (bytes32 value, uint256 roundTime) = BEACON.randomnessAfter(ready);
+            |        (bytes32 value, uint256 roundTime) = BEACON.randomnessAfter(ready + BEACON_DELAY);
             |        if (value != bytes32(0)) {
             |            // A resolution time is never in the future, whatever the beacon reports.
             |            if (roundTime > block.timestamp) roundTime = block.timestamp;
@@ -192,7 +198,7 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
         |        return;
         |    }
         |    if (block.timestamp > ready + TIMEOUT) {
-        |        quitAt[owner] = ready + TIMEOUT;
+        |        quitAt[owner] = ready + TIMEOUT;@@MISSED_BINDING@@
         |        resolvedAt[i] = ready + TIMEOUT;
         |        if (_isJoin(i)) aborted = true;
         |    }
@@ -244,16 +250,19 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
 
 /**
  * Fill the audit hooks of the schedule infrastructure: with an audit, play
- * records readiness blocks, anchors their hashes, registers every successful
- * call, and notes when play ended; without one, the hooks are empty.
+ * records readiness blocks, anchors their hashes, charges a role that lets
+ * its own commitment expire, and notes when play ended; without one, the
+ * hooks are empty.
  */
 private fun String.withAudit(audit: EvmAudit?): String {
     val hooks = mapOf(
-        "@@SETTLE_RECORD@@" to listOf("executed[msg.sender][keccak256(msg.data)] = true;"),
-        "@@SETTLE_ANCHOR@@" to listOf("if (resolvedAt[i] == 0 && readyAt[i] != 0) _anchor(i);"),
+        // A node is anchored even when it resolves here: a move made in time
+        // but included after the deadline must still find its context.
+        "@@SETTLE_ANCHOR@@" to listOf("if (readyAt[i] != 0) _anchor(i);"),
         "@@SETTLE_END@@" to listOf("if (endedAt == 0 && (prefix == NODE_COUNT || aborted)) endedAt = block.timestamp;"),
         "@@READY_BLOCK@@" to listOf("readyBlock[i] = block.number;"),
-        "@@END_MOVE@@" to listOf("executed[msg.sender][keccak256(msg.data)] = true;", "_settle();"),
+        "@@MISSED_BINDING@@" to listOf("if (_isCommitment(i)) _charge(owner);"),
+        "@@END_MOVE@@" to listOf("_settle();"),
     )
     return hooks.entries.fold(this) { text, (hook, code) ->
         // Each inserted line is indented like the line that holds the hook.
@@ -265,16 +274,18 @@ private fun String.withAudit(audit: EvmAudit?): String {
     }
 }
 
-/** The terminal audit: bonds, readiness contexts, the call registry, and evidence checking. */
-private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
+/**
+ * The terminal audit: bonds, readiness contexts, the charge for a missed
+ * binding, and evidence checking by content.
+ */
+private fun StringBuilder.renderAudit(contract: EvmContract, audit: EvmAudit) {
+    val roleEnum = contract.enums.single { it.name == roleEnumName }
     appendLine("""
         uint256 constant public AUDIT_WINDOW = ${audit.windowSeconds};
         /// Block in which each node became ready, and that block's hash once known.
         /// A move must carry the hash, so a signed move proves it was made after that block.
         mapping(uint256 => uint256) public readyBlock;
         mapping(uint256 => bytes32) public readyHash;
-        /// Calldata hashes of the calls each account made successfully to this contract.
-        mapping(address => mapping(bytes32 => bool)) public executed;
         /// Whether a role's bond was burned.
         mapping(Role => bool) public charged;
         /// When play was seen to end; the audit window starts here (0 = still playing).
@@ -284,6 +295,7 @@ private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
     renderPureTable("_bond", "uint256", roleEnum.values.map { v ->
         audit.bonds.entries.singleOrNull { it.key.name == v }?.value?.toString() ?: "0"
     }, key = "Role role", index = { i -> "role == Role.${roleEnum.values[i]}" })
+    renderPureTable("_isCommitment", "bool", contract.schedule.nodes.map { it.commitment.toString() })
     appendLine("""
         /// Snapshot the hash of node `i`'s readiness block, once the block is sealed.
         /// A hash that aged out of `blockhash` is re-anchored at the current block.
@@ -297,29 +309,42 @@ private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
             }
         }
 
+        /// Burn a role's bond, once.
+        function _charge(Role role) internal {
+            if (charged[role]) return;
+            charged[role] = true;
+            (bool ok, ) = payable(address(0)).call{value: _bond(role)}("");
+            require(ok, "burn failed");
+        }
+
         /// Evidence: a transaction signed by a game account. `unsignedTx` is the exact
         /// payload the signature covers (a legacy RLP list, or a type byte and a list).
-        /// Anything but a successful call to this contract burns the signer's bond, once.
+        /// Unless its content is permitted in the phase it names, the signer's bond is burned.
         function report(bytes calldata unsignedTx, uint8 yParity, bytes32 r, bytes32 s) external {
             require(endedAt != 0 && block.timestamp <= endedAt + AUDIT_WINDOW, "audit closed");
             address signer = ecrecover(keccak256(unsignedTx), 27 + yParity, r, s);
             require(signer != address(0), "bad signature");
             Role role = roles[signer];
-            uint256 bond = _bond(role);
-            require(bond != 0, "not an audited account");
-            (address to, bytes calldata data) = _callOf(unsignedTx);
-            require(to != address(this) || !executed[signer][keccak256(data)], "permitted traffic");
-            executed[msg.sender][keccak256(msg.data)] = true;
-            if (!charged[role]) {
-                charged[role] = true;
-                (bool ok, ) = payable(address(0)).call{value: bond}("");
-                require(ok, "burn failed");
+            require(_bond(role) != 0, "not an audited account");
+            require(!_permittedTransaction(signer, unsignedTx), "permitted traffic");
+            _charge(role);
+        }
+
+        /// A transaction is permitted only as a plain call to this contract (no access
+        /// list, blobs or authorizations, which could carry data) with permitted content.
+        function _permittedTransaction(address signer, bytes calldata t) internal view returns (bool) {
+            (bool plain, address to, uint256 value, bytes calldata data) = _callOf(t);
+            if (!plain || to != address(this)) return false;
+            try this.isPermitted(signer, value, data) returns (bool ok) {
+                return ok;
+            } catch {
+                return false;
             }
         }
 
-        /// Destination and calldata of a transaction payload. An unknown type is
-        /// never a permitted call, so it maps to no destination.
-        function _callOf(bytes calldata t) internal pure returns (address to, bytes calldata data) {
+        /// Destination, value and calldata of a transaction payload, and whether it
+        /// is plain: legacy, or type 1 or 2 with an empty access list.
+        function _callOf(bytes calldata t) internal pure returns (bool plain, address to, uint256 value, bytes calldata data) {
             uint8 kind = uint8(t[0]);
             uint256 list;
             uint256 toIndex;
@@ -327,14 +352,21 @@ private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
                 (list, toIndex) = (0, 3);
             } else if (kind == 1) {
                 (list, toIndex) = (1, 4);
-            } else if (kind >= 2 && kind <= 4) {
+            } else if (kind == 2) {
                 (list, toIndex) = (1, 5);
             } else {
-                return (address(0), t[0:0]);
+                return (false, address(0), 0, t[0:0]);
             }
             (uint256 toStart, uint256 toLength) = _rlpItem(t, list, toIndex);
+            (uint256 valueStart, uint256 valueLength) = _rlpItem(t, list, toIndex + 1);
             (uint256 dataStart, uint256 dataLength) = _rlpItem(t, list, toIndex + 2);
+            plain = true;
+            if (kind != 0 && kind < 0xc0) {
+                (, uint256 accessLength) = _rlpItem(t, list, toIndex + 3);
+                plain = accessLength == 0;
+            }
             to = toLength == 20 ? address(bytes20(t[toStart:toStart + 20])) : address(0);
+            value = _bigEndian(t[valueStart:valueStart + valueLength]);
             data = t[dataStart:dataStart + dataLength];
         }
 
@@ -364,6 +396,62 @@ private fun StringBuilder.renderAudit(audit: EvmAudit, roleEnum: EvmEnum) {
             for (uint256 k = 0; k < x.length; k++) v = (v << 8) | uint8(x[k]);
         }
     """.trimIndent())
+    appendLine()
+    renderPermitted(contract)
+}
+
+/**
+ * `isPermitted(actor, value, data)`: whether a call to this contract, signed by
+ * `actor`, is permitted in the phase it names. A game account may call
+ * `settle()`, its own withdrawal, and the moves of its own nodes. A move is
+ * permitted when its context is the readiness hash of its node (so it was made
+ * once the node was granted) and its content passes the move's checks: the
+ * domain, the guard, and, for an opening, the commitment. Its timing and
+ * whether it was included do not matter. Calldata must be canonical: nothing
+ * may ride along after the arguments.
+ */
+private fun StringBuilder.renderPermitted(contract: EvmContract) {
+    val owners = contract.schedule.nodes.map { it.owner }
+    append("function isPermitted(address actor, uint256 value, bytes calldata data) external view returns (bool)")
+    block {
+        appendLine("if (data.length < 4) return false;")
+        appendLine("bytes4 selector = bytes4(data[0:4]);")
+        appendLine("bytes calldata args = data[4:];")
+        appendLine("if (selector == this.settle.selector) return value == 0 && args.length == 0;")
+        contract.withdrawals.forEach { w ->
+            appendLine("if (selector == this.${w.name}.selector) return value == 0 && args.length == 0 && roles[actor] == $roleEnumName.${w.role.name};")
+        }
+        contract.actions.forEach { a ->
+            appendLine("if (selector == this.${a.name}.selector) return value == ${a.value} && _permitted_${a.name}(actor, args);")
+        }
+        appendLine("return false;")
+    }
+    appendLine()
+    contract.actions.forEach { a ->
+        require(a.inputs.all { it.type in setOf(Int256, Uint256, Bool, Bytes32) }) { "${a.name} has a dynamic input" }
+        val owner = owners[a.node]
+        append("function _permitted_${a.name}(address actor, bytes calldata args) internal view returns (bool)")
+        block {
+            appendLine("if (args.length != ${32 * a.inputs.size}) return false;")
+            appendLine("if (roles[actor] != $roleEnumName.${owner.name}) return false;")
+            if (a.inputs.isNotEmpty()) {
+                val names = a.inputs.joinToString(", ") { "${renderType(it.type)} ${renderExpr(Var(it.name))}" }
+                val types = a.inputs.joinToString(", ") { renderType(it.type) }
+                appendLine("($names) = abi.decode(args, ($types));")
+            }
+            if (a.inputs.any { it.name == CONTEXT_PARAM }) {
+                val ctx = renderExpr(Var(CONTEXT_PARAM))
+                appendLine("if ($ctx == bytes32(0) || $ctx != readyHash[${a.node}]) return false;")
+            }
+            a.guards.forEach { appendLine("if (!(${renderExpr(it)})) return false;") }
+            a.body.filterIsInstance<CheckReveal>().forEach { check ->
+                val payload = check.payload.joinToString(", ") { renderExpr(it) }
+                appendLine("if (_commitmentHash($roleEnumName.${check.role.name}, actor, abi.encode($payload)) != ${renderExpr(check.commitment)}) return false;")
+            }
+            appendLine("return true;")
+        }
+        appendLine()
+    }
 }
 
 /** A pure lookup `name(i)` over schedule positions, as an if-chain. */

@@ -53,12 +53,14 @@ data class EvmContract(
 /**
  * Terminal-audit settlement.
  *
- * Every role posts [bonds] on top of its stake. Every move is bound to the
- * hash of the block in which its node became ready (`ctx`), so a signed move
- * proves it was created after that block. After play ends, anyone may submit
- * a transaction signed by a game account during [windowSeconds]; if it is not
- * a successfully executed call to this contract, the signer's bond is burned
- * (once). Settlement then returns unburned bonds with the payouts.
+ * Every role posts [bonds] on top of its stake, and events are granted one at
+ * a time in schedule order. Every move is bound to the hash of the block in
+ * which its node became ready (`ctx`), so a signed move proves it was created
+ * after that block. After play ends, anyone may submit a transaction signed
+ * by a game account during [windowSeconds]; if its content is not permitted
+ * in the phase it names, the signer's bond is burned (once). A role that lets
+ * one of its own commitments expire is charged the same way. Settlement then
+ * returns unburned bonds with the payouts.
  */
 data class EvmAudit(
     val bonds: Map<RoleId, Int>,
@@ -102,11 +104,16 @@ data class EvmSchedule(
 
 enum class EvmNodeKind { JOIN, MOVE, DRAW }
 
+/**
+ * [commitment] marks a move that binds hidden values: under a terminal audit,
+ * letting it expire is a missed binding and is charged.
+ */
 data class EvmScheduleNode(
     val actionId: NodeId,
     val owner: RoleId,
     val predecessors: List<Int>,
     val kind: EvmNodeKind,
+    val commitment: Boolean = false,
 ) {
     /** Predecessors as a bitmask over schedule positions. */
     val predecessorMask: java.math.BigInteger
@@ -151,6 +158,7 @@ data class EvmAction(
     val inputs: List<EvmParam>,
     val payable: Boolean,              // True if this action accepts ETH (e.g. Join)
     val isJoin: Boolean,
+    val value: Int = 0,                // The exact ETH a call carries: stake plus bond at a join
 
     // The Imperative Logic
     val guards: List<EvmExpr>,
@@ -298,6 +306,16 @@ object EvmConstants {
      * Default timeout in seconds (24 hours).
      */
     const val TIMEOUT_SECONDS = 86400
+
+    /**
+     * How long after a draw becomes ready its beacon round is taken (15 minutes).
+     * The block that makes a draw ready must be final before the round is
+     * published: a proposer who could still include or drop that block after
+     * seeing the round would choose the outcome. It exceeds Ethereum's
+     * finality time (two epochs, under 13 minutes); a chain with slower
+     * finality needs a longer delay.
+     */
+    const val BEACON_DELAY_SECONDS = 900
 
     /**
      * Default maximum size for bytes type.

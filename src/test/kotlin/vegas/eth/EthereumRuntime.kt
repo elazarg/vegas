@@ -145,6 +145,9 @@ class EthereumSession(
 
     override fun isTerminal(): Boolean = localSession.isTerminal()
 
+    /** The model's payoffs for the moves played so far (the game must be terminal). */
+    fun modelPayoffs(): Map<RoleId, Int> = localSession.payoffs()
+
     override fun payoffs(): Map<RoleId, Int> {
         require(isTerminal()) { "Cannot compute payoffs: game is not terminal" }
         return executeWithdrawals().mapValues { (_, v) -> v.toInt() }
@@ -257,8 +260,9 @@ class EthereumSession(
         "${action.name}(${action.inputs.joinToString(",") { evmTypeToSolidity(it.type) }})"
 
     /**
-     * A draw happens without a player: publish a beacon round for the node's
-     * readiness time whose output maps to the model's value, then settle.
+     * A draw happens without a player: publish the beacon round the node reads
+     * (the first after its readiness plus the beacon delay) with an output that
+     * maps to the model's value, let that round's time come, then settle.
      */
     private fun submitDraw(move: GameMove) {
         val node = evmContract.schedule.indexOf(move.actionId)
@@ -268,8 +272,10 @@ class EthereumSession(
         val dist = requireNotNull(game.dag.sampleSpec(move.actionId)?.dist) { "draw ${move.actionId} has no distribution" }
         val value = move.assignments.values.single()
         val output = MockBeacon.outputDrawing(contractAddress, node, dist, value)
-        MockBeacon.publish(rpc, operator, requireNotNull(beacon), ready, output)
-        if (rpc.latestBlockTimestamp() <= ready) rpc.advanceTime(1)
+        val round = ready + EvmConstants.BEACON_DELAY_SECONDS
+        MockBeacon.publish(rpc, operator, requireNotNull(beacon), round, output)
+        val now = rpc.latestBlockTimestamp()
+        if (now <= round) rpc.advanceTime(round - now + 1)
         settle()
     }
 

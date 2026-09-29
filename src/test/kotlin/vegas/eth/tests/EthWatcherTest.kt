@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.serialization.json.jsonPrimitive
@@ -32,8 +33,11 @@ import java.math.BigInteger
  * disclosing a choice early lets Alice move first and make Bob follow her,
  * turning her worst equilibrium (4) into her best outcome (16). The watcher
  * collects that disclosure from the node's pool or the chain, and the
- * contract burns Alice's bond at settlement. Honest play is never charged,
- * and the watcher cannot charge anything a player did not sign.
+ * contract burns Alice's bond at settlement. A record is judged by its
+ * content in the phase it names, not by whether it was included: honest play
+ * is never charged, even when a move lands late, and the watcher cannot
+ * charge anything a player did not sign. Letting one's own commitment expire
+ * is charged too; withholding an opening is not.
  */
 @EnabledIf(EthToolsAvailable::class)
 class EthWatcherTest : FunSpec({
@@ -47,7 +51,9 @@ class EthWatcherTest : FunSpec({
     val bob = RoleId("Bob")
     val policy = AuditPolicy()
     val game: GameIR = compileToIR(inlineMacros(parseExample("Coordination")))
-    val bond = vegas.backend.evm.compileToEvm(game, policy).audit!!.bonds.getValue(alice).toLong()
+    val evm = vegas.backend.evm.compileToEvm(game, policy)
+    val bond = evm.audit!!.bonds.getValue(alice).toLong()
+    val bobsBond = evm.audit!!.bonds.getValue(bob).toLong()
 
     class Match(val rpc: EthJsonRpc, val session: EthereumSession, val watcher: Watcher) {
         val contract get() = session.contractAddress
@@ -76,8 +82,36 @@ class EthWatcherTest : FunSpec({
         watcher.observe()
     }
 
+    /** [role] stays silent at its next move until the deadline passes. */
+    fun Match.quit(role: RoleId) {
+        session.submitMove(session.legalMoves().first { m ->
+            m.role == role && m.assignments.values.any { it is Expr.Const.Quit }
+        })
+    }
+
     fun Match.revealNode(role: RoleId) = game.dag.actions.single {
         game.dag.owner(it) == role && game.dag.kind(it) == Visibility.REVEAL
+    }
+
+    fun Match.commitNode(role: RoleId) = game.dag.actions.single {
+        game.dag.owner(it) == role && game.dag.kind(it) == Visibility.COMMIT
+    }
+
+    /** [role]'s opening, bound to its node's real readiness context, with [salt] (default: the real one). */
+    fun Match.openingCalldata(role: RoleId, salt: Long? = null): String {
+        val node = revealNode(role)
+        val (realSalt, value) = session.secret(FieldRef(role, VarId("opera")))
+        return Hex.encode(AbiCodec.encodeCall(
+            AbiCodec.functionSelector(session.functionSignature(node)),
+            AbiValue.Bytes32(session.contextFor(evm.schedule.indexOf(node))), value, AbiValue.Uint256(salt ?: realSalt),
+        ))
+    }
+
+    fun Match.charged(role: RoleId): Boolean {
+        val index = evm.enums.single { it.name == "Role" }.values.indexOf(role.name)
+        return rpc.ethCall(account(alice), contract, Hex.encode(
+            AbiCodec.functionSelector("charged(uint8)") + AbiCodec.encodeUint256(index.toLong())
+        )).removePrefix("0x").toBigInteger(16) == BigInteger.ONE
     }
 
     /** Alice's reveal, signed before it is her turn: the call data carries her choice and salt. */
@@ -161,7 +195,7 @@ class EthWatcherTest : FunSpec({
         payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
     }
 
-    test("blob and set-code transactions are classified like any other") {
+    test("blob and set-code transactions are evidence, whatever they call") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, true)
@@ -171,9 +205,10 @@ class EthWatcherTest : FunSpec({
         val blob = Cast.sendBlob(anvil.rpcUrl, Cast.key(1), m.contract, m.earlyRevealCalldata(), "opening".toByteArray())
         m.watcher.observe()
         m.play(bob, true)
-        // Bob re-sends his executed commitment call inside a set-code transaction: an alias, not evidence.
+        // Bob re-sends his own permitted commitment inside a set-code transaction.
+        // Its authorization list is data outside the protocol (as a blob would be), so it is evidence too.
         val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
-        val alias = Cast.sendSetCode(anvil.rpcUrl, Cast.key(2), m.contract,
+        val wrapped = Cast.sendSetCode(anvil.rpcUrl, Cast.key(2), m.contract,
             m.rpc.txByHash(bobsCommit.hash)["input"]!!.jsonPrimitive.content, delegate = "0x0000000000000000000000000000000000000abc")
         m.watcher.observe()
         m.play(alice, true); m.play(bob, true)
@@ -182,8 +217,8 @@ class EthWatcherTest : FunSpec({
         m.watcher.unsupported.shouldBeEmpty()
         outcomes.single { it.tx.hash == setCode }.charged shouldBe true
         outcomes.single { it.tx.hash == blob }.charged shouldBe true
-        outcomes.single { it.tx.hash == alias }.reason shouldContain "permitted traffic"
-        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
+        outcomes.single { it.tx.hash == wrapped }.charged shouldBe true
+        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L - bobsBond)
     }
 
     test("a disclosure that reaches only another node is caught only if that node's pool is watched") {
@@ -240,6 +275,78 @@ class EthWatcherTest : FunSpec({
         outcomes.single { it.tx.hash == replay }.charged shouldBe false
         outcomes.filter { it.charged }.shouldBeEmpty()
         payoffs shouldBe mapOf(alice to 4L, bob to 16L)
+    }
+
+    test("an opening made in its phase is not evidence, even when it is included after the deadline") {
+        val m = start()
+        m.play(alice); m.play(bob)
+        m.play(alice, false); m.play(bob, false)
+        m.play(alice, false)
+        // Bob signs his opening once it is his turn, but it lands after his deadline and reverts.
+        m.quit(bob)
+        val calldata = m.openingCalldata(bob)
+        m.rpc.advanceTime(vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS.toLong() + 1)
+        val late = m.rpc.sendAsync(m.account(bob), m.contract, calldata)
+        m.rpc.receiptStatus(late) shouldBe false
+        m.watcher.observe()
+
+        val (outcomes, payoffs) = m.finish()
+        outcomes.single { it.tx.hash == late }.reason shouldContain "permitted traffic"
+        outcomes.filter { it.charged }.shouldBeEmpty()
+        payoffs shouldBe m.session.modelPayoffs().mapValues { it.value.toLong() }
+    }
+
+    test("letting one's own commitment expire burns the bond; withholding an opening does not") {
+        val missed = start()
+        missed.play(alice); missed.play(bob)
+        missed.play(alice, true)
+        missed.quit(bob)
+        missed.play(alice, true)
+        missed.quit(bob) // the model's record of Bob's persistent quit at his opening
+        missed.finish().second shouldBe missed.session.modelPayoffs()
+            .mapValues { (role, v) -> v.toLong() - if (role == bob) bobsBond else 0L }
+        missed.charged(bob) shouldBe true
+        missed.charged(alice) shouldBe false
+        anvil.stop(); anvil.start()
+
+        val withheld = start()
+        withheld.play(alice); withheld.play(bob)
+        withheld.play(alice, true); withheld.play(bob, true)
+        withheld.quit(alice)
+        withheld.play(bob, true)
+        withheld.finish().second shouldBe withheld.session.modelPayoffs().mapValues { it.value.toLong() }
+        withheld.charged(alice) shouldBe false
+        withheld.charged(bob) shouldBe false
+    }
+
+    test("content that is not permitted is evidence: a wrong opening, and extra bytes after a permitted call") {
+        val m = start()
+        m.play(alice); m.play(bob)
+        m.play(alice, false); m.play(bob, false)
+        // In her own phase, Alice sends an opening that does not open her commitment.
+        val wrong = m.rpc.sendAsync(m.account(alice), m.contract, m.openingCalldata(alice, salt = 12345))
+        m.rpc.receiptStatus(wrong) shouldBe false
+        // Bob re-sends his commitment call with bytes appended: a covert channel.
+        val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
+        val padded = m.rpc.sendAsync(m.account(bob), m.contract,
+            m.rpc.txByHash(bobsCommit.hash)["input"]!!.jsonPrimitive.content + "00".repeat(32))
+        m.watcher.observe()
+        m.play(alice, false); m.play(bob, false)
+
+        val (outcomes, payoffs) = m.finish()
+        outcomes.single { it.tx.hash == wrong }.charged shouldBe true
+        outcomes.single { it.tx.hash == padded }.charged shouldBe true
+        payoffs shouldBe mapOf(alice to 4L - bond, bob to 16L - bobsBond)
+    }
+
+    test("events are granted one at a time: Bob's commitment opens only once Alice's is resolved") {
+        val m = start()
+        m.play(alice); m.play(bob)
+        m.session.settle()
+        m.session.readyAt(evm.schedule.indexOf(m.commitNode(alice))) shouldBeGreaterThan 0L
+        m.session.readyAt(evm.schedule.indexOf(m.commitNode(bob))) shouldBe 0L
+        m.play(alice, true)
+        m.session.readyAt(evm.schedule.indexOf(m.commitNode(bob))) shouldBeGreaterThan 0L
     }
 
     test("the watch command audits a finished game") {

@@ -1,5 +1,6 @@
 package vegas.backend.evm
 
+import vegas.backend.evm.EvmConstants.BEACON_DELAY_SECONDS
 import vegas.backend.evm.EvmConstants.TIMEOUT_SECONDS
 import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
@@ -42,7 +43,12 @@ fun generateVyper(contract: EvmContract): String {
         appendLine("TIMEOUT: public(constant(uint256)) = $TIMEOUT_SECONDS")
         appendLine("NODE_COUNT: public(constant(uint256)) = ${schedule.nodes.size}")
         appendLine("deployedAt: public(immutable(uint256))")
-        if (schedule.usesBeacon) appendLine("BEACON: public(immutable(IVegasBeacon))")
+        if (schedule.usesBeacon) {
+            appendLine("BEACON: public(immutable(IVegasBeacon))")
+            appendLine("# A draw takes the first beacon round after its readiness plus this delay,")
+            appendLine("# by which time the block that made it ready is final.")
+            appendLine("BEACON_DELAY: public(constant(uint256)) = $BEACON_DELAY_SECONDS")
+        }
         appendLine("COMMIT_TAG: immutable(bytes32)")
         appendLine("# Readiness time of each node: when its last predecessor resolved (0 = not ready).")
         appendLine("readyAt: public(HashMap[uint256, uint256])")
@@ -187,7 +193,7 @@ private fun StringBuilder.renderSchedule(schedule: EvmSchedule) {
             |    if self._isDraw(i):
             |        value: bytes32 = empty(bytes32)
             |        roundTime: uint256 = 0
-            |        value, roundTime = staticcall BEACON.randomnessAfter(ready)
+            |        value, roundTime = staticcall BEACON.randomnessAfter(ready + BEACON_DELAY)
             |        if value != empty(bytes32):
             |            # A resolution time is never in the future, whatever the beacon reports.
             |            self._draw(i, value)

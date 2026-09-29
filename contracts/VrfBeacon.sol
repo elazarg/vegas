@@ -18,16 +18,20 @@ interface IVrfCoordinatorV2Plus {
 
 /// An `IVegasBeacon` backed by Chainlink VRF v2.5.
 ///
-/// A Vegas draw asks for the first round published after its readiness time
-/// `t`. Here a round for `t` is a VRF request that anyone may make once `t` has
-/// passed, fulfilled by the coordinator's callback. The requester cannot
-/// choose the output (the VRF proof fixes it) and the request postdates `t`,
-/// so the output was unknown when the draw's inputs became final. Each `t` is
-/// requested and fulfilled once, so retrying cannot pick among outputs.
+/// A Vegas draw asks for the first round after its readiness time plus the
+/// contract's beacon delay; call that time `t`. Here the round for `t` is a VRF
+/// request that anyone may make once `t` has passed, fulfilled by the
+/// coordinator's callback. The requester cannot choose the output (the VRF
+/// proof fixes it), and the request postdates `t`, when the block that made
+/// the draw ready is final. Each `t` is requested and fulfilled once, so
+/// retrying cannot pick among outputs.
 ///
-/// Trust: the VRF service's liveness (a round nobody requests, or that is never
-/// fulfilled, stalls the draw) and its key. The subscription must list this
-/// contract as a consumer and stay funded.
+/// Trust: the VRF operator computes each output before publishing it, so it
+/// could bias a draw by withholding an output it dislikes; it is trusted not
+/// to, and to stay live (a round nobody requests, or that is never fulfilled,
+/// stalls the draw). A threshold beacon such as drand removes the single
+/// party who sees a round early. The subscription must list this contract as
+/// a consumer and stay funded.
 contract VrfBeacon {
     IVrfCoordinatorV2Plus public immutable coordinator;
     bytes32 public immutable keyHash;
@@ -79,7 +83,7 @@ contract VrfBeacon {
         roundTimeOf[t] = block.timestamp;
     }
 
-    /// `IVegasBeacon`: the output of the round for readiness time `t`, and its time; zero while unfulfilled.
+    /// `IVegasBeacon`: the output of the round for time `t`, and its time; zero while unfulfilled.
     function randomnessAfter(uint256 t) external view returns (bytes32 value, uint256 roundTime) {
         return (valueOf[t], roundTimeOf[t]);
     }

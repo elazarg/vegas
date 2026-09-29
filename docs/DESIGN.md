@@ -36,7 +36,7 @@ the same name and, since the fixes recorded below, the same semantics.
 | `where` guard reading another role's field | a guard is discharged when a publication it reads failed; no value is invented |
 | `join ... $ d` | the `Setup` precondition: a missing join aborts the instance with refunds; money has no core counterpart |
 | readiness-relative deadlines (`TIMEOUT` from readiness) | relative deadlines from the event's readiness |
-| `--audited` terminal audit and watcher (`docs/AUDITED-RUNTIME.md`) | the audited service of `SourceServiceSpec`; bonds as in `rosterAuditDeposit` |
+| `--audited` terminal audit and watcher (`docs/AUDITED-RUNTIME.md`) | the audited roster service of `SourceServiceSpec`: events granted one at a time, a missed commitment charged, evidence judged by its content in the phase it names; bonds as in `rosterAuditDeposit` |
 
 ### 0.2 Deliberate differences
 

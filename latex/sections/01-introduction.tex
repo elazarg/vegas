@@ -107,8 +107,9 @@ Deliberately out of scope:
   is a closed system; cross-contract MEV is parameterised, not
   modelled);
 \item concrete randomness services: draws read an abstract beacon
-  interface, and adapters for drand or Chainlink VRF are not
-  implemented;
+  interface; a Chainlink VRF adapter trusts its operator not to
+  withhold outputs, and a drand adapter, which would need on-chain
+  threshold-signature verification, is not implemented;
 \item dynamic player counts (the role set is fixed at compile time).
 \end{itemize}
 

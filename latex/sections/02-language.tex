@@ -91,8 +91,8 @@ sample (w: ticket);
 \end{lstlisting}
 Anonymous samples live under a reserved label \TT{Sample}; on chain
 their value is fixed by a randomness beacon, the first round published
-after the draw becomes ready, so no participant chooses when or what
-is drawn.  No actor identity is required; the field is
+a fixed delay (longer than the chain's finality) after the draw becomes
+ready, so no participant chooses when or what is drawn.  No actor identity is required; the field is
 referenced in expressions as \TT{Sample.w}.
 
 Naming a role makes the draw \emph{private}: nature draws a value

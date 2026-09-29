@@ -735,9 +735,11 @@ class SampleSpecTest : FreeSpec({
             val ir = typedCompile(src)
             val contract = vegas.backend.evm.compileToEvm(ir)
             val sol = vegas.backend.evm.generateSolidity(contract)
-            // The draw reads the beacon round after the node's readiness and
-            // selects from the dist support by domain-separated reduction.
-            sol shouldContain "BEACON.randomnessAfter(ready)"
+            // The draw reads the beacon round after the node's readiness plus a
+            // delay that outlasts finality, and selects from the dist support by
+            // domain-separated reduction.
+            sol shouldContain "BEACON.randomnessAfter(ready + BEACON_DELAY)"
+            sol shouldContain "uint256 constant public BEACON_DELAY = ${vegas.backend.evm.EvmConstants.BEACON_DELAY_SECONDS};"
             sol shouldContain "keccak256(abi.encode(_value, address(this), uint256(1)))"
             sol shouldContain "% 2"
             // Nobody can trigger the draw with a value or at a chosen time.

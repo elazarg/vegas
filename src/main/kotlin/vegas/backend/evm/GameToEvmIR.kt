@@ -58,18 +58,26 @@ fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
     fun onChainPredecessors(id: NodeId): Set<NodeId> = dag.prerequisitesOf(id).flatMap { p ->
         if (dag.isPrivateDraw(p)) onChainPredecessors(p) else setOf(p)
     }.toSet()
+    // An audited service grants events one at a time, in schedule order, as
+    // VegasCore's roster service does: each event also waits for the event
+    // granted before it. Joins stay concurrent; they precede play.
+    val events = order.filter { dag.spec(it).join == null }
+    val grantedBefore: Map<NodeId, NodeId> =
+        if (audit == null) emptyMap() else events.zipWithNext().associate { (before, next) -> next to before }
 
     val schedule = EvmSchedule(
         nodes = order.map { id ->
             EvmScheduleNode(
                 actionId = id,
                 owner = dag.owner(id),
-                predecessors = onChainPredecessors(id).map { position.getValue(it) }.sorted(),
+                predecessors = (onChainPredecessors(id) + listOfNotNull(grantedBefore[id]))
+                    .map { position.getValue(it) }.distinct().sorted(),
                 kind = when {
                     dag.spec(id).join != null -> EvmNodeKind.JOIN
                     isBeaconDraw(dag, id) -> EvmNodeKind.DRAW
                     else -> EvmNodeKind.MOVE
                 },
+                commitment = dag.kind(id) == Visibility.COMMIT,
             )
         },
         draws = order.filter { isBeaconDraw(dag, it) }.map { buildDraw(it, dag, position.getValue(it)) },
@@ -308,6 +316,7 @@ private fun buildAction(
         inputs = inputs,
         payable = join != null && join.deposit.v + (audit?.bonds?.get(meta.struct.owner) ?: 0) > 0,
         isJoin = join != null,
+        value = if (join == null) 0 else join.deposit.v + (audit?.bonds?.get(meta.struct.owner) ?: 0),
         guards = guards,
         body = body
     )

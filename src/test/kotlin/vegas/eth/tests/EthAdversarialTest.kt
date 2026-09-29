@@ -233,14 +233,14 @@ class EthAdversarialTest : FunSpec({
             "function Sample_accident() external view returns (bool); function done_Sample_accident() external view returns (bool);")
         val pick = d.rpc.sendAndWait(from = insured, data = SolcCompiler.compile(attack, "Pick").bytecode).contractAddress!!
 
-        // The beacon round for the draw's readiness says "accident"
+        // The beacon round the draw reads (after its readiness plus the delay) says "accident"
         // (uniform over {false, true}: index 1).
         d.beacon?.let { beacon ->
             d.send(insured, "settle()") shouldBe "ok"
             val node = d.schedulePosition("Sample")
             val ready = BigInteger(d.rpc.ethCall(insured, d.address,
                 Hex.encode(AbiCodec.functionSelector("readyAt(uint256)") + AbiCodec.encodeUint256(node.toLong()))).removePrefix("0x"), 16).toLong()
-            d.send(insured, "publish(uint256,bytes32)", AbiValue.Uint256(ready), AbiValue.Bytes32(outputFor(d, node, 2, 1)), to = beacon) shouldBe "ok"
+            d.send(insured, "publish(uint256,bytes32)", AbiValue.Uint256(ready + EvmConstants.BEACON_DELAY_SECONDS), AbiValue.Bytes32(outputFor(d, node, 2, 1)), to = beacon) shouldBe "ok"
         }
 
         val attempts = (1..20).map {
@@ -263,7 +263,7 @@ class EthAdversarialTest : FunSpec({
             val ready = BigInteger(d.rpc.ethCall(gambler, d.address,
                 Hex.encode(AbiCodec.functionSelector("readyAt(uint256)") + AbiCodec.encodeUint256(node.toLong()))).removePrefix("0x"), 16).toLong()
             // The draw lands on 2 (support {1, 2, 3}, index 1).
-            d.send(gambler, "publish(uint256,bytes32)", AbiValue.Uint256(ready), AbiValue.Bytes32(outputFor(d, node, 3, 1)), to = d.beacon!!) shouldBe "ok"
+            d.send(gambler, "publish(uint256,bytes32)", AbiValue.Uint256(ready + EvmConstants.BEACON_DELAY_SECONDS), AbiValue.Bytes32(outputFor(d, node, 3, 1)), to = d.beacon!!) shouldBe "ok"
             d.received(gambler) { d.send(gambler, "withdraw_Gambler()") } shouldBe ("ok" to if (bet == 2) 10L else 0L)
             d.view("Sample_winner()") shouldBe BigInteger.TWO
         }

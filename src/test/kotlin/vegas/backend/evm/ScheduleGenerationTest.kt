@@ -1,6 +1,7 @@
 package vegas.backend.evm
 
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import vegas.RoleId
@@ -55,6 +56,29 @@ class ScheduleGenerationTest : FunSpec({
         """.trimIndent()
         solidity shouldContain "_beginMove(1, Role.Trigger);"
         solidity shouldNotContain "lastTs"
+    }
+
+    test("an audited schedule grants events one at a time; joins stay concurrent") {
+        val game = vegas.frontend.compileToIR(vegas.frontend.inlineMacros(vegas.golden.parseExample("Coordination")))
+        fun predecessors(audit: AuditPolicy?) = compileToEvm(game, audit).schedule.nodes.map { it.predecessors }
+        // Joins of Alice and Bob, their commitments, their openings.
+        predecessors(null) shouldBe
+            listOf(emptyList(), emptyList(), listOf(0, 1), listOf(0, 1), listOf(0, 1, 2, 3), listOf(0, 1, 2, 3, 4))
+        // Only Bob's commitment gains a predecessor: Alice's commitment.
+        predecessors(AuditPolicy()) shouldBe
+            listOf(emptyList(), emptyList(), listOf(0, 1), listOf(0, 1, 2), listOf(0, 1, 2, 3), listOf(0, 1, 2, 3, 4))
+    }
+
+    test("an audited contract charges a role that lets its own commitment expire") {
+        val game = vegas.frontend.compileToIR(vegas.frontend.inlineMacros(vegas.golden.parseExample("Coordination")))
+        val audited = compileToEvm(game, AuditPolicy())
+        audited.schedule.nodes.map { it.commitment } shouldBe listOf(false, false, true, true, false, false)
+        val solidity = generateSolidity(audited).withoutIndentation()
+        solidity shouldContain """
+            quitAt[owner] = ready + TIMEOUT;
+            if (_isCommitment(i)) _charge(owner);
+        """.trimIndent()
+        generateSolidity(compileToEvm(game)) shouldNotContain "_charge"
     }
 
     test("Vyper expires a node only once it is ready, at its own deadline") {
