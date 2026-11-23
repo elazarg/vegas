@@ -15,7 +15,10 @@ fun compileToIR(ast: GameAst): GameIR {
         (if (hasSampleBinding(ast.game)) setOf(SAMPLE_OWNER) else emptySet())
 
     val phases = collectPhases(ast.game, typeEnv)
-    val payoffs = extractPayoffs(ast.game, typeEnv, chanceRoles)
+    val exits = terminalValue(ast.game).exits.orEmpty().mapKeys { it.key.id }
+    val payoffs = extractPayoffs(ast.game, typeEnv, chanceRoles).let { outcome ->
+        outcome.copy(payoffs = withExits(outcome.payoffs, exits, phases))
+    }
 
     val dag = actionDagFromPhases(phases, chanceRoles)
         ?: error("EventGraph construction failed: cyclic deps / illegal commit–reveal / bad guard visibility")
@@ -27,6 +30,7 @@ fun compileToIR(ast: GameAst): GameIR {
         payoffs = payoffs.payoffs,
         burn = payoffs.burn,
         utilities = extractUtilities(ast.game, typeEnv, payoffs.payoffs),
+        exits = exits,
     )
 
     // IMPORTANT: Verify that IR contains no frontend Exp.Let nodes
@@ -921,6 +925,27 @@ private fun extractTerminalOutcome(ext: Ext): Outcome = when (ext) {
 
 private data class DesugaredOutcome(val payoffs: Map<RoleId, Expr>, val burn: Expr)
 
+/** The game's final `withdraw` step. */
+private fun terminalValue(ext: Ext): Ext.Value = generateSequence(ext) { e ->
+    when (e) {
+        is Ext.Bind -> e.ext
+        is Ext.BindSingle -> e.ext
+        is Ext.Sample -> e.ext
+        is Ext.Value -> null
+    }
+}.last() as Ext.Value
+
+/**
+ * A role with an exit payout is paid exactly that amount once it has quit,
+ * whatever the outcome would pay it; the other roles are paid as before.
+ */
+private fun withExits(payoffs: Map<RoleId, Expr>, exits: Map<RoleId, Int>, phases: List<Phase>): Map<RoleId, Expr> =
+    payoffs.keys.union(exits.keys).associateWith { role ->
+        val payoff = payoffs[role] ?: Expr.Const.IntVal(0)
+        val exit = exits[role] ?: return@associateWith payoff
+        Expr.Ite(computeAliveExpr(role, phases), payoff, Expr.Const.IntVal(exit))
+    }
+
 /**
  * Lower the `utility` clause, if any. `Role.payout` reads the role's
  * settlement, so it is replaced by the role's lowered payoff expression.
@@ -930,15 +955,7 @@ private fun extractUtilities(
     typeEnv: Map<AstType.TypeId, AstType>,
     payoffs: Map<RoleId, Expr>,
 ): Map<RoleId, Expr> {
-    val value = generateSequence(ext) { e ->
-        when (e) {
-            is Ext.Bind -> e.ext
-            is Ext.BindSingle -> e.ext
-            is Ext.Sample -> e.ext
-            is Ext.Value -> null
-        }
-    }.last() as Ext.Value
-    val utility = value.utility ?: return emptyMap()
+    val utility = terminalValue(ext).utility ?: return emptyMap()
     return utility.entries.associate { (role, exp) ->
         role.id to substitutePayouts(lowerExpr(exp, typeEnv), payoffs)
     }

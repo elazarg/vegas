@@ -222,6 +222,11 @@ class EthJsonRpc(private val rpcUrl: String) {
         call("evm_mine", buildJsonArray {})
     }
 
+    /** Whether every transaction is mined at once; without it, transactions wait in the pool. */
+    fun setAutomine(on: Boolean) {
+        call("evm_setAutomine", buildJsonArray { add(on) })
+    }
+
     /** Advance time and mine a block. */
     fun advanceTime(seconds: Long) {
         evmIncreaseTime(seconds)
@@ -236,8 +241,11 @@ class EthJsonRpc(private val rpcUrl: String) {
         return block.getValue("timestamp").jsonPrimitive.content.hexToLong()
     }
 
-    /** Submit without waiting for inclusion; an explicit [nonce] past the account's next one leaves it queued. */
-    fun sendAsync(from: String, to: String, data: String, nonce: Long? = null): String =
+    /**
+     * Submit without waiting for inclusion; an explicit [nonce] past the account's next one leaves it queued.
+     * A [gasPrice] above the default replaces a pending transaction with the same nonce (a fee bump).
+     */
+    fun sendAsync(from: String, to: String, data: String, nonce: Long? = null, gasPrice: Long? = null): String =
         call("eth_sendTransaction", buildJsonArray {
             add(buildJsonObject {
                 put("from", from)
@@ -245,6 +253,7 @@ class EthJsonRpc(private val rpcUrl: String) {
                 put("data", data)
                 put("gas", "0x1000000")
                 if (nonce != null) put("nonce", "0x" + nonce.toString(16))
+                if (gasPrice != null) put("gasPrice", "0x" + gasPrice.toString(16))
             })
         }).jsonPrimitive.content
 

@@ -27,17 +27,19 @@ import vegas.watcher.Watcher
 import java.math.BigInteger
 
 /**
- * The terminal audit and its watcher, end to end on a local chain.
+ * The count audit and its watcher, end to end on a local chain.
  *
  * In Coordination (Battle of the Sexes) both players choose simultaneously;
  * disclosing a choice early lets Alice move first and make Bob follow her,
  * turning her worst equilibrium (4) into her best outcome (16). The watcher
  * collects that disclosure from the node's pool or the chain, and the
- * contract burns Alice's bond at settlement. A record is judged by its
- * content in the phase it names, not by whether it was included: honest play
- * is never charged, even when a move lands late, and the watcher cannot
- * charge anything a player did not sign. Letting one's own commitment expire
- * is charged too; withholding an opening is not.
+ * contract burns Alice's audit deposit at settlement. As in VegasCore's count
+ * audit, a game account may send one well-formed move per node it owns, and
+ * nothing else; a record is judged by its content and its readiness
+ * credential, not by whether or when it was included. Honest play is never
+ * charged, even when a move lands late; a fee bump is the same transaction;
+ * the watcher cannot charge anything a player did not sign; and quitting is
+ * never charged.
  */
 @EnabledIf(EthToolsAvailable::class)
 class EthWatcherTest : FunSpec({
@@ -52,8 +54,8 @@ class EthWatcherTest : FunSpec({
     val policy = AuditPolicy()
     val game: GameIR = compileToIR(inlineMacros(parseExample("Coordination")))
     val evm = vegas.backend.evm.compileToEvm(game, policy)
-    val bond = evm.audit!!.bonds.getValue(alice).toLong()
-    val bobsBond = evm.audit!!.bonds.getValue(bob).toLong()
+    val deposit = evm.audit!!.deposits.getValue(alice).toLong()
+    val bobsDeposit = evm.audit!!.deposits.getValue(bob).toLong()
 
     class Match(val rpc: EthJsonRpc, val session: EthereumSession, val watcher: Watcher) {
         val contract get() = session.contractAddress
@@ -97,13 +99,13 @@ class EthWatcherTest : FunSpec({
         game.dag.owner(it) == role && game.dag.kind(it) == Visibility.COMMIT
     }
 
-    /** [role]'s opening, bound to its node's real readiness context, with [salt] (default: the real one). */
+    /** [role]'s opening, bound to its node's real readiness credential, with [salt] (default: the real one). */
     fun Match.openingCalldata(role: RoleId, salt: Long? = null): String {
         val node = revealNode(role)
         val (realSalt, value) = session.secret(FieldRef(role, VarId("opera")))
         return Hex.encode(AbiCodec.encodeCall(
             AbiCodec.functionSelector(session.functionSignature(node)),
-            AbiValue.Bytes32(session.contextFor(evm.schedule.indexOf(node))), value, AbiValue.Uint256(salt ?: realSalt),
+            AbiValue.Bytes32(session.credentialFor(evm.schedule.indexOf(node))), value, AbiValue.Uint256(salt ?: realSalt),
         ))
     }
 
@@ -117,10 +119,10 @@ class EthWatcherTest : FunSpec({
     /** Alice's reveal, signed before it is her turn: the call data carries her choice and salt. */
     fun Match.earlyRevealCalldata(): String {
         val (salt, value) = session.secret(FieldRef(alice, VarId("opera")))
-        val guessedContext = rpc.blockHash(rpc.latestBlockNumber())
+        val guessedCredential = rpc.blockHash(rpc.latestBlockNumber())
         return Hex.encode(AbiCodec.encodeCall(
             AbiCodec.functionSelector(session.functionSignature(revealNode(alice))),
-            AbiValue.Bytes32(guessedContext), value, AbiValue.Uint256(salt),
+            AbiValue.Bytes32(guessedCredential), value, AbiValue.Uint256(salt),
         ))
     }
 
@@ -143,7 +145,7 @@ class EthWatcherTest : FunSpec({
         return outcomes to session.executeWithdrawals()
     }
 
-    test("honest play: every record is permitted and bonds come back") {
+    test("honest play: every record is a well-formed move and deposits come back") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, false); m.play(bob, false)
@@ -151,12 +153,12 @@ class EthWatcherTest : FunSpec({
         val (outcomes, payoffs) = m.finish()
         outcomes.size shouldBeGreaterThan 0
         outcomes.filter { it.charged }.shouldBeEmpty()
-        outcomes.forEach { it.reason shouldContain "permitted traffic" }
+        outcomes.forEach { it.reason shouldContain "well-formed move" }
         payoffs shouldBe mapOf(alice to 4L, bob to 16L)
         m.watcher.unsupported.shouldBeEmpty()
     }
 
-    test("a disclosure that is never included is collected from the pool and burns the bond") {
+    test("a disclosure that is never included is collected from the pool and burns the deposit") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, true)
@@ -173,9 +175,11 @@ class EthWatcherTest : FunSpec({
 
         val (outcomes, payoffs) = m.finish()
         outcomes.single { it.tx.hash == leak }.charged shouldBe true
-        outcomes.filter { it.charged }.map { it.role } shouldBe listOf("Alice")
-        // Leading gained Alice 16 - 4 = 12 over her worst equilibrium; the bond (20) exceeds it.
-        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
+        // Her later opening is a second transaction for the same node; the deposit is burned once.
+        outcomes.filter { it.charged }.map { it.role }.distinct() shouldBe listOf("Alice")
+        outcomes.filter { "reported" in it.reason }.map { it.tx.hash } shouldBe listOf(leak)
+        // Leading gained Alice 16 - 4 = 12 over her worst equilibrium; the deposit (20) exceeds it.
+        payoffs shouldBe mapOf(alice to 16L - deposit, bob to 4L)
         (payoffs.getValue(alice) < 4L) shouldBe true
         m.rpc.txpool().map { it["hash"]!!.jsonPrimitive.content } shouldBe listOf(leak)
     }
@@ -192,7 +196,7 @@ class EthWatcherTest : FunSpec({
 
         val (outcomes, payoffs) = m.finish()
         outcomes.single { it.tx.hash == leak }.charged shouldBe true
-        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L)
+        payoffs shouldBe mapOf(alice to 16L - deposit, bob to 4L)
     }
 
     test("blob and set-code transactions are evidence, whatever they call") {
@@ -205,7 +209,7 @@ class EthWatcherTest : FunSpec({
         val blob = Cast.sendBlob(anvil.rpcUrl, Cast.key(1), m.contract, m.earlyRevealCalldata(), "opening".toByteArray())
         m.watcher.observe()
         m.play(bob, true)
-        // Bob re-sends his own permitted commitment inside a set-code transaction.
+        // Bob re-sends his own well-formed commitment inside a set-code transaction.
         // Its authorization list is data outside the protocol (as a blob would be), so it is evidence too.
         val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
         val wrapped = Cast.sendSetCode(anvil.rpcUrl, Cast.key(2), m.contract,
@@ -218,7 +222,7 @@ class EthWatcherTest : FunSpec({
         outcomes.single { it.tx.hash == setCode }.charged shouldBe true
         outcomes.single { it.tx.hash == blob }.charged shouldBe true
         outcomes.single { it.tx.hash == wrapped }.charged shouldBe true
-        payoffs shouldBe mapOf(alice to 16L - bond, bob to 4L - bobsBond)
+        payoffs shouldBe mapOf(alice to 16L - deposit, bob to 4L - bobsDeposit)
     }
 
     test("a disclosure that reaches only another node is caught only if that node's pool is watched") {
@@ -248,11 +252,12 @@ class EthWatcherTest : FunSpec({
         }
     }
 
-    test("replaying an executed call is not chargeable, and outsiders' traffic is not evidence") {
+    test("replaying an executed call is a second transaction for its node, and outsiders' traffic is not evidence") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, false); m.play(bob, false)
-        // Bob re-sends his exact commitment call: it reverts, but carries nothing new.
+        // Bob re-sends his exact commitment call with a new nonce: it reverts, but it is a
+        // second transaction for his node, and its timing alone could carry a signal.
         val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
         val original = m.rpc.txByHash(bobsCommit.hash)
         val replay = m.rpc.sendAsync(m.account(bob), m.contract, original["input"]!!.jsonPrimitive.content)
@@ -272,9 +277,34 @@ class EthWatcherTest : FunSpec({
         rejection.exceptionOrNull()!!.message!! shouldContain "not an audited account"
 
         val (outcomes, payoffs) = m.finish()
-        outcomes.single { it.tx.hash == replay }.charged shouldBe false
+        outcomes.single { it.tx.hash == replay }.reason shouldContain "with an earlier transaction for its node"
+        outcomes.filter { it.charged }.map { it.tx.hash } shouldBe listOf(replay)
+        payoffs shouldBe mapOf(alice to 4L, bob to 16L - bobsDeposit)
+    }
+
+    test("a fee bump is the same transaction, not a second one") {
+        val m = start()
+        m.play(alice); m.play(bob)
+        m.play(alice, false); m.play(bob, false)
+        m.play(alice, false)
+        // Bob opens in his phase, then bumps the fee of the pending opening: same nonce and calldata.
+        m.quit(bob)
+        m.rpc.setAutomine(false)
+        val calldata = m.openingCalldata(bob)
+        val nonce = m.rpc.nonce(m.account(bob))
+        val first = m.rpc.sendAsync(m.account(bob), m.contract, calldata, nonce = nonce)
+        m.watcher.observe()
+        val price = m.rpc.txByHash(first)["gasPrice"]!!.jsonPrimitive.content.removePrefix("0x").toLong(16)
+        val bumped = m.rpc.sendAsync(m.account(bob), m.contract, calldata, nonce = nonce, gasPrice = 2 * price + 1)
+        m.watcher.observe()
+        m.rpc.setAutomine(true)
+        m.rpc.evmMine()
+        m.rpc.receiptStatus(bumped) shouldBe true
+        m.watcher.recorded.map { it.hash }.containsAll(listOf(first, bumped)) shouldBe true
+
+        val (outcomes, _) = m.finish()
+        outcomes.single { it.tx.hash == bumped }.charged shouldBe false
         outcomes.filter { it.charged }.shouldBeEmpty()
-        payoffs shouldBe mapOf(alice to 4L, bob to 16L)
     }
 
     test("an opening made in its phase is not evidence, even when it is included after the deadline") {
@@ -291,21 +321,21 @@ class EthWatcherTest : FunSpec({
         m.watcher.observe()
 
         val (outcomes, payoffs) = m.finish()
-        outcomes.single { it.tx.hash == late }.reason shouldContain "permitted traffic"
+        outcomes.single { it.tx.hash == late }.reason shouldContain "well-formed move"
         outcomes.filter { it.charged }.shouldBeEmpty()
         payoffs shouldBe m.session.modelPayoffs().mapValues { it.value.toLong() }
     }
 
-    test("letting one's own commitment expire burns the bond; withholding an opening does not") {
+    test("quitting is never charged: neither letting one's own commitment expire nor withholding an opening") {
         val missed = start()
         missed.play(alice); missed.play(bob)
         missed.play(alice, true)
         missed.quit(bob)
         missed.play(alice, true)
         missed.quit(bob) // the model's record of Bob's persistent quit at his opening
-        missed.finish().second shouldBe missed.session.modelPayoffs()
-            .mapValues { (role, v) -> v.toLong() - if (role == bob) bobsBond else 0L }
-        missed.charged(bob) shouldBe true
+        // Bob quit, so he gets his exit payout (0); Alice gets the split pot.
+        missed.finish().second shouldBe missed.session.modelPayoffs().mapValues { it.value.toLong() }
+        missed.charged(bob) shouldBe false
         missed.charged(alice) shouldBe false
         anvil.stop(); anvil.start()
 
@@ -319,7 +349,7 @@ class EthWatcherTest : FunSpec({
         withheld.charged(bob) shouldBe false
     }
 
-    test("content that is not permitted is evidence: a wrong opening, and extra bytes after a permitted call") {
+    test("a transaction that is not a well-formed move is evidence: a wrong opening, extra bytes, a call to settle") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, false); m.play(bob, false)
@@ -330,16 +360,19 @@ class EthWatcherTest : FunSpec({
         val bobsCommit = m.watcher.recorded.last { it.from == m.account(bob).lowercase() }
         val padded = m.rpc.sendAsync(m.account(bob), m.contract,
             m.rpc.txByHash(bobsCommit.hash)["input"]!!.jsonPrimitive.content + "00".repeat(32))
+        // Bob also calls settle(): not a move, so its timing could signal. Anyone outside the game may call it.
+        val settle = m.rpc.sendAsync(m.account(bob), m.contract, Hex.encode(AbiCodec.functionSelector("settle()")))
         m.watcher.observe()
         m.play(alice, false); m.play(bob, false)
 
         val (outcomes, payoffs) = m.finish()
         outcomes.single { it.tx.hash == wrong }.charged shouldBe true
         outcomes.single { it.tx.hash == padded }.charged shouldBe true
-        payoffs shouldBe mapOf(alice to 4L - bond, bob to 16L - bobsBond)
+        outcomes.single { it.tx.hash == settle }.charged shouldBe true
+        payoffs shouldBe mapOf(alice to 4L - deposit, bob to 16L - bobsDeposit)
     }
 
-    test("events are granted one at a time: Bob's commitment opens only once Alice's is resolved") {
+    test("events become ready one at a time: Bob's commitment is ready only once Alice's is resolved") {
         val m = start()
         m.play(alice); m.play(bob)
         m.session.settle()
@@ -369,17 +402,18 @@ class EthWatcherTest : FunSpec({
         }
         val lines = output.toString().lines()
         lines.single { leak in it } shouldContain "Alice: CHARGED"
-        lines.filter { "CHARGED" in it && "not chargeable" !in it } shouldHaveSize 1
+        // One report burns Alice's deposit; her later opening is a second transaction for its node, already paid for.
+        lines.filter { "reported" in it } shouldHaveSize 1
     }
 
-    test("moves carry the hash of their readiness block, so an early move cannot be replayed later") {
+    test("moves carry the hash of their readiness block as credential, so an early move cannot be replayed later") {
         val m = start()
         m.play(alice); m.play(bob)
         m.play(alice, true)
         val leak = m.rpc.sendAsync(m.account(alice), m.contract, m.earlyRevealCalldata())
         m.rpc.receiptStatus(leak) shouldBe false
         m.play(bob, true)
-        // Once it is Alice's turn, the same signed call is still rejected: its context predates readiness.
+        // Once it is Alice's turn, the same signed call is still rejected: its credential predates readiness.
         val again = m.rpc.sendAsync(m.account(alice), m.contract, m.rpc.txByHash(leak)["input"]!!.jsonPrimitive.content)
         m.rpc.receiptStatus(again) shouldBe false
         m.play(alice, true)

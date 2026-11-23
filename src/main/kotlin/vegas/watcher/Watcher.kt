@@ -11,11 +11,12 @@ import java.math.BigInteger
  * It keeps every transaction signed by a game account that it sees, whether
  * in a block (included, successful or reverted) or only in a node's pool
  * (pending or queued, possibly never included). Once play has ended it asks
- * the contract to classify each record, and submits the ones the contract
- * would charge.
+ * the contract to classify each record, alone and paired with each earlier
+ * record of the same account, and submits the evidence the contract would
+ * charge.
  *
  * The watcher is trusted only for coverage. It cannot frame a player: the
- * contract recovers the signer, and the readiness context bound into every
+ * contract recovers the signer, and the readiness credential bound into every
  * move makes early moves self-evidently early. Its observation scope is the
  * chain plus the pools of the nodes in [pools]; a transaction that only ever
  * reaches other nodes, or is handed to an opponent off-chain, is outside it.
@@ -85,40 +86,64 @@ class Watcher(
 
     /**
      * Classify every record with the contract and submit the chargeable ones,
-     * at most one per role (a role's bond is burned once).
+     * at most one per role (a role's audit deposit is burned once). A record
+     * is chargeable alone when it is not a well-formed move of its signer's
+     * node, or together with an earlier record of the same account when both
+     * call the move of one node and differ beyond their fees.
      */
     fun audit(): List<Outcome> {
         observe()
         val charged = mutableSetOf<String>()
+        val earlier = mutableMapOf<String, MutableList<SignedTransaction>>()
         return records.values.map { tx ->
             val role = accounts.getValue(tx.from)
-            val call = evidenceCall(tx)
-            val reason = try {
-                rpc.ethCall(reporter, contract, call)
-                null
-            } catch (e: JsonRpc.RpcError) {
-                e.message ?: "rejected"
+            val calls = listOf(evidenceCall(tx)) + earlier[tx.from].orEmpty().map { pairCall(it, tx) }
+            earlier.getOrPut(tx.from) { mutableListOf() } += tx
+            val rejections = calls.map { call ->
+                try {
+                    rpc.ethCall(reporter, contract, call)
+                    null
+                } catch (e: JsonRpc.RpcError) {
+                    e.message ?: "rejected"
+                }
             }
+            val accepted = calls.indices.firstOrNull { rejections[it] == null }
             when {
-                reason != null -> Outcome(tx, role, charged = false, reason = reason)
-                role in charged -> Outcome(tx, role, charged = true, reason = "bond already burned")
+                accepted == null -> Outcome(tx, role, charged = false, reason = rejections.first()!!)
+                role in charged -> Outcome(tx, role, charged = true, reason = "deposit already burned")
                 else -> {
-                    val hash = rpc.send(reporter, contract, call)
+                    val hash = rpc.send(reporter, contract, calls[accepted])
                     check(rpc.awaitReceipt(hash)) { "report $hash for ${tx.hash} failed" }
                     charged += role
-                    Outcome(tx, role, charged = true, reason = "reported in $hash")
+                    val what = if (accepted == 0) "reported" else "reported with an earlier transaction for its node"
+                    Outcome(tx, role, charged = true, reason = "$what in $hash")
                 }
             }
         }
     }
 
-    /** ABI encoding of `report(bytes unsignedTx, uint8 yParity, bytes32 r, bytes32 s)`. */
-    fun evidenceCall(tx: SignedTransaction): ByteArray {
+    /** ABI encoding of `report(bytes unsignedTx, bytes signature)`. */
+    fun evidenceCall(tx: SignedTransaction): ByteArray =
+        JsonRpc.selector("report(bytes,bytes)") + encodeBytes(listOf(tx.unsignedPayload, signature(tx)))
+
+    /** ABI encoding of `reportPair(bytes first, bytes firstSignature, bytes second, bytes secondSignature)`. */
+    fun pairCall(first: SignedTransaction, second: SignedTransaction): ByteArray =
+        JsonRpc.selector("reportPair(bytes,bytes,bytes,bytes)") +
+            encodeBytes(listOf(first.unsignedPayload, signature(first), second.unsignedPayload, signature(second)))
+
+    /** `r`, `s` and the y-parity byte. */
+    private fun signature(tx: SignedTransaction): ByteArray = tx.r + tx.s + byteArrayOf(tx.yParity.toByte())
+
+    /** ABI encoding of a tuple of dynamic `bytes` arguments. */
+    private fun encodeBytes(items: List<ByteArray>): ByteArray {
         fun word(n: Long) = BigInteger.valueOf(n).toByteArray().let { ByteArray(32 - it.size) + it }
-        val payload = tx.unsignedPayload
-        val padded = payload + ByteArray((32 - payload.size % 32) % 32)
-        return JsonRpc.selector("report(bytes,uint8,bytes32,bytes32)") +
-            word(4 * 32) + word(tx.yParity.toLong()) + tx.r + tx.s +
-            word(payload.size.toLong()) + padded
+        fun padded(b: ByteArray) = b + ByteArray((32 - b.size % 32) % 32)
+        val heads = mutableListOf<ByteArray>()
+        var offset = 32L * items.size
+        for (item in items) {
+            heads += word(offset)
+            offset += 32 + padded(item).size
+        }
+        return (heads + items.flatMap { listOf(word(it.size.toLong()), padded(it)) }).reduce(ByteArray::plus)
     }
 }

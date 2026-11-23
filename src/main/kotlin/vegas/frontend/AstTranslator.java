@@ -279,15 +279,28 @@ class AstTranslator extends VegasBaseVisitor<Ast> {
 
     @Override
     public Ext.Value visitWithdrawExt(WithdrawExtContext ctx) {
-        if (ctx.utilities.isEmpty()) return new Ext.Value(outcome(ctx.outcome()));
-        Map<Role, Exp> utility = new LinkedHashMap<>();
-        for (UtilityItemContext item : ctx.utilities) {
-            Role role = role(item.role);
-            if (utility.put(role, exp(item.exp())) != null) {
-                throw new StaticError("Duplicate utility for " + role, role);
+        Map<Role, Exp> utility = null;
+        if (!ctx.utilities.isEmpty()) {
+            utility = new LinkedHashMap<>();
+            for (UtilityItemContext item : ctx.utilities) {
+                Role role = role(item.role);
+                if (utility.put(role, exp(item.exp())) != null) {
+                    throw new StaticError("Duplicate utility for " + role, role);
+                }
             }
         }
-        return withSpan(new Ext.Value(outcome(ctx.outcome()), utility), ctx);
+        Map<Role, Integer> exits = null;
+        if (!ctx.exits.isEmpty()) {
+            exits = new LinkedHashMap<>();
+            for (ExitItemContext item : ctx.exits) {
+                Role role = role(item.role);
+                int amount = Integer.parseInt(item.amount.getText());
+                if (exits.put(role, item.neg != null ? -amount : amount) != null) {
+                    throw new StaticError("Duplicate exit payout for " + role, role);
+                }
+            }
+        }
+        return withSpan(new Ext.Value(outcome(ctx.outcome()), utility, exits), ctx);
     }
 
     @Override

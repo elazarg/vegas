@@ -58,7 +58,7 @@ class ScheduleGenerationTest : FunSpec({
         solidity shouldNotContain "lastTs"
     }
 
-    test("an audited schedule grants events one at a time; joins stay concurrent") {
+    test("an audited schedule makes events ready one at a time; joins stay concurrent") {
         val game = vegas.frontend.compileToIR(vegas.frontend.inlineMacros(vegas.golden.parseExample("Coordination")))
         fun predecessors(audit: AuditPolicy?) = compileToEvm(game, audit).schedule.nodes.map { it.predecessors }
         // Joins of Alice and Bob, their commitments, their openings.
@@ -69,16 +69,37 @@ class ScheduleGenerationTest : FunSpec({
             listOf(emptyList(), emptyList(), listOf(0, 1), listOf(0, 1, 2), listOf(0, 1, 2, 3), listOf(0, 1, 2, 3, 4))
     }
 
-    test("an audited contract charges a role that lets its own commitment expire") {
+    test("an audited contract never charges quitting: an expired node only makes its owner quit") {
         val game = vegas.frontend.compileToIR(vegas.frontend.inlineMacros(vegas.golden.parseExample("Coordination")))
-        val audited = compileToEvm(game, AuditPolicy())
-        audited.schedule.nodes.map { it.commitment } shouldBe listOf(false, false, true, true, false, false)
-        val solidity = generateSolidity(audited).withoutIndentation()
+        val solidity = generateSolidity(compileToEvm(game, AuditPolicy())).withoutIndentation()
         solidity shouldContain """
             quitAt[owner] = ready + TIMEOUT;
-            if (_isCommitment(i)) _charge(owner);
+            resolvedAt[i] = ready + TIMEOUT;
         """.trimIndent()
+        solidity shouldNotContain "_isCommitment"
         generateSolidity(compileToEvm(game)) shouldNotContain "_charge"
+    }
+
+    test("an audited move enforces its where constraint, but a value that fails it is still a well-formed move") {
+        val game = vegas.frontend.compileToIR(vegas.frontend.inlineMacros(vegas.frontend.parseCode("""
+            type small = {1..3}
+            game main() {
+              join Alice() $ 10 Bob() $ 10;
+              yield or split Alice(x: small) where Alice.x != 2;
+              withdraw { Alice -> 10; Bob -> 10 }
+              exit { Alice -> 0; Bob -> 0 }
+            }
+        """.trimIndent())))
+        val audited = compileToEvm(game, AuditPolicy())
+        val move = audited.actions.single { !it.isJoin }
+        move.constraints.size shouldBe 1
+        val solidity = generateSolidity(audited).withoutIndentation()
+        fun body(signature: String) = solidity.substringAfter(signature).substringBefore("\n}\n")
+        val constraint = "!= 2"
+        body("function ${move.name}(") shouldContain constraint
+        body("function _wellFormed_${move.name}(") shouldNotContain constraint
+        // The domain check stays: a value outside the type is malformed.
+        body("function _wellFormed_${move.name}(") shouldContain "<= 3"
     }
 
     test("Vyper expires a node only once it is ready, at its own deadline") {

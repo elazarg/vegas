@@ -46,29 +46,31 @@ data class EvmContract(
     // Initialization logic
     val initialization: List<EvmStmt>,
 
-    // 5. TERMINAL AUDIT (null: plain settlement)
+    // 5. COUNT AUDIT (null: plain settlement)
     val audit: EvmAudit? = null,
 )
 
 /**
- * Terminal-audit settlement.
+ * Count-audit settlement, after VegasCore's count audit.
  *
- * Every role posts [bonds] on top of its stake, and events are granted one at
- * a time in schedule order. Every move is bound to the hash of the block in
- * which its node became ready (`ctx`), so a signed move proves it was created
- * after that block. After play ends, anyone may submit a transaction signed
- * by a game account during [windowSeconds]; if its content is not permitted
- * in the phase it names, the signer's bond is burned (once). A role that lets
- * one of its own commitments expire is charged the same way. Settlement then
- * returns unburned bonds with the payouts.
+ * Every strategic role posts its audit deposit ([deposits]) on top of its
+ * stake, and events become ready one at a time in schedule order. Every move
+ * carries a readiness credential ([CREDENTIAL_PARAM]): the hash of the block
+ * in which its node became ready, so a signed move proves it was created
+ * after that block. After play ends, anyone may submit, during
+ * [windowSeconds], evidence of a forbidden transaction of a game account:
+ * one that is not a well-formed move of a node its role owns, or a second,
+ * different transaction for a node the account already sent one for. The
+ * signer's deposit is then burned (once). Quitting is never charged.
+ * Settlement returns unburned deposits with the payouts.
  */
 data class EvmAudit(
-    val bonds: Map<RoleId, Int>,
+    val deposits: Map<RoleId, Int>,
     val windowSeconds: Int,
 )
 
-/** Name of the readiness-context input of every audited move. */
-val CONTEXT_PARAM = VarId("ctx")
+/** Name of the readiness-credential input of every audited move. */
+val CREDENTIAL_PARAM = VarId("credential")
 
 /**
  * The event graph as the contract enforces it.
@@ -104,16 +106,11 @@ data class EvmSchedule(
 
 enum class EvmNodeKind { JOIN, MOVE, DRAW }
 
-/**
- * [commitment] marks a move that binds hidden values: under a terminal audit,
- * letting it expire is a missed binding and is charged.
- */
 data class EvmScheduleNode(
     val actionId: NodeId,
     val owner: RoleId,
     val predecessors: List<Int>,
     val kind: EvmNodeKind,
-    val commitment: Boolean = false,
 ) {
     /** Predecessors as a bitmask over schedule positions. */
     val predecessorMask: java.math.BigInteger
@@ -158,11 +155,13 @@ data class EvmAction(
     val inputs: List<EvmParam>,
     val payable: Boolean,              // True if this action accepts ETH (e.g. Join)
     val isJoin: Boolean,
-    val value: Int = 0,                // The exact ETH a call carries: stake plus bond at a join
+    val value: Int = 0,                // The exact ETH a call carries: stake plus audit deposit at a join
 
-    // The Imperative Logic
+    // The Imperative Logic: [guards] check that each value is in its type's
+    // domain, [constraints] are the move's `where` clause.
     val guards: List<EvmExpr>,
-    val body: List<EvmStmt>
+    val body: List<EvmStmt>,
+    val constraints: List<EvmExpr> = emptyList(),
 )
 
 // ==========================================

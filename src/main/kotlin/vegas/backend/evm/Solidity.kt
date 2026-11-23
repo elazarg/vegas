@@ -42,7 +42,7 @@ fun generateSolidity(contract: EvmContract): String {
             renderInfrastructure(contract.schedule, contract.audit)
             appendLine()
 
-            // 5. Terminal audit
+            // 5. Count audit
             if (contract.audit != null) {
                 renderAudit(contract, contract.audit)
                 appendLine()
@@ -198,7 +198,7 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
         |        return;
         |    }
         |    if (block.timestamp > ready + TIMEOUT) {
-        |        quitAt[owner] = ready + TIMEOUT;@@MISSED_BINDING@@
+        |        quitAt[owner] = ready + TIMEOUT;
         |        resolvedAt[i] = ready + TIMEOUT;
         |        if (_isJoin(i)) aborted = true;
         |    }
@@ -250,18 +250,16 @@ private fun StringBuilder.renderInfrastructure(schedule: EvmSchedule, audit: Evm
 
 /**
  * Fill the audit hooks of the schedule infrastructure: with an audit, play
- * records readiness blocks, anchors their hashes, charges a role that lets
- * its own commitment expire, and notes when play ended; without one, the
- * hooks are empty.
+ * records readiness blocks, anchors their hashes, and notes when play ended;
+ * without one, the hooks are empty.
  */
 private fun String.withAudit(audit: EvmAudit?): String {
     val hooks = mapOf(
         // A node is anchored even when it resolves here: a move made in time
-        // but included after the deadline must still find its context.
+        // but included after the deadline must still find its credential.
         "@@SETTLE_ANCHOR@@" to listOf("if (readyAt[i] != 0) _anchor(i);"),
         "@@SETTLE_END@@" to listOf("if (endedAt == 0 && (prefix == NODE_COUNT || aborted)) endedAt = block.timestamp;"),
         "@@READY_BLOCK@@" to listOf("readyBlock[i] = block.number;"),
-        "@@MISSED_BINDING@@" to listOf("if (_isCommitment(i)) _charge(owner);"),
         "@@END_MOVE@@" to listOf("_settle();"),
     )
     return hooks.entries.fold(this) { text, (hook, code) ->
@@ -275,27 +273,31 @@ private fun String.withAudit(audit: EvmAudit?): String {
 }
 
 /**
- * The terminal audit: bonds, readiness contexts, the charge for a missed
- * binding, and evidence checking by content.
+ * The count audit: audit deposits, readiness credentials, and evidence of
+ * forbidden transactions.
  */
 private fun StringBuilder.renderAudit(contract: EvmContract, audit: EvmAudit) {
     val roleEnum = contract.enums.single { it.name == roleEnumName }
+    val roleKey: (Int) -> String = { i -> "role == Role.${roleEnum.values[i]}" }
     appendLine("""
         uint256 constant public AUDIT_WINDOW = ${audit.windowSeconds};
         /// Block in which each node became ready, and that block's hash once known.
-        /// A move must carry the hash, so a signed move proves it was made after that block.
+        /// A move carries the hash as its readiness credential, so a signed move
+        /// proves it was made after that block.
         mapping(uint256 => uint256) public readyBlock;
         mapping(uint256 => bytes32) public readyHash;
-        /// Whether a role's bond was burned.
+        /// Whether a role's audit deposit was burned.
         mapping(Role => bool) public charged;
         /// When play was seen to end; the audit window starts here (0 = still playing).
         uint256 public endedAt;
     """.trimIndent())
     appendLine()
-    renderPureTable("_bond", "uint256", roleEnum.values.map { v ->
-        audit.bonds.entries.singleOrNull { it.key.name == v }?.value?.toString() ?: "0"
-    }, key = "Role role", index = { i -> "role == Role.${roleEnum.values[i]}" })
-    renderPureTable("_isCommitment", "bool", contract.schedule.nodes.map { it.commitment.toString() })
+    renderPureTable("_auditDeposit", "uint256", roleEnum.values.map { v ->
+        audit.deposits.entries.singleOrNull { it.key.name == v }?.value?.toString() ?: "0"
+    }, key = "Role role", index = roleKey)
+    renderPureTable("_audited", "bool", roleEnum.values.map { v ->
+        audit.deposits.keys.any { it.name == v }.toString()
+    }, key = "Role role", index = roleKey)
     appendLine("""
         /// Snapshot the hash of node `i`'s readiness block, once the block is sealed.
         /// A hash that aged out of `blockhash` is re-anchored at the current block.
@@ -309,37 +311,72 @@ private fun StringBuilder.renderAudit(contract: EvmContract, audit: EvmAudit) {
             }
         }
 
-        /// Burn a role's bond, once.
+        /// Burn a role's audit deposit, once.
         function _charge(Role role) internal {
             if (charged[role]) return;
             charged[role] = true;
-            (bool ok, ) = payable(address(0)).call{value: _bond(role)}("");
+            (bool ok, ) = payable(address(0)).call{value: _auditDeposit(role)}("");
             require(ok, "burn failed");
         }
 
         /// Evidence: a transaction signed by a game account. `unsignedTx` is the exact
-        /// payload the signature covers (a legacy RLP list, or a type byte and a list).
-        /// Unless its content is permitted in the phase it names, the signer's bond is burned.
-        function report(bytes calldata unsignedTx, uint8 yParity, bytes32 r, bytes32 s) external {
-            require(endedAt != 0 && block.timestamp <= endedAt + AUDIT_WINDOW, "audit closed");
-            address signer = ecrecover(keccak256(unsignedTx), 27 + yParity, r, s);
-            require(signer != address(0), "bad signature");
-            Role role = roles[signer];
-            require(_bond(role) != 0, "not an audited account");
-            require(!_permittedTransaction(signer, unsignedTx), "permitted traffic");
-            _charge(role);
+        /// payload the signature covers (a legacy RLP list, or a type byte and a list),
+        /// and `signature` is `r`, `s` and the y-parity byte.
+        /// Unless it is a well-formed move of a node its signer's role owns, the
+        /// signer's audit deposit is burned.
+        function report(bytes calldata unsignedTx, bytes calldata signature) external {
+            address signer = _signer(unsignedTx, signature);
+            require(!_wellFormedTransaction(signer, unsignedTx), "well-formed move");
+            _charge(roles[signer]);
         }
 
-        /// A transaction is permitted only as a plain call to this contract (no access
-        /// list, blobs or authorizations, which could carry data) with permitted content.
-        function _permittedTransaction(address signer, bytes calldata t) internal view returns (bool) {
+        /// Evidence of a second transaction for one node: two transactions signed by
+        /// the same game account that both call the move of one node, and are not
+        /// the same transaction up to its fees (same nonce, value and calldata).
+        /// The signer's audit deposit is burned.
+        function reportPair(bytes calldata first, bytes calldata firstSignature,
+                            bytes calldata second, bytes calldata secondSignature) external {
+            address signer = _signer(first, firstSignature);
+            require(_signer(second, secondSignature) == signer, "different signers");
+            require(_secondForNode(first, second), "not a second transaction for one node");
+            _charge(roles[signer]);
+        }
+
+        /// Whether two transactions call the move of one node and differ beyond their fees.
+        function _secondForNode(bytes calldata first, bytes calldata second) internal view returns (bool) {
+            (bool firstMove, uint256 firstNode, bytes32 firstIdentity) = _moveOf(first);
+            (bool secondMove, uint256 secondNode, bytes32 secondIdentity) = _moveOf(second);
+            return firstMove && secondMove && firstNode == secondNode && firstIdentity != secondIdentity;
+        }
+
+        /// The game account that signed `t`, while the audit window is open.
+        function _signer(bytes calldata t, bytes calldata signature) internal view returns (address signer) {
+            require(endedAt != 0 && block.timestamp <= endedAt + AUDIT_WINDOW, "audit closed");
+            require(signature.length == 65, "bad signature");
+            signer = ecrecover(keccak256(t), 27 + uint8(signature[64]), bytes32(signature[0:32]), bytes32(signature[32:64]));
+            require(signer != address(0), "bad signature");
+            require(_audited(roles[signer]), "not an audited account");
+        }
+
+        /// A transaction is well formed only as a plain call to this contract (no access
+        /// list, blobs or authorizations, which could carry data) with well-formed content.
+        function _wellFormedTransaction(address signer, bytes calldata t) internal view returns (bool) {
             (bool plain, address to, uint256 value, bytes calldata data) = _callOf(t);
             if (!plain || to != address(this)) return false;
-            try this.isPermitted(signer, value, data) returns (bool ok) {
+            try this.isWellFormed(signer, value, data) returns (bool ok) {
                 return ok;
             } catch {
                 return false;
             }
+        }
+
+        /// The node whose move a transaction calls, if any, and the transaction's
+        /// identity up to its fees: its nonce, value and calldata.
+        function _moveOf(bytes calldata t) internal view returns (bool isMove, uint256 node, bytes32 identity) {
+            (bool plain, address to, uint256 value, bytes calldata data) = _callOf(t);
+            if (!plain || to != address(this) || data.length < 4) return (false, 0, bytes32(0));
+            (isMove, node) = _nodeOf(bytes4(data[0:4]));
+            identity = keccak256(abi.encode(_nonceOf(t), value, keccak256(data)));
         }
 
         /// Destination, value and calldata of a transaction payload, and whether it
@@ -370,6 +407,13 @@ private fun StringBuilder.renderAudit(contract: EvmContract, audit: EvmAudit) {
             data = t[dataStart:dataStart + dataLength];
         }
 
+        /// The nonce of a plain transaction payload: the first item of a legacy list,
+        /// the second (after the chain id) of a typed one.
+        function _nonceOf(bytes calldata t) internal pure returns (uint256) {
+            (uint256 start, uint256 length) = uint8(t[0]) >= 0xc0 ? _rlpItem(t, 0, 0) : _rlpItem(t, 1, 1);
+            return _bigEndian(t[start:start + length]);
+        }
+
         /// Content offset and length of item `index` of the RLP list at `list`.
         function _rlpItem(bytes calldata t, uint256 list, uint256 index) internal pure returns (uint256, uint256) {
             (uint256 pos, uint256 length) = _rlpHeader(t, list);
@@ -397,32 +441,44 @@ private fun StringBuilder.renderAudit(contract: EvmContract, audit: EvmAudit) {
         }
     """.trimIndent())
     appendLine()
-    renderPermitted(contract)
+    renderNodeOf(contract)
+    renderWellFormed(contract)
+}
+
+/** `_nodeOf(selector)`: the schedule node whose move has this selector, if any. */
+private fun StringBuilder.renderNodeOf(contract: EvmContract) {
+    append("function _nodeOf(bytes4 selector) internal view returns (bool, uint256)")
+    block {
+        contract.actions.forEach { a ->
+            appendLine("if (selector == this.${a.name}.selector) return (true, ${a.node});")
+        }
+        appendLine("return (false, 0);")
+    }
+    appendLine()
 }
 
 /**
- * `isPermitted(actor, value, data)`: whether a call to this contract, signed by
- * `actor`, is permitted in the phase it names. A game account may call
- * `settle()`, its own withdrawal, and the moves of its own nodes. A move is
- * permitted when its context is the readiness hash of its node (so it was made
- * once the node was granted) and its content passes the move's checks: the
- * domain, the guard, and, for an opening, the commitment. Its timing and
- * whether it was included do not matter. Calldata must be canonical: nothing
- * may ride along after the arguments.
+ * `isWellFormed(actor, value, data)`: whether a call to this contract, signed
+ * by `actor`, is a well-formed move, as VegasCore's count audit requires of a
+ * packet. It must call the move of a node `actor`'s role owns, carry that
+ * node's readiness credential (so it was made once the node was ready), the
+ * exact ETH the move requires, and canonical calldata (nothing may ride along
+ * after the arguments), and its content must pass the move's domain checks
+ * and, for an opening, open the commitment. A value that fails the move's
+ * `where` constraint is well formed: it is a failed move, as in the source
+ * game, not a forbidden one. Timing and inclusion do not matter. Nothing
+ * else is well formed, including `settle()` and withdrawals: anyone else may
+ * call `settle()`, and a withdrawal is only possible after the audit closes.
  */
-private fun StringBuilder.renderPermitted(contract: EvmContract) {
+private fun StringBuilder.renderWellFormed(contract: EvmContract) {
     val owners = contract.schedule.nodes.map { it.owner }
-    append("function isPermitted(address actor, uint256 value, bytes calldata data) external view returns (bool)")
+    append("function isWellFormed(address actor, uint256 value, bytes calldata data) external view returns (bool)")
     block {
         appendLine("if (data.length < 4) return false;")
         appendLine("bytes4 selector = bytes4(data[0:4]);")
         appendLine("bytes calldata args = data[4:];")
-        appendLine("if (selector == this.settle.selector) return value == 0 && args.length == 0;")
-        contract.withdrawals.forEach { w ->
-            appendLine("if (selector == this.${w.name}.selector) return value == 0 && args.length == 0 && roles[actor] == $roleEnumName.${w.role.name};")
-        }
         contract.actions.forEach { a ->
-            appendLine("if (selector == this.${a.name}.selector) return value == ${a.value} && _permitted_${a.name}(actor, args);")
+            appendLine("if (selector == this.${a.name}.selector) return value == ${a.value} && _wellFormed_${a.name}(actor, args);")
         }
         appendLine("return false;")
     }
@@ -430,7 +486,7 @@ private fun StringBuilder.renderPermitted(contract: EvmContract) {
     contract.actions.forEach { a ->
         require(a.inputs.all { it.type in setOf(Int256, Uint256, Bool, Bytes32) }) { "${a.name} has a dynamic input" }
         val owner = owners[a.node]
-        append("function _permitted_${a.name}(address actor, bytes calldata args) internal view returns (bool)")
+        append("function _wellFormed_${a.name}(address actor, bytes calldata args) internal view returns (bool)")
         block {
             appendLine("if (args.length != ${32 * a.inputs.size}) return false;")
             appendLine("if (roles[actor] != $roleEnumName.${owner.name}) return false;")
@@ -439,9 +495,9 @@ private fun StringBuilder.renderPermitted(contract: EvmContract) {
                 val types = a.inputs.joinToString(", ") { renderType(it.type) }
                 appendLine("($names) = abi.decode(args, ($types));")
             }
-            if (a.inputs.any { it.name == CONTEXT_PARAM }) {
-                val ctx = renderExpr(Var(CONTEXT_PARAM))
-                appendLine("if ($ctx == bytes32(0) || $ctx != readyHash[${a.node}]) return false;")
+            if (a.inputs.any { it.name == CREDENTIAL_PARAM }) {
+                val credential = renderExpr(Var(CREDENTIAL_PARAM))
+                appendLine("if ($credential == bytes32(0) || $credential != readyHash[${a.node}]) return false;")
             }
             a.guards.forEach { appendLine("if (!(${renderExpr(it)})) return false;") }
             a.body.filterIsInstance<CheckReveal>().forEach { check ->
@@ -478,7 +534,7 @@ private fun StringBuilder.renderConstructor(schedule: EvmSchedule, init: List<Ev
         appendLine("deployedAt = block.timestamp;")
         if (schedule.usesBeacon) appendLine("BEACON = beacon;")
         if (audit != null) {
-            // Source nodes are ready at deployment; their moves carry the deployment block's hash.
+            // Source nodes are ready at deployment; their moves carry the deployment block's hash as credential.
             schedule.nodes.withIndex().filter { it.value.predecessors.isEmpty() }.forEach { (i, _) ->
                 appendLine("readyAt[$i] = block.timestamp;")
                 appendLine("readyBlock[$i] = block.number;")
@@ -496,9 +552,9 @@ private fun StringBuilder.renderAction(a: EvmAction, audit: EvmAudit?) {
     block {
         appendLine("_beginMove(${a.node}, $roleEnumName.${a.invokedBy});")
         if (audit != null) {
-            appendLine("require(${renderExpr(Var(CONTEXT_PARAM))} == readyHash[${a.node}], \"stale context\");")
+            appendLine("require(${renderExpr(Var(CREDENTIAL_PARAM))} == readyHash[${a.node}], \"stale credential\");")
         }
-        a.guards.forEach { guard ->
+        (a.guards + a.constraints).forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
         a.body.forEach { renderStmt(it) }
@@ -524,7 +580,7 @@ private fun StringBuilder.renderWithdrawal(w: EvmWithdrawal, audit: EvmAudit?) {
         appendLine("    payout = ${renderPayoffExpr(w.payout)};")
         appendLine("}")
         if (audit != null) {
-            appendLine("if (${roleJoined(w.role.name)} && !charged[$roleEnumName.${w.role.name}]) payout += int256(${audit.bonds.getValue(w.role)});")
+            appendLine("if (${roleJoined(w.role.name)} && !charged[$roleEnumName.${w.role.name}]) payout += int256(${audit.deposits.getValue(w.role)});")
         }
         appendLine("claimed_${w.role.name} = true;")
         appendLine("if (payout > 0) {")

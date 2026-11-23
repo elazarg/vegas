@@ -8,17 +8,20 @@ import vegas.backend.evm.EvmExpr.*
 import vegas.backend.evm.EvmStmt.*
 import vegas.backend.evm.EvmType.*
 import vegas.frontend.SAMPLE_OWNER
-import vegas.semantics.payoutRanges
+import vegas.semantics.utilityBounds
 import java.math.BigInteger
 
 /**
- * Terminal-audit policy for [compileToEvm].
+ * Count-audit policy for [compileToEvm].
  *
- * A player's first departure is collected with probability at least
- * [coverage], so a bond of `range / coverage` deters every departure whose
- * gain is at most `range` (VegasCore's `rosterAuditDeposit`). The range is the
- * role's payout range over every way the game can end ([payoutRanges]); for a
- * game too large to enumerate it is the whole pot, which bounds every payout.
+ * [coverage] is the claimed probability `p = alpha * beta` that a forbidden
+ * transaction of a player is observed (`alpha`) and its report delivered
+ * (`beta`), whatever the rest of the traffic. VegasCore's theorem
+ * (`Vegas.Paper.intended_raw_sequentialEquilibrium_preserved`) needs the
+ * expected charge `p * d` to cover the role's utility spread
+ * `max(0, a, hi) - min(0, a, lo)`, where `a` is its utility after quitting
+ * (see [vegas.semantics.UtilityBounds]); the audit deposit `d` is that spread
+ * divided by `p`, rounded up.
  */
 data class AuditPolicy(
     val coverage: vegas.Rational = vegas.Rational(1),
@@ -31,9 +34,42 @@ data class AuditPolicy(
         require(windowSeconds > 0) { "audit window must be positive" }
     }
 
-    /** The bond for a payout range: `ceil(range / coverage)`. */
-    fun bond(range: Int): Int =
-        ((range.toLong() * coverage.denominator + coverage.numerator - 1) / coverage.numerator).toInt()
+    /** The audit deposit for a utility spread: `ceil(spread / coverage)`. */
+    fun deposit(spread: Int): Int =
+        ((spread.toLong() * coverage.denominator + coverage.numerator - 1) / coverage.numerator).toInt()
+}
+
+/**
+ * Each strategic role's audit deposit under [policy], after checking the
+ * hypotheses of VegasCore's theorem that the game itself must meet: its
+ * histories can be enumerated (finite payload types), every role that can
+ * quit has a declared exit payout, the utility of a role that quit is fixed,
+ * and it is no better than the role's utility at any outcome where nobody
+ * quits.
+ */
+fun auditDeposits(game: GameIR, policy: AuditPolicy): Map<RoleId, Int> {
+    val bounds = requireNotNull(utilityBounds(game)) {
+        "${game.name}: an audited contract needs a game whose histories can be enumerated; " +
+            "give every parameter a finite type"
+    }
+    return game.payoffs.keys.associateWith { role ->
+        val b = bounds[role] ?: error("${game.name}: no terminal history for $role")
+        if (b.exits.isNotEmpty()) {
+            require(role in game.exits) {
+                "${game.name}: $role can quit, so an audited contract needs its exit payout: " +
+                    "add `exit { ${role.name} -> <amount> }` after the withdraw outcome"
+            }
+            val exit = requireNotNull(b.exit) {
+                "${game.name}: the utility of $role after quitting must be fixed, but takes the values " +
+                    "${b.exits.sorted()}; its utility clause must give one value on every history where it quits"
+            }
+            require(b.intendedLower == null || exit <= b.intendedLower) {
+                "${game.name}: $role's utility after quitting ($exit) exceeds its utility at an outcome " +
+                    "where nobody quits (${b.intendedLower}); lower its exit payout"
+            }
+        }
+        policy.deposit(b.spread)
+    }
 }
 
 /**
@@ -43,12 +79,7 @@ data class AuditPolicy(
 fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
     val dag = game.dag
     val evmAudit = audit?.let { policy ->
-        val pot = game.roles.sumOf { dag.deposit(it).v }
-        val ranges = payoutRanges(game)
-        EvmAudit(
-            bonds = game.payoffs.keys.associateWith { role -> policy.bond(ranges?.get(role)?.width ?: pot) },
-            windowSeconds = policy.windowSeconds,
-        )
+        EvmAudit(deposits = auditDeposits(game, policy), windowSeconds = policy.windowSeconds)
     }
     // Private draws are the players' own knowledge and have no on-chain
     // presence: they leave the schedule, and a node that waited for one
@@ -58,11 +89,11 @@ fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
     fun onChainPredecessors(id: NodeId): Set<NodeId> = dag.prerequisitesOf(id).flatMap { p ->
         if (dag.isPrivateDraw(p)) onChainPredecessors(p) else setOf(p)
     }.toSet()
-    // An audited service grants events one at a time, in schedule order, as
-    // VegasCore's roster service does: each event also waits for the event
-    // granted before it. Joins stay concurrent; they precede play.
+    // An audited contract runs VegasCore's information graph: every event
+    // also waits for the event before it in schedule order, so events become
+    // ready one at a time. Joins stay concurrent; they precede play.
     val events = order.filter { dag.spec(it).join == null }
-    val grantedBefore: Map<NodeId, NodeId> =
+    val previousEvent: Map<NodeId, NodeId> =
         if (audit == null) emptyMap() else events.zipWithNext().associate { (before, next) -> next to before }
 
     val schedule = EvmSchedule(
@@ -70,14 +101,13 @@ fun compileToEvm(game: GameIR, audit: AuditPolicy? = null): EvmContract {
             EvmScheduleNode(
                 actionId = id,
                 owner = dag.owner(id),
-                predecessors = (onChainPredecessors(id) + listOfNotNull(grantedBefore[id]))
+                predecessors = (onChainPredecessors(id) + listOfNotNull(previousEvent[id]))
                     .map { position.getValue(it) }.distinct().sorted(),
                 kind = when {
                     dag.spec(id).join != null -> EvmNodeKind.JOIN
                     isBeaconDraw(dag, id) -> EvmNodeKind.DRAW
                     else -> EvmNodeKind.MOVE
                 },
-                commitment = dag.kind(id) == Visibility.COMMIT,
             )
         },
         draws = order.filter { isBeaconDraw(dag, it) }.map { buildDraw(it, dag, position.getValue(it)) },
@@ -225,7 +255,7 @@ private fun buildAction(
     val hidden = kind == Visibility.COMMIT
 
     val inputs = buildList {
-        if (audit != null) add(EvmParam(CONTEXT_PARAM, Bytes32))
+        if (audit != null) add(EvmParam(CREDENTIAL_PARAM, Bytes32))
         spec.params.forEach { p ->
             val type = if (hidden) Bytes32 else translateType(p.type)
             add(EvmParam(VarId(inputParam(p.name, hidden)), type))
@@ -236,30 +266,28 @@ private fun buildAction(
         }
     }
 
-    // Guards - `where` expressions, checked when the value becomes public.
-    val guards = if (!hidden) {
-        translateDomainGuards(spec.params) +
-            translateSampleSupportGuards(meta) +
-            if (spec.guardExpr != Expr.Const.BoolVal(true)) {
-                listOf(
-                    translateExpr(
-                        spec.guardExpr,
-                        contextOwner = meta.struct.owner,
-                        contextParams = spec.params.map { it.name }.toSet()
-                    )
-                )
-            } else {
-                listOf()
-            }
-    } else {
+    // Checks on a public value: its type's domain (and a draw's support), and
+    // the `where` constraint. The audit judges a transaction by the former
+    // only: a value that fails its constraint is a failed move, not a
+    // forbidden one.
+    val domain = if (hidden) listOf() else translateDomainGuards(spec.params) + translateSampleSupportGuards(meta)
+    val constraints = if (hidden || spec.guardExpr == Expr.Const.BoolVal(true)) {
         listOf()
+    } else {
+        listOf(
+            translateExpr(
+                spec.guardExpr,
+                contextOwner = meta.struct.owner,
+                contextParams = spec.params.map { it.name }.toSet()
+            )
+        )
     }
 
     val body = buildList {
         // Join Logic (Deposit, Role assignment)
         if (spec.join != null) {
             val role = meta.struct.owner
-            val deposit = spec.join.deposit.v + (audit?.bonds?.get(role) ?: 0)
+            val deposit = spec.join.deposit.v + (audit?.deposits?.get(role) ?: 0)
 
             add(
                 Require(
@@ -314,10 +342,11 @@ private fun buildAction(
         name = "move_${meta.struct.owner}_$idx",
         invokedBy = if (join != null) RoleId(roleNone) else meta.struct.owner,
         inputs = inputs,
-        payable = join != null && join.deposit.v + (audit?.bonds?.get(meta.struct.owner) ?: 0) > 0,
+        payable = join != null && join.deposit.v + (audit?.deposits?.get(meta.struct.owner) ?: 0) > 0,
         isJoin = join != null,
-        value = if (join == null) 0 else join.deposit.v + (audit?.bonds?.get(meta.struct.owner) ?: 0),
-        guards = guards,
+        value = if (join == null) 0 else join.deposit.v + (audit?.deposits?.get(meta.struct.owner) ?: 0),
+        guards = domain,
+        constraints = constraints,
         body = body
     )
 }

@@ -21,7 +21,11 @@ See docs/DESIGN.md section 0 for the correspondence and deliberate differences.
   integer subtraction, multiplication and comparison. Either extend
   simpleExpr in VegasCore or supply an IExpr mirroring Vegas expressions.
   Also compare the Vegas event graph with the core compiler's.
-* Terminal audit for the Vyper backend (Solidity only today).
+* Count audit for the Vyper backend (Solidity only today).
+* The audited contract checks an opening against the commitment it accepted;
+  VegasCore's count rule also permits opening a signed commitment that was
+  never accepted (stricter only for a role that already quit). Matching it
+  exactly needs evidence that pairs the opening with that signed commitment.
 * A drand (evmnet) beacon adapter with on-chain BLS verification; test the
   VRF adapter (contracts/VrfBeacon.sol) against Chainlink's contracts.
 

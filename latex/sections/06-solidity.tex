@@ -226,7 +226,7 @@ step for games whose state space the enumerator cannot cover
 (unbounded \TT{int} parameters, very deep trees); the current
 check is best-effort on those and tracked in \file{TODO.txt}.
 
-\subsection{Terminal audit}
+\subsection{Count audit}
 \label{sec:solidity:audit}
 
 A contract can enforce who moves, when, and with which values, but not
@@ -235,29 +235,40 @@ its calldata, so a player can disclose a hidden choice before the game
 allows it; the opponent reads it and reacts.  In a coordination game
 this lets a player move first and make the other follow, a deviation
 the source game does not have.  With \TT{--audited}, the Solidity
-backend emits the terminal-audit service of VegasCore's
-sequential-equilibrium theorem.  Every role posts a bond of its payout
-range (over every way the game can end, including quits and aborts)
-divided by the claimed collection probability.  Events are granted one
-at a time, in schedule order.  Every move carries the hash of the block
-in which its node became ready, so a signed move proves it was made
-once its node was granted.  A role that lets its own commitment expire
-loses its bond; withholding an opening costs nothing.  After play ends,
-anyone can submit a transaction signed by a game account, and the
-contract judges it by its content in the phase it names.  A move of the
-signer's own node, carrying that node's readiness hash and passing the
-move's domain, guard and opening checks, is permitted whether or not it
-was included in time; so are \TT{settle()} and the signer's own
-withdrawal.  Anything else burns the bond: an early or wrong opening, a
-move of another role's node, appended calldata, a transaction to
-another address, and any blob or set-code transaction, whose side data
-could carry a secret.  A watcher (\TT{vegas watch}) collects the game
+backend realizes the count audit of VegasCore's sequential-equilibrium
+theorem, which preserves the equilibria of the intended game (every
+commitment acceptable, every reveal attempted).  The game must declare
+an \TT{exit} payout for every role that can quit, so that a quitter's
+utility is fixed and no better than any outcome where nobody quits;
+the compiler checks both, and refuses a game it cannot enumerate.
+Every role posts an audit deposit of its utility spread
+$\max(0,a,\mathit{hi})-\min(0,a,\mathit{lo})$, where $a$ is its exit
+utility and $[\mathit{lo},\mathit{hi}]$ bounds its utility over every
+way the game can end, divided by the claimed probability of observing
+a forbidden transaction and delivering its report.  Events become
+ready one at a time, in schedule order.  Every move carries a
+readiness credential, the hash of the block in which its node became
+ready, so a signed move proves it was made once its node was ready.
+Quitting is never charged.  After play ends, anyone can submit evidence
+signed by a game account.  A game account may send one well-formed
+move per node it owns: one carrying that node's credential and passing
+the move's domain and opening checks, whether or not it was included
+in time.  A value that fails the move's \TT{where} constraint is well
+formed; the move fails and its owner quits, as a failed publication
+does in the source game.  Anything else burns the deposit: an early or
+wrong opening, a move of another role's node, appended calldata, a call
+of \TT{settle()} or a withdrawal, a transaction to another address, any
+blob or set-code transaction, whose side data could carry a secret, and
+a second transaction for a node, shown by a pair of signed
+transactions that differ in nonce, value or calldata (a fee bump is the
+same transaction).  A watcher (\TT{vegas watch}) collects the game
 accounts' transactions from the chain and from the pools of the nodes
 it watches.  It is trusted for coverage only: it cannot frame a player,
-whose signature, readiness context and content are checked on chain.
+whose signature, credential and content are checked on chain.
 Coverage of traffic that never reaches a watched pool, protected
 inclusion, finality, and the fee fields every sender chooses freely
-remain assumptions; \file{docs/AUDITED-RUNTIME.md} lists them.
+remain assumptions; \file{SE\_RUNTIME\_SPEC.md} and
+\file{docs/AUDITED-RUNTIME.md} list them.
 Public draws read the first beacon round after readiness plus a delay
 longer than the chain's finality, so no proposer can see the round
 while it can still decide whether the draw becomes ready.

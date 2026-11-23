@@ -12,8 +12,11 @@ VegasCore (`../VegasCore`) is the companion Lean 4 development. Its source
 language, `SourceProgram` with an initial `Setup`, has four constructors:
 `ret`, `sample`, `commit` and `reveal`, where a disclosure has a typed
 publication result (`ok v` or failure). It compiles to a dependency-driven
-`EventGraph` and a pending-message runtime, and proves that equilibria
-survive compilation, up to sequential equilibrium under an audited service.
+`EventGraph` and a pending-message ledger model, and proves that equilibria
+survive compilation: Nash equilibria in general, and sequential equilibria
+of the intended game under a funded count audit with a fixed exit utility.
+The paper calls a quit a *default*; in Vegas "default" means a default value,
+so Vegas keeps "quit".
 
 Vegas is a different, richer surface language and a multi-backend compiler,
 not a front end of VegasCore. Where both describe the same object they use
@@ -31,19 +34,17 @@ the same name and, since the fixes recorded below, the same semantics.
 | `sample (x: T ~ D)` | `sample` (public chance from a declared kernel); on EVM realized by a beacon (`EntropySource.Beacon`), because the chance contract forbids choosing, retrying or withholding a draw |
 | `sample Role(x: T ~ D)` before the role's first move | a private type drawn by the `Setup` and observed by that player alone |
 | `withdraw { ... }` | `ret` |
+| a role quits (misses a deadline, persistently) | a public default (binding omission or failed publication); later instructions of the defaulted player complete automatically |
+| `exit { Role -> n }` | the setup's exit transfer: replaces all payouts of a player that defaulted |
 | `utility { Role -> e }` | the player's utility (defaults to the payout net of the deposit) |
 | `null`, `|| null`, `or split/burn`, `|| { ... }` | explicit elimination of the publication result; handlers are sugar for the failure branch |
 | `where` guard reading another role's field | a guard is discharged when a publication it reads failed; no value is invented |
 | `join ... $ d` | the `Setup` precondition: a missing join aborts the instance with refunds; money has no core counterpart |
 | readiness-relative deadlines (`TIMEOUT` from readiness) | relative deadlines from the event's readiness |
-| `--audited` terminal audit and watcher (`docs/AUDITED-RUNTIME.md`) | the audited roster service of `SourceServiceSpec`: events granted one at a time, a missed commitment charged, evidence judged by its content in the phase it names; bonds as in `rosterAuditDeposit` |
+| `--audited` count audit and watcher (`docs/AUDITED-RUNTIME.md`, `SE_RUNTIME_SPEC.md`) | the hypotheses of `Vegas.Paper.intended_raw_sequentialEquilibrium_preserved` (`ClientSpec`): the information graph (events ready one at a time), the count audit (one well-formed move per owned event; quitting never charged), a fixed exit utility, and deposits with `coverage * deposit >= max(0, a, hi) - min(0, a, lo)` |
 
 ### 0.2 Deliberate differences
 
-* **Quitting is persistent.** In Vegas a role that fails to act has no later
-  moves; VegasCore's failure is per publication. The Vegas behaviour is
-  expressible in the core: guard each later commitment of the role on "all its
-  earlier publications succeeded", so later publications fail.
 * **Guards on public moves restrict the legal values.** A `where` clause on a
   `yield` rejects an illegal value outright. On a reveal, an opening that
   violates its guard is rejected, and the honest client withholds instead;
@@ -84,8 +85,14 @@ the same name and, since the fixes recorded below, the same semantics.
   cells, because `simpleExpr` has no integer subtraction, multiplication or
   comparison, so value semantics is not checked. Nor is the dependency graph
   compared with the core compiler's, whose definitions are noncomputable.
+  Only the program is emitted, not the setup, so exit payouts are not
+  emitted either; the payoffs a placeholder stands for already include them.
 * **The audited runtime covers Solidity only.** The watcher encodes all five
   transaction types (see `docs/AUDITED-RUNTIME.md` for its assumptions).
+* **The audited contract checks an opening against the commitment it
+  accepted.** VegasCore's count rule also permits opening a commitment that
+  was signed but never accepted; the contract charges it. This is stricter
+  only for a role that has already quit at that commitment.
 
 ---
 

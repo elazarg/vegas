@@ -12,7 +12,7 @@ import vegas.backend.evm.EvmType.*
  */
 fun generateVyper(contract: EvmContract): String {
     require(contract.audit == null) {
-        "Terminal audit is implemented for the Solidity backend only; compile without an audit policy for Vyper"
+        "The count audit is implemented for the Solidity backend only; compile without an audit policy for Vyper"
     }
     val schedule = contract.schedule
     return buildString {
@@ -269,7 +269,7 @@ private fun StringBuilder.renderAction(a: EvmAction) {
 
     indent {
         appendLine("self._beginMove(${a.node}, ${roleEnumMember(a.invokedBy.name)})")
-        a.guards.forEach { guard ->
+        (a.guards + a.constraints).forEach { guard ->
             renderStmt(Require(guard, "domain"))
         }
         a.body.forEach { renderStmt(it) }

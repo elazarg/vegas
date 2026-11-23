@@ -33,27 +33,35 @@ deadlines.
 \label{sec:vegascore:theorems}
 
 \begin{itemize}\itemsep2pt
-\item \emph{Outcome and deviation laws.}  Compiling to the event
-  graph and the pending-message runtime preserves each compiled
-  profile's outcome law exactly, and maps every unilateral
-  deviation in the runtime to a finite mixture of legal source
-  deviations; hence Nash and same-error $\varepsilon$-Nash
-  equilibria are preserved and reflected.  The event-graph proof
-  uses a barrier discipline: public events wait for every earlier
-  event, and only commitments of different owners are concurrent.
+\item \emph{Outcome laws and Nash equilibria.}  Compiling to the
+  event graph and the ledger model preserves each compiled
+  profile's outcome law exactly.  On the \emph{information graph},
+  where every event waits for the one before it, clients that act
+  at their first turn are an $\varepsilon$-Nash equilibrium of the
+  ledger game exactly when the source profile is one of the source
+  game, with an authentic audit and no coverage requirement.  A
+  dependency choice may relax the order between commitments of
+  different owners and between independent openings; intended Nash
+  equilibria survive it, under a utility-only forfeit for failed
+  reveals.
 \item \emph{Obstructions to stronger preservation.}  Checked
   counterexamples show that subgame perfection and sequential
   equilibrium are not preserved in general: an early opening, or a
   disclosure that the source records as failed, gives an opponent
   information the source game does not.
-\item \emph{Sequential equilibrium under an audited service.}  For
-  the full language with finite commitment payloads, every source
-  sequential equilibrium has a sequential equilibrium of the audited
-  bounded runtime with the same joint law of typed outcome and
-  realized settlement.  The service must record authentic evidence,
-  classify it soundly, collect a forbidden record with a positive
-  probability, and settle a fixed deposit of payoff range over that
-  probability.
+\item \emph{Sequential equilibrium under a count audit.}  On the
+  information graph, with finite payloads, every sequential
+  equilibrium of the \emph{intended} game (commitments acceptable to
+  their guards, every reveal attempted) is realized by a sequential
+  equilibrium of the ledger game with the intended joint law of
+  terminal configuration and payoffs, and with no defaults (Vegas's
+  quits) or charges on path.  A defaulted player gets a fixed exit
+  utility $a_i$, no better than any intended outcome.  The audit
+  permits each player one well-formed packet per event it owns and
+  charges nothing else, including omissions; it must be authentic
+  and observe and deliver a forbidden packet with probability at
+  least $p_i$, and the deposit $d_i$ must satisfy
+  $p_i d_i \ge \max(0,a_i,\mathit{hi}_i)-\min(0,a_i,\mathit{lo}_i)$.
 \end{itemize}
 
 These results fix the service contract a deployment has to meet, and
@@ -77,6 +85,8 @@ guard (\TT{scope}, \TT{expr}) & per-node guard $R$ \\
 frontier (\TT{FrontierMachine}) & frontier \\
 \TT{sample}                 & \TT{sample} \\
 \TT{withdraw}               & \TT{ret} \\
+a role quits                & a player defaults \\
+\TT{exit} payout            & exit transfer \\
 handler branches            & failure branch of a disclosure \\
 \bottomrule
 \end{tabular}
@@ -108,10 +118,12 @@ follow in source order.  A theorem that the rewrite preserves the
 strategic content of the pre-rewrite program is not stated.
 
 \paragraph{Quitting.}  In Vegas a player that misses a deadline
-quits for the rest of the game; in VegasCore failure is per
-disclosure.  The Vegas behaviour is expressible in the core by
-guarding each later commitment of the player on the success of its
-earlier disclosures.  Both use deadlines relative to readiness.
+quits for the rest of the game; VegasCore calls this a default, and
+there too a binding omission or a failed publication ends the
+player's choices and completes its later instructions with failure.
+An \TT{exit} clause fixes a quitter's payout, as the core's exit
+transfer does.  Both use deadlines relative to readiness.  Vegas
+keeps the word ``quit'': in Vegas a default is a default value.
 
 \paragraph{Private inputs.}  VegasCore's \TT{Setup} gives players
 private initial types, as in auctions with private valuations.  In

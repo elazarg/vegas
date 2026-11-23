@@ -242,8 +242,9 @@ fun main(args: Array<String>) {
                             `lake env lean <file>.core.lean` in a built VegasCore checkout
 
             Audited settlement (see docs/AUDITED-RUNTIME.md):
-              --audited             Solidity with bonds, readiness contexts and a terminal audit
-              --coverage p/q        Claimed watcher coverage (default 1); bond = payout range / coverage
+              --audited             Solidity with audit deposits, readiness credentials and a count audit
+              --coverage p/q        Claimed probability of observing and delivering a forbidden transaction
+                                    (default 1); deposit = utility spread / coverage
 
             Interactive mode:
               --play        Play the game interactively in the terminal (local runtime)

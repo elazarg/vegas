@@ -9,7 +9,7 @@ private val operatorTexts = setOf(
 )
 
 private val keywordTexts = setOf(
-    "type", "join", "yield", "reveal", "random", "withdraw",
+    "type", "join", "yield", "reveal", "random", "withdraw", "exit",
     "where", "let", "in", "let!", "hidden", "null", "true", "false"
 )
 

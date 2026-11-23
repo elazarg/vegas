@@ -195,6 +195,25 @@ finite, meaning uniform over `T`. The role must already have joined.
 
 See `examples/PrivateValueAuction.vg`.
 
+#### `exit` payouts
+
+An `exit` clause after the `withdraw` outcome (and before any `utility`
+clause) fixes what a role is paid once it quits:
+
+```vegas
+withdraw (Alice.opera && Bob.opera) ? { Alice -> 16; Bob -> 4 } : ...
+exit { Alice -> 0; Bob -> 0 }
+```
+
+A role that quit gets its exit payout and nothing else, whatever the
+outcome and its handlers would pay it; they still decide what the other
+roles get. A role without an exit payout is paid by the outcome, as
+before. The analysis backends and the contract all use the same payout,
+and pot conservation is checked with it. In VegasCore this is the setup's
+*exit transfer* (the paper calls quitting *default*). An audited contract
+(`--audited`) requires an exit payout for every role that can quit; see
+`docs/AUDITED-RUNTIME.md`.
+
 #### Distribution annotation `~ D` on strategic actions
 
 A `commit P1(x: int ~ uniform { 0, 1, 2 })` on a *strategic* role is
@@ -239,8 +258,8 @@ Vegas implements a **non-blocking timeout** mechanism to prevent griefing (where
 
 - **Readiness**: A node is ready once every predecessor is resolved; its readiness time is the latest predecessor resolution.
 - **Deadline**: A ready node that is not played within `TIMEOUT` seconds of its readiness expires at that deadline, and its owner quits. Only a ready node can expire, so a player is never blamed for a move it could not yet make, and a move after its own deadline is rejected.
-- **Persistent quit**: A role that quit has no further moves; its later nodes resolve without a value, as in the analysis model.
-- **Settlement**: Anyone may call `settle()` to resolve what can be resolved; every move and withdrawal settles first. A role that quit can still withdraw what the `withdraw` clause assigns it.
+- **Persistent quit**: A role that quit has no further moves; its later nodes resolve without a value, as in the analysis model. (VegasCore's paper calls this a *default*.)
+- **Settlement**: Anyone may call `settle()` to resolve what can be resolved; every move and withdrawal settles first. A role that quit can still withdraw what the `withdraw` clause assigns it, or its `exit` payout if it has one.
 
 ### 3. Null Handling
 
@@ -261,7 +280,7 @@ withdraw (Alice.x != null)
     - Identifies "Risk Partners" (concurrent public moves).
     - **Rewrites DAG**: Inserts Commit and Reveal nodes for risk partners.
 4.  **Backend Generation**:
-    - **Solidity**: Generates the schedule, one entry point per move, and per-role withdrawals; optionally a terminal audit (see `docs/AUDITED-RUNTIME.md`).
+    - **Solidity**: Generates the schedule, one entry point per move, and per-role withdrawals; optionally a count audit (see `docs/AUDITED-RUNTIME.md`).
     - **Gambit**: Generates a game tree where concurrent DAG nodes share information sets.
 
 ## Related languages

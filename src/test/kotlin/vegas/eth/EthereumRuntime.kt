@@ -157,8 +157,8 @@ class EthereumSession(
      * Execute withdrawals and return actual payoffs from the contract.
      * Uses balance snapshots to determine exact payout amounts.
      * Accounts for gas costs by using Anvil's zero-base-fee mode.
-     * With a terminal audit, the audit window passes first, and the payoffs
-     * are reported net of the role's bond (the bond is returned unless burned).
+     * With a count audit, the audit window passes first, and the payoffs
+     * are reported net of the role's audit deposit (returned unless burned).
      */
     fun executeWithdrawals(): Map<RoleId, Long> {
         if (quitFrontier != null) letDeadlinesPass()
@@ -187,7 +187,7 @@ class EthereumSession(
             val balanceAfter = rpc.getBalance(account)
             // Balance delta may be negative due to gas costs; for small payoffs
             // use BigInteger subtraction then convert to Long
-            payoffs[role] = (balanceAfter - balanceBefore).toLong() - (evmContract.audit?.bonds?.get(role) ?: 0)
+            payoffs[role] = (balanceAfter - balanceBefore).toLong() - (evmContract.audit?.deposits?.get(role) ?: 0)
         }
 
         return payoffs
@@ -232,10 +232,10 @@ class EthereumSession(
         .removePrefix("0x").toBigInteger(16).toLong()
 
     /**
-     * The readiness context an honest client binds into an audited move: the
+     * The readiness credential an honest client binds into an audited move: the
      * hash of the block in which the node became ready, once that block is sealed.
      */
-    fun contextFor(node: Int): ByteArray {
+    fun credentialFor(node: Int): ByteArray {
         if (viewAt("readyBlock(uint256)", node) == 0L) settle()
         val block = viewAt("readyBlock(uint256)", node)
         check(block != 0L) { "node $node is not ready" }
@@ -243,10 +243,10 @@ class EthereumSession(
         return rpc.blockHash(block)
     }
 
-    /** Arguments of [action]: the readiness context where required, then [values] for the rest. */
+    /** Arguments of [action]: the readiness credential where required, then [values] for the rest. */
     private fun arguments(action: EvmAction, values: (EvmParam) -> AbiValue): List<AbiValue> =
         action.inputs.map { param ->
-            if (param.name == CONTEXT_PARAM) AbiValue.Bytes32(contextFor(action.node)) else values(param)
+            if (param.name == CREDENTIAL_PARAM) AbiValue.Bytes32(credentialFor(action.node)) else values(param)
         }
 
     /** The entry point of a node, and its ABI signature (for off-script transactions). */
@@ -297,12 +297,12 @@ class EthereumSession(
 
         val calldata = Hex.encode(AbiCodec.encodeCall(selector, *args.toTypedArray()))
 
-        // Compute value (deposit, plus the audit bond, for join actions)
+        // Compute value (stake, plus the audit deposit, for join actions)
         val weiValue = if (isJoin) {
             val deposit = game.dag.spec(move.actionId).join?.deposit?.v
                 ?: error("Join action ${action.name} has no deposit")
-            val bond = evmContract.audit?.bonds?.get(move.role) ?: 0
-            "0x" + (deposit + bond).toLong().toString(16)
+            val auditDeposit = evmContract.audit?.deposits?.get(move.role) ?: 0
+            "0x" + (deposit + auditDeposit).toLong().toString(16)
         } else {
             "0x0"
         }

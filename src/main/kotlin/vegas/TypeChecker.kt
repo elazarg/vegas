@@ -622,6 +622,7 @@ internal class ProtocolTyper(
                     privateFields = st.privateFields.keys,
                 )
                 typeOutcome(ext.outcome, view)
+                ext.exits?.let { typeExits(it, st) }
                 ext.utility?.let { typeUtility(it, st) }
             }
             is Ext.BindSingle -> typeExt(Ext.Bind(ext.kind, listOf(ext.q), ext.handler, ext.ext), st)
@@ -839,6 +840,16 @@ internal class ProtocolTyper(
      * leave missing by quitting is nullable here, whatever its handler: the
      * utility is defined on every way the game can end.
      */
+    /** Exit payouts are given only to strategic roles, the ones that can quit. */
+    private fun typeExits(exits: Map<Role, Int>, st: State) {
+        val strategic = st.roles - st.randomRoles
+        for (role in exits.keys) {
+            if (role.id !in strategic) {
+                throw StaticError("An exit payout is given only to strategic roles; '${role.id.name}' is not one", role)
+            }
+        }
+    }
+
     private fun typeUtility(utility: Map<Role, Exp>, st: State) {
         val strategic = st.roles - st.randomRoles
         for (role in utility.keys) {

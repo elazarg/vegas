@@ -270,6 +270,11 @@ data class GameIR(
     val burn: Expr = Expr.Const.IntVal(0),
     /** Analysis utilities given by a `utility` clause; `Role.payout` is already substituted. */
     val utilities: Map<RoleId, Expr> = emptyMap(),
+    /**
+     * Exit payouts given by an `exit` clause. They are already folded into
+     * [payoffs]: a role that quit is paid its exit payout.
+     */
+    val exits: Map<RoleId, Int> = emptyMap(),
 ) {
     /** Roles whose moves are all chance draws; a strategic role owning a private draw is not one. */
     val chanceRoles: Set<RoleId> get() = dag.chanceRoles - roles

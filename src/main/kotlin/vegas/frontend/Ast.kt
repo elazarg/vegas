@@ -37,8 +37,17 @@ sealed class Ext : Ast() {
      * backends optimize, and may also read private draws and `Role.payout`
      * (the role's settlement). Without a utility clause a role's utility is
      * its payout net of its deposit.
+     *
+     * [exits] gives a role's exit payout: once the role quits, this fixed
+     * amount replaces whatever [outcome] would pay it. The other roles are
+     * still paid by [outcome]. (The VegasCore paper calls quitting "default"
+     * and this amount the "exit transfer".)
      */
-    data class Value @JvmOverloads constructor(val outcome: Outcome, val utility: Map<Role, Exp>? = null) : Ext()
+    data class Value @JvmOverloads constructor(
+        val outcome: Outcome,
+        val utility: Map<Role, Exp>? = null,
+        val exits: Map<Role, Int>? = null,
+    ) : Ext()
 }
 
 /**

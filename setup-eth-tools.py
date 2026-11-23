@@ -82,7 +82,7 @@ def install_foundry():
             ["curl", "-L", "https://foundry.paradigm.xyz"],
             capture_output=True, text=True, check=True,
         )
-        subprocess.run(["bash"], input=result.stdout, check=True)
+        subprocess.run(["bash"], input=result.stdout, text=True, check=True)
         # foundryup is now at ~/.foundry/bin/foundryup
         home_foundryup = Path.home() / ".foundry" / "bin" / "foundryup"
         if home_foundryup.exists():
