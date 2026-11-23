@@ -89,9 +89,10 @@ after seeing the others, which is profitable whenever withholding
 pays more than losing (the three-player \TT{RandomLeader} example is
 such a game).  The rewrite therefore orders the openings in source
 order, the analysis sees each later revealer's information, and the
-contract enforces the same order.  This is VegasCore's barrier
-discipline: public events wait for every earlier event, and only
-commitments of different owners are concurrent.  A multi-role
+contract enforces the same order.  In VegasCore's terms this is the
+dependency choice that relaxes only independent binds: every edge to or
+from a public event, and between bindings of one owner, is kept, so
+only commitments of different owners are concurrent.  A multi-role
 \TT{reveal} statement is ordered the same way.
 After the rewrite, no \REVEAL node is on the frontier of any
 configuration in which a sibling \COMMIT is still unresolved.
@@ -228,11 +229,12 @@ named commit is done.
 
 The companion Lean development VegasCore
 (\S\ref{sec:vegascore:theorems}) compiles its source language to
-event graphs with a stronger discipline: every public event waits
-for all earlier events, so commitments of different owners are the
-only concurrent events.  The rewritten graph has this shape: its
-concurrent nodes are commitments, and the openings follow each
-other in source order.  No theorem connects Vegas's rewrite to
+event graphs and lets a \emph{dependency choice} relax some of
+their source-order edges.  The rewritten graph matches the choice that
+relaxes only independent binds: it keeps every edge to or from a
+public event and between bindings of one owner, so its concurrent
+nodes are commitments of different owners, and the openings follow
+each other in source order.  No theorem connects Vegas's rewrite to
 VegasCore's graphs; the correspondence is a design contract.
 
 \subsection{Implementation}

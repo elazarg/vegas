@@ -30,7 +30,7 @@ the same name and, since the fixes recorded below, the same semantics.
 | `commit Role(x: T)` | `commit` (a binding owned by the role) |
 | `reveal Role(x: T)` | `reveal` (publication result `ok v` / failure) |
 | public `yield` of one role | a commit whose reveal follows at once |
-| `yield` of several roles in one statement | concurrent commits, then reveals one at a time in source order (`BarrierOrdered`: public events wait for every earlier event) |
+| `yield` of several roles in one statement | concurrent commits, then reveals one at a time in source order (the dependency choice that relaxes only independent binds: every edge to or from a public event, and between bindings of one owner, is kept) |
 | `sample (x: T ~ D)` | `sample` (public chance from a declared kernel); on EVM realized by a beacon (`EntropySource.Beacon`), because the chance contract forbids choosing, retrying or withholding a draw |
 | `sample Role(x: T ~ D)` before the role's first move | a private type drawn by the `Setup` and observed by that player alone |
 | `withdraw { ... }` | `ret` |

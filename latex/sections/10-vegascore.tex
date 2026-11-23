@@ -112,9 +112,10 @@ the anonymous \TT{sample}.
 an explicit rewrite (\S\ref{sec:commit-reveal}) that introduces
 commit-reveal pairs for concurrent public writes.  VegasCore has
 commit and reveal as primitive constructors and never needs a
-rewrite.  The rewritten graph is barrier-ordered in VegasCore's
-sense: commitments are the only concurrent events, and openings
-follow in source order.  A theorem that the rewrite preserves the
+rewrite.  The rewritten graph is, in VegasCore's terms, the
+dependency choice that relaxes only independent binds: commitments of
+different owners are the only concurrent events, and openings follow
+in source order.  A theorem that the rewrite preserves the
 strategic content of the pre-rewrite program is not stated.
 
 \paragraph{Quitting.}  In Vegas a player that misses a deadline
@@ -179,7 +180,7 @@ The current state of the connection:
 
 \begin{itemize}\itemsep1pt
 \item Vegas's IR follows VegasCore's semantic choices where the two
-  overlap: barrier-ordered openings, deadlines relative to readiness,
+  overlap: openings in source order, deadlines relative to readiness,
   guards discharged by failed publications, and chance that no
   player controls.  This is a design contract, checked by tests
   that replay model traces on chain, not a theorem.
