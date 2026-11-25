@@ -14,11 +14,11 @@
  * public data, publications and its own author's commitments, all in scope
  * where it is declared, and payoffs read only public cells.
  *
- * The emitted code is not the program's: `simpleExpr` has no integer
- * subtraction, multiplication or comparison, so guards and payoffs are
- * replaced by placeholders that read exactly the same cells. Value semantics
- * is therefore not checked, and neither is money (deposits, `burn`), which the
- * core does not have.
+ * Guard predicates and public payout expressions are emitted as concrete
+ * code. Guard evaluation uses successfully published inputs, as required by
+ * the core. The emitter refuses possibly undefined numeric expressions.
+ * Deposits, burn, strategic utilities and private setup laws are outside
+ * this source-program export.
  *
  * A game outside the core's fragment is refused with [UnsupportedCoreElaboration]
  * naming the construct; see [generateCoreSourceProgram].
@@ -27,6 +27,7 @@ package vegas.backend.vegascore
 
 import vegas.FieldRef
 import vegas.RoleId
+import vegas.frontend.guardBeforeFailureDischarge
 import vegas.ir.Dist
 import vegas.ir.EntropySource
 import vegas.ir.Expr
@@ -102,7 +103,7 @@ private class CoreElaborator(private val ir: GameIR) {
         val (initial, draws) = privateInputs(order)
         var ctx = initial
         val steps = mutableListOf<String>()
-        val guards = guardReadsByCommitment(order)
+        val guards = guardsByCommitment(order)
 
         for (id in order) {
             if (id in draws) continue
@@ -207,37 +208,41 @@ private class CoreElaborator(private val ir: GameIR) {
      * to `goat`, reading the earlier commitment to `car`, and the core checks
      * it when `car` is revealed, as Vegas does.
      */
-    private fun guardReadsByCommitment(order: List<NodeId>): Map<FieldRef, Set<FieldRef>> {
+    private fun guardsByCommitment(order: List<NodeId>): Map<FieldRef, List<Expr>> {
         val committedAt = mutableMapOf<FieldRef, Int>()
         for (id in order) {
             for ((field, visibility) in dag.visibilityOf(id)) {
                 if (visibility != Visibility.REVEAL) committedAt.putIfAbsent(field, committedAt.size)
             }
         }
-        val reads = mutableMapOf<FieldRef, Set<FieldRef>>()
+        val guards = mutableMapOf<FieldRef, MutableList<Expr>>()
         for (id in order) {
             val meta = dag.meta(id)
-            if (meta.sample != null || isTrue(meta.spec.guardExpr) || meta.spec.params.isEmpty()) continue
+            val predicate = guardBeforeFailureDischarge(meta)
+            if (meta.sample != null || isTrue(predicate) || meta.spec.params.isEmpty()) continue
             val owner = meta.struct.owner
-            val read = meta.spec.guardExpr.fieldsRead()
+            val read = predicate.fieldsRead()
             val subject = (meta.spec.params.map { FieldRef(owner, it.name) } + read.filter { it.owner == owner })
                 .filter { it in committedAt }
                 .maxBy { committedAt.getValue(it) }
-            reads[subject] = reads[subject].orEmpty() + read
+            guards.getOrPut(subject) { mutableListOf() }.add(predicate)
         }
-        return reads
+        return guards
     }
 
-    private fun guard(ctx: Context, author: RoleId, subject: Cell, readFields: Set<FieldRef>): String {
+    private fun guard(ctx: Context, author: RoleId, subject: Cell, predicates: List<Expr>): String {
+        val readFields = predicates.flatMap { it.fieldsRead() }.toSet()
         val schema = (readFields - subject.field).map { field ->
-            val (read, cell) = guardRead(ctx, field, subject)
+            val (read, cell) = guardRead(ctx, author, field, subject)
             Triple(field, read, cell)
         }
         val schemaIds = schema.map { (_, _, cell) -> cell.id }
-        val code = schema.foldIndexed(".eq (.var ${subject.id} .here) (.var ${subject.id} .here)") { i, acc, (_, _, cell) ->
-            val v = ".var ${cell.id} ${hasVar(i + 1)}"
-            ".andBool ($acc) (.eq ($v) ($v))"
-        }
+        val refs = (listOf(subject) + schema.map { (_, _, cell) -> cell }).mapIndexed { index, cell ->
+            cell.field to ValueRef("(.var ${cell.id} ${hasVar(index)})", cell.type,
+                published = false, guardPublication = cell.kind != CellKind.PUBLIC_DATA)
+        }.toMap()
+        val expr = predicates.reduceOrNull(Expr::And) ?: Expr.Const.BoolVal(true)
+        val code = ValueExpression(refs::getValue).guard(expr, subject.field)
         val reads = if (schema.isEmpty()) "fun h => nomatch h" else
             "fun h => match h with " + schema.mapIndexed { i, (_, read, _) -> "| ${hasVar(i)} => $read" }.joinToString(" ")
         val schemaList = schema.joinToString(", ") { (_, _, cell) -> "(${cell.id}, ${leanType(cell.type)})" }
@@ -248,15 +253,17 @@ private class CoreElaborator(private val ir: GameIR) {
 
     /**
      * How a guard reads [field], as `SourceGuardRead`: its publication if it is
-     * public, else its commitment. The commitment may be another role's; Lean
-     * then rejects the read, as the core forbids it.
+     * public, else a commitment of the guard's author.
      */
-    private fun guardRead(ctx: Context, field: FieldRef, subject: Cell): Pair<String, Cell> {
+    private fun guardRead(ctx: Context, author: RoleId, field: FieldRef, subject: Cell): Pair<String, Cell> {
         ctx.public(field)?.let { cell ->
             val constructor = if (cell.kind == CellKind.PUBLIC_DATA) ".publicData" else ".publication"
             return "$constructor ${ctx.path(cell)}" to cell
         }
-        ctx.commitment(field)?.let { cell -> return ".commitment ${ctx.path(cell)}" to cell }
+        ctx.commitment(field)?.let { cell ->
+            if (field.owner != author) unsupported("the guard on ${subject.field} reads another role's commitment $field")
+            return ".commitment ${ctx.path(cell)}" to cell
+        }
         if (ctx.privateInput(field) != null) unsupported("the guard on ${subject.field} reads the private input $field")
         unsupported("the guard on ${subject.field} reads $field, which is not yet in scope at the commitment")
     }
@@ -268,19 +275,18 @@ private class CoreElaborator(private val ir: GameIR) {
         return step to ctx.push(cell)
     }
 
-    /** `ret` with each role's payoff: a placeholder reading the same public cells. */
+    /** Emit each role's payout over ordinary public data and publication results. */
     private fun payoffs(ctx: Context): String {
         val public = ctx.publicCells()
         val entries = ir.roles.sortedBy { it.name }.map { role ->
-            val expr = ir.payoffs[role]
-            val reads = expr?.fieldsRead().orEmpty().map { field ->
-                ctx.public(field) ?: unsupported("the payoff of $role reads $field, which is never published")
+            val expr = ir.payoffs[role] ?: Expr.Const.IntVal(0)
+            val emitter = ValueExpression { field ->
+                val cell = ctx.public(field)
+                    ?: unsupported("the payout of $role reads $field, which is never published")
+                ValueRef("(.var ${cell.id} ${hasVar(public.indexOf(cell))})", cell.type,
+                    published = cell.kind == CellKind.PUBLICATION)
             }
-            val code = reads.fold(".constInt 0") { acc, cell ->
-                val v = ".var ${cell.id} ${hasVar(public.indexOf(cell))}"
-                ".ite (.eq ($v) ($v)) ($acc) (.constInt 0)"
-            }
-            "(${player(role)}, $code)"
+            "(${player(role)}, ${emitter.payout(expr)})"
         }
         return "[" + entries.joinToString(", ") + "]"
     }
@@ -304,7 +310,7 @@ private fun hasVar(index: Int): String =
 private fun leanType(type: Type): String = when (type) {
     Type.BoolType -> ".bool"
     Type.IntType -> ".int"
-    is Type.RangeType -> "(.range (${type.min}) ${type.max - type.min})"
+    is Type.RangeType -> "(.range (${type.min}) ${type.max.toLong() - type.min})"
 }
 
 private fun leanValue(value: Expr.Const, type: Type): String = when (type) {

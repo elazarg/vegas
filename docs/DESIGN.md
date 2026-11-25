@@ -72,21 +72,26 @@ the same name and, since the fixes recorded below, the same semantics.
   to emit MAID for any program whose guards reference fields written by
   other nodes; self-only guards are accepted but their domain restriction
   is still discarded — see `backend/maid/FromIR.kt` and TODO.
-* **The elaboration is checked for structure, not values.** `--core`
-  (`backend/vegascore/SourceProgram.kt`) emits each game as a VegasCore
-  `SourceProgram` over `simpleExpr`, with private draws as setup inputs.
-  Lean checks the event sequence, the commit/reveal accounting, and the read
-  discipline of guards and payoffs: a guard reads only public cells and its
-  author's own commitments, in scope where it is declared, and payoffs read
-  only public cells. Every example except `MontyHallChance` (a `random`
-  role) elaborates and checks (`SourceProgramLeanTest`, which needs a
-  VegasCore checkout built with the installed toolchain, found through
-  `VEGASCORE_DIR`). Guard and payoff *code* are placeholders reading the same
-  cells, because `simpleExpr` has no integer subtraction, multiplication or
-  comparison, so value semantics is not checked. Nor is the dependency graph
-  compared with the core compiler's, whose definitions are noncomputable.
-  Only the program is emitted, not the setup, so exit payouts are not
-  emitted either; the payoffs a placeholder stands for already include them.
+* **The core export emits guard and payout expressions.** `--core` emits a
+  VegasCore `SourceProgram` over `simpleExpr`, with private draws represented
+  by setup input cells. Lean checks the event typing, commitment accounting,
+  and read discipline. The expression export supports signed 32-bit integer
+  arithmetic, comparisons, boolean operations, conditionals, bounded values,
+  and checks for failed publications in payouts. The exporter rejects numeric
+  uses of possibly failed publications, divisors it cannot establish as
+  nonzero, and guards that test whether another commitment or publication
+  succeeded. Core guards evaluate expressions once the subject and all of
+  their code-read inputs succeed. The core's existing discharge rule applies
+  when one of those inputs fails.
+
+  The integration tests type-check actual exporter output in a built VegasCore
+  checkout (`VEGASCORE_DIR` or `../VegasCore`). They compare the private-value
+  auction's payouts with the independent IR evaluator on every publication
+  tuple and prove the same equality with a settlement specification in Lean.
+  These tests cover public payout values at terminal readout. The export
+  supplies neither the setup's private draw law nor a model of deposits,
+  burn, exit transitions, or private strategic utility. The payout expressions
+  include the split and exit branches that the IR already desugars into them.
 * **The audited runtime covers Solidity only.** The watcher encodes all five
   transaction types (see `docs/AUDITED-RUNTIME.md` for its assumptions).
 * **The audited contract checks an opening against the commitment it

@@ -195,6 +195,23 @@ private fun dischargedOnFailure(guard: Expr, foreignReads: List<FieldRef>): Expr
         .reduce { a, b -> Expr.Or(a, b) }
         .let { failed -> Expr.Or(failed, guard) }
 
+/**
+ * Recover the written predicate when a backend handles failed foreign publications itself.
+ * Compare against the shared normalization so a user-written failure test remains in the code.
+ */
+internal fun guardBeforeFailureDischarge(meta: NodeMeta): Expr {
+    val guard = meta.spec.guardExpr
+    if (guard !is Expr.Or) return guard
+    val foreignReads = meta.struct.guardReads.filter { it.owner != meta.struct.owner }
+    if (dischargedOnFailure(guard.r, foreignReads) != guard) return guard
+    // Simplification can remove a field from the predicate while its absence
+    // still discharges the original guard. Keep these reads in the core code.
+    return (foreignReads - guard.r.fieldsRead()).fold(guard.r) { predicate, field ->
+        val read = Expr.Field(field)
+        Expr.And(predicate, Expr.Eq(read, read))
+    }
+}
+
 /** True when [sig] opens at least one of [role]'s earlier commitments. */
 private fun isDisclosure(role: RoleId, phaseIdx: Int, sig: Signature, phases: List<Phase>): Boolean =
     sig.parameters.any { p ->
